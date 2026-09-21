@@ -1,5 +1,5 @@
-name: flash-impl
-description: builtin default と同じ development-core 構成で、テスト生成・実装を DGX Spark 上の Flash 級モデル（T0）から始め、失敗時に T1 → T2 へ昇格する開発ワークフロー。provider の実体は runtime.yaml の ladder で解決する。
+name: flash-default
+description: builtin default の Flash 版。default と同じ development-core 構成で、テスト生成・実装を DGX Spark 上の Flash 級モデル（T0）から始め、失敗時に T1 → T2 へ昇格する開発ワークフロー。provider の実体は runtime.yaml の step 割り当てで解決する。
 max_steps: 51
 initial_step: develop
 
