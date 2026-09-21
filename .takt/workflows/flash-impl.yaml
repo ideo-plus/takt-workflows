@@ -18,16 +18,22 @@ initial_step: develop
 #       <t2>:      { provider: ..., model: ... }
 #     targets:
 #       steps:
-#         development-core/write_tests:        { ladder: [<t0-code>, <t1>, <t2>] }
-#         flash-implement-dynamic/implement:   { ladder: [<t0-impl>, <t1>, <t2>] }
-#         flash-implement-dynamic/reimplement: { ladder: [<t0-impl>, <t2>] }
-#         flash-remediation-dynamic/fix:       { ladder: [<t1>, <t2>] }
+#         development-core/write_tests:              { ladder: [<t0-code>, <t1>, <t2>] }
+#         flash-implement-dynamic/implement:         { profile: <t0-impl> }
+#         flash-implement-dynamic/reimplement:       { profile: <t1> }
+#         flash-implement-dynamic/reimplement_final: { profile: <t2> }
+#         flash-remediation-dynamic/fix:             { ladder: [<t1>, <t2>] }
 #       internal_agents:
 #         selector: { profile: <t1> }          # dynamic_facets selector（構造化出力対応の provider に固定）
 #       companions:
 #         ai-antipattern-review-companion: { profile: <t1> }
 #         testing-review-companion:        { profile: <t1> }
 #         review-companion-moderator:      { profile: <t1> }
+#
+# 実装の tier 昇格は promotion ではなく flash-implement-dynamic の step 列（implement → reimplement →
+# reimplement_final）で表現している。子 workflow の stepIterations は workflow_call のたびに空から始まるため、
+# 子 step の `promotion: {at: N}` は非対話実行では発火せず、親の workflow_call step には promotion を付けられない
+# （スキーマが agent step 以外を拒否する）。replan 経由の再入は T0 からやり直し、各サイクルで T2 まで昇格する。
 #
 # write_tests の promotion は、builtin development-core をコピーせず、project 層の step fragment
 # `.takt/steps/development-core-write-tests.yaml`（builtin fragment の shadowing + promotion 追加）で宣言している。
