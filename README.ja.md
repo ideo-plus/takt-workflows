@@ -46,40 +46,6 @@ takt -w flash-default -t "〜をテスト付きで追加する"
 
 この例はこのワークフローの実走で実際に使った profile そのもので、`runtime.yaml` の例も同じ名前を使っています。
 
-### 最上位モデルはどこに入るか（T3）
-T3 は、出力がその後の全工程を左右するのにトークン消費は少ない、ごく少数のステップに使います。計画の作成、並列レビューの裁定、final gate の 3 つです。動作確認済みの構成では、計画を書いたモデルがそのまま検収しないよう、意図的に 2 ベンダーへ分けています。
-
-| profile | ステップ | 確認済みモデル |
-|---|---|---|
-| `t3-plan` | `development-core/plan`、`development-core/replan` | `claude` / `claude-fable-5-1` |
-| `t3-judge` | `peer-review/review-adjudication`、`peer-review/final-gate` | `codex` / `gpt-6-astra` |
-
-profile を `~/.takt/runtime.yaml` に、ステップの割り当てをプロジェクト側に追加します:
-
-```yaml
-# ~/.takt/runtime.yaml
-    t3-plan:  { provider: claude, model: claude-fable-5-1 }
-    t3-judge: { provider: codex,  model: gpt-6-astra }
-```
-
-```yaml
-# <project>/.takt/runtime.yaml  (provider.targets.steps 配下に追加)
-      development-core/plan:                     { profile: t3-plan }
-      development-core/replan:                   { profile: t3-plan }
-      peer-review/review-adjudication:           { profile: t3-judge }
-      peer-review/final-gate:                    { profile: t3-judge }
-```
-
-ここに挙げていないステップ（並列レビュアー、`fix-plan`、`fix-verifier`）は引き続き `defaults` の T2 に落ちます。最上位モデルはレート制限に早く当たるので、`~/.takt/config.yaml` のフォールバック連鎖と組み合わせてください。制限に当たったステップは失敗せず、次の provider で再実行されます:
-
-```yaml
-# ~/.takt/config.yaml
-rate_limit_fallback:
-  switch_chain:
-    - { provider: claude, model: opus }
-    - { provider: codex,  model: gpt-5.6-sol }
-```
-
 ### `~/.takt/runtime.yaml` — profile（環境依存、コミットしない）
 ```yaml
 version: 1
@@ -93,6 +59,9 @@ provider:
     t0-production-code: { provider: opencode, model: ollama/glm-5.3-flash:cloud }
     t1: { provider: codex,  model: gpt-5.6-sol }
     t2: { provider: claude, model: opus }
+    # T3（任意）: 計画と検収を別ベンダーにし、計画を書いたモデルに承認させない
+    t3-plan:  { provider: claude, model: claude-fable-5-1 }
+    t3-judge: { provider: codex,  model: gpt-6-astra }
 ```
 
 ### `<project>/.takt/runtime.yaml` — ステップへの割り当て
@@ -102,6 +71,10 @@ provider:
   defaults: { profile: t2 }
   targets:
     steps:
+      development-core/plan:                     { profile: t3-plan }
+      development-core/replan:                   { profile: t3-plan }
+      peer-review/review-adjudication:           { profile: t3-judge }
+      peer-review/final-gate:                    { profile: t3-judge }
       development-core/write_tests:              { ladder: [t0-test-code, t1, t2] }
       flash-implement-dynamic/implement:         { profile: t0-production-code }
       flash-implement-dynamic/reimplement:       { profile: t1 }
@@ -121,6 +94,7 @@ provider:
 - ループバック以外の `base_url`（LAN 上の DGX Spark など）はグローバルの `~/.takt/runtime.yaml` でしか受け付けません。
 - `runtime.yaml` は意図的に `.takt/.gitignore` の許可リスト外です。環境ごとの設定なのでコミットしません。
 - あとで T0 を DGX Spark に切り替えるときは、`t0-*` の 2 つの profile だけを書き換えます。
+- 最上位モデルはレート制限に早く当たります。`~/.takt/config.yaml` に `rate_limit_fallback.switch_chain`（例: `[{provider: claude, model: opus}, {provider: codex, model: gpt-5.6-sol}]`）を置くと、制限に当たったステップは失敗せず次の provider で再実行されます。
 
 ## ヘルプ
 - Issues: https://github.com/ideo-plus/takt-workflows/issues

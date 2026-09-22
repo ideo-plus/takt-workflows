@@ -46,40 +46,6 @@ takt -w flash-default -t "Add ... with tests"
 
 The examples are the exact profiles used in the verified full runs of this workflow; the `runtime.yaml` snippets use the same names.
 
-### Where the top models go (T3)
-T3 is for the handful of steps whose output steers everything else but which consume few tokens: writing the plan, adjudicating the parallel reviews, and the final gate. In the verified setup they are split across two vendors on purpose, so the model that wrote the plan is not the one that signs it off.
-
-| Profile | Steps | Verified model |
-|---|---|---|
-| `t3-plan` | `development-core/plan`, `development-core/replan` | `claude` / `claude-fable-5-1` |
-| `t3-judge` | `peer-review/review-adjudication`, `peer-review/final-gate` | `codex` / `gpt-6-astra` |
-
-Add the profiles to `~/.takt/runtime.yaml` and the step targets to the project file:
-
-```yaml
-# ~/.takt/runtime.yaml
-    t3-plan:  { provider: claude, model: claude-fable-5-1 }
-    t3-judge: { provider: codex,  model: gpt-6-astra }
-```
-
-```yaml
-# <project>/.takt/runtime.yaml  (add under provider.targets.steps)
-      development-core/plan:                     { profile: t3-plan }
-      development-core/replan:                   { profile: t3-plan }
-      peer-review/review-adjudication:           { profile: t3-judge }
-      peer-review/final-gate:                    { profile: t3-judge }
-```
-
-Everything not listed (parallel reviewers, `fix-plan`, `fix-verifier`) still falls back to `defaults`, which is T2. Top models hit rate limits sooner, so pair T3 with a fallback chain in `~/.takt/config.yaml`; a step that hits a limit is re-run on the next provider instead of failing:
-
-```yaml
-# ~/.takt/config.yaml
-rate_limit_fallback:
-  switch_chain:
-    - { provider: claude, model: opus }
-    - { provider: codex,  model: gpt-5.6-sol }
-```
-
 ### `~/.takt/runtime.yaml` — profiles (environment specific, not committed)
 ```yaml
 version: 1
@@ -93,6 +59,9 @@ provider:
     t0-production-code: { provider: opencode, model: ollama/glm-5.3-flash:cloud }
     t1: { provider: codex,  model: gpt-5.6-sol }
     t2: { provider: claude, model: opus }
+    # T3 (optional): planning and sign-off on different vendors, so the model that wrote the plan does not approve it
+    t3-plan:  { provider: claude, model: claude-fable-5-1 }
+    t3-judge: { provider: codex,  model: gpt-6-astra }
 ```
 
 ### `<project>/.takt/runtime.yaml` — step assignments
@@ -102,6 +71,10 @@ provider:
   defaults: { profile: t2 }
   targets:
     steps:
+      development-core/plan:                     { profile: t3-plan }
+      development-core/replan:                   { profile: t3-plan }
+      peer-review/review-adjudication:           { profile: t3-judge }
+      peer-review/final-gate:                    { profile: t3-judge }
       development-core/write_tests:              { ladder: [t0-test-code, t1, t2] }
       flash-implement-dynamic/implement:         { profile: t0-production-code }
       flash-implement-dynamic/reimplement:       { profile: t1 }
@@ -121,6 +94,7 @@ provider:
 - A non-loopback `base_url` (for example a DGX Spark on the LAN) is only accepted in the global `~/.takt/runtime.yaml`.
 - `runtime.yaml` is outside the `.takt/.gitignore` allowlist on purpose: it is per-environment and never committed.
 - To switch T0 to a DGX Spark later, change only the two `t0-*` profiles.
+- Top models hit rate limits sooner. Set `rate_limit_fallback.switch_chain` in `~/.takt/config.yaml` (for example `[{provider: claude, model: opus}, {provider: codex, model: gpt-5.6-sol}]`) so a step that hits a limit is re-run on the next provider instead of failing.
 
 ## Getting help
 - Issues: https://github.com/ideo-plus/takt-workflows/issues
