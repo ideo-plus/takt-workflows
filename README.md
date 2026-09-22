@@ -37,12 +37,14 @@ takt -w flash-default -t "Add ... with tests"
 ## Usage
 
 ### Tiers
-| Tier | Used for | Typical model |
-|---|---|---|
-| T0 | `write_tests`, first `implement` | Flash-class model (DGX Spark, Ollama Cloud, LM Studio) |
-| T1 | `reimplement`, `fix`, review companions, facet selector | Mid-size model with structured output |
-| T2 | `reimplement_final`, `fix` escalation, default for every other step | Strongest general model |
-| T3 (optional) | `plan`, `replan`, adjudication, `final-gate` | Top model for low-token, high-leverage judgment steps |
+| Tier | Used for | What to put there | Verified example (provider / model) |
+|---|---|---|---|
+| T0 | `write_tests`, first `implement` | Flash-class model (DGX Spark, Ollama Cloud, LM Studio) | `opencode` / `ollama/glm-5.3-flash:cloud` |
+| T1 | `reimplement`, `fix`, review companions, facet selector | Mid-size model with structured output | `codex` / `gpt-5.6-sol` |
+| T2 | `reimplement_final`, `fix` escalation, default for every other step | Strongest general model | `claude` / `opus` |
+| T3 (optional) | `plan`, `replan`, adjudication, `final-gate` | Top model for low-token, high-leverage judgment steps | `claude` / `claude-fable-5-1` (plan), `codex` / `gpt-6-astra` (judge) |
+
+The examples are the exact profiles used in the verified full runs of this workflow; the `runtime.yaml` snippets use the same names.
 
 ### Where the top models go (T3)
 T3 is for the handful of steps whose output steers everything else but which consume few tokens: writing the plan, adjudicating the parallel reviews, and the final gate. In the verified setup they are split across two vendors on purpose, so the model that wrote the plan is not the one that signs it off.
