@@ -1,13 +1,13 @@
-Create tests per contract ID from the completion contract table and the requirement scenarios (gherkin) in the plan (`plan.md`).
-Refer only to the reports in the Report Directory named in the Workflow Context and to the repository source, existing tests, and configuration needed to confirm the contracts. Do not search or read any other report directory.
+計画 `plan.md` の完了契約表と要求シナリオ（gherkin）から、契約 ID ごとにテストを作成してください。
+Workflow Context に示された Report Directory 内のレポートと、契約確認に必要なリポジトリのソース・既存テスト・設定だけを参照してください。他のレポートディレクトリは検索・参照しないでください。
 
-**Important: do not create or modify production code. You may only create test files.**
+**重要: プロダクションコードは作成・変更しないでください。テストファイルのみ作成可能です。**
 
-**Mapping:**
-- For each contract ID, turn the P (passing side) and N (rejecting side) requirement scenarios into tests, one test per scenario.
-- For a contract row whose requirement scenario is 「対象外」 (out of scope), treat the 「成立する振る舞い」 (expected behavior) column as P and the 「拒否すべき誤実装」 (wrong implementation to reject) column as N, and map them one-to-one the same way.
-- Do not write tests for concerns that are not in the contract table.
-- Follow the testing-lite policy for placement and naming. If tests already exist, follow the file:line test pattern that the plan's implementation guidelines point to.
-- Run the tests you created, and record failures caused by missing implementation separately from defects on the test side (configuration, fixtures, assertions).
+**対応付け:**
+- 契約 ID ごとに、要求シナリオの P（成立側）/ N（拒否側）シナリオをシナリオ 1 本につきテスト 1 本で落とす
+- 要求シナリオが「対象外」の契約行は、「成立する振る舞い」列を P、「拒否すべき誤実装」列を N として同様に 1 対 1 で落とす
+- 契約表に無い観点のテストは書かない
+- 配置・命名は testing-lite ポリシーに従う。既存テストがある場合は、計画の実装ガイドラインが示した file:line のテストパターンを踏襲する
+- 作成したテストを実行し、未実装による失敗と、テスト側の欠陥（設定・fixture・assertion）を区別して記録する
 
 {{include:instructions/requirement-scenario-test-mapping}}
