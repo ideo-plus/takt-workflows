@@ -27,7 +27,7 @@ jobs:
         run: |
           mkdir -p ~/.takt
           printf 'language: %s\n' "${{ matrix.lang }}" > ~/.takt/config.yaml
-          scripts/use-lang.sh "${{ matrix.lang }}"
+          scripts/use-lang.sh "${{ matrix.lang }}" --no-runtime
       - name: Validate workflows
         run: takt workflow doctor flash-default flash-implement-dynamic flash-remediation-dynamic
       - name: Inspect root workflow

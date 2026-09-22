@@ -13,29 +13,31 @@ Tiered development workflows for [TAKT](https://github.com/nrslib/takt): start t
 ### Requirements
 - TAKT 0.66 or later (`npm i -g takt`)
 - One provider with structured output for T1: `claude`, `claude-sdk`, `claude-terminal`, `codex`, or `opencode`
-- Any provider for T0. OpenCode → local Ollama server → Ollama Cloud is a verified option.
+- Any provider for T0. OpenCode → local Ollama server → Ollama Cloud, and OpenCode → OpenCode Go, are verified options.
 
-### Install
-The bundle ships in two languages with identical structure, `en/` and `ja/`, mirroring TAKT's own `builtins/{en,ja}` layout. Pick the one that matches the `language` in your TAKT config and copy it into `.takt/`:
+### Get the bundle (once per machine)
+Clone this repository anywhere. It is only a source to copy from; TAKT never reads it directly.
 
 ```sh
-git clone https://github.com/ideo-plus/takt-workflows.git
-cd takt-workflows
-scripts/use-lang.sh en      # or: ja  (copies en/{workflows,steps,facets} into .takt/)
+git clone https://github.com/ideo-plus/takt-workflows.git ~/src/takt-workflows
 ```
 
-To use the bundle in another project, copy `<lang>/workflows`, `<lang>/steps`, and `<lang>/facets` into that project's `.takt/` directory. TAKT resolves project resources only from `.takt/`, has no language-aware project layer, and refuses symlinked resource directories, so the active language is always a copy.
+Then define the tier profiles once in `~/.takt/runtime.yaml` (see [Usage](#usage)).
 
-### Run
-1. Define the tier profiles in `~/.takt/runtime.yaml` (see [Usage](#usage)).
-2. Assign the profiles to steps in `<project>/.takt/runtime.yaml`.
-3. Validate and run:
+### Add it to the project you work in
+Run the installer from that project. It copies `<lang>/{workflows,steps,facets}` into the project's `.takt/` and creates `.takt/runtime.yaml` (step assignments) if there is none:
 
 ```sh
-takt workflow doctor flash-default    # schema and reference check
-takt workflow inspect flash-default   # resolved provider/model per step
+cd ~/work/my-app
+~/src/takt-workflows/scripts/use-lang.sh ja        # or: en
+git add .takt && git commit -m "chore: add takt flash-default workflow bundle"
+takt workflow doctor flash-default
 takt -w flash-default -t "Add ... with tests"
 ```
+
+Commit the copied files. TAKT runs tasks in worktree clones of the repository, so untracked files under `.takt/` are invisible to a run; TAKT's default `.takt/.gitignore` already tracks `workflows/`, `steps/`, and `facets/`.
+
+To update the bundle or switch language later, run the installer again. It replaces only its own files, leaves other workflows in `.takt/` untouched, and records the installed language and bundle commit in `.takt/.takt-workflows`.
 
 ## Usage
 
@@ -68,6 +70,8 @@ provider:
 ```
 
 ### `<project>/.takt/runtime.yaml` — step assignments
+This is [`runtime.project.yaml`](runtime.project.yaml), which the installer copies into the project when no `.takt/runtime.yaml` exists.
+
 ```yaml
 version: 1
 provider:
@@ -95,7 +99,7 @@ provider:
 - Every profile referenced from a `ladder` must define both `provider` and `model`.
 - When both files define `targets`, the project file replaces the global one. `profiles` are merged, project wins.
 - A non-loopback `base_url` (for example a DGX Spark on the LAN) is only accepted in the global `~/.takt/runtime.yaml`.
-- `runtime.yaml` is outside the `.takt/.gitignore` allowlist on purpose: it is per-environment and never committed.
+- `~/.takt/runtime.yaml` (profiles) is per machine and never committed. `<project>/.takt/runtime.yaml` (step assignments) only names profiles, so a team can share it: add `!runtime.yaml` to the project's `.takt/.gitignore`, which ignores it by default.
 - To switch T0 to a DGX Spark later, change only the two `t0-*` profiles.
 - Top models hit rate limits sooner. Set `rate_limit_fallback.switch_chain` in `~/.takt/config.yaml` (for example `[{provider: claude, model: claude-opus-5}, {provider: codex, model: gpt-5.6-sol}]`) so a step that hits a limit is re-run on the next provider instead of failing.
 
@@ -108,7 +112,7 @@ provider:
 - **Escalation is modelled as steps, not `promotion`.** `promotion: [{at: N}]` only advances a `ladder`, and a child workflow's iteration counter resets on every `workflow_call`, so `implement → reimplement → reimplement_final` are separate steps. `write_tests` and `fix` keep a real ladder because they loop inside one workflow.
 - **`write_tests` promotion via step fragment.** `.takt/steps/development-core-write-tests.yaml` shadows the builtin fragment and adds `promotion`, so `development-core` itself is not copied. Note that this shadowing applies to every workflow in this project that uses `development-core`.
 - **T0 context budget.** Policy + knowledge + instruction injected into `write_tests`, `implement`, and `reimplement` stay under 25 KB (`coding-lite`, `testing-lite`, `implementation-semantics`). Do not add full builtin policies to T0 steps.
-- **Two languages, one structure.** `en/` and `ja/` must stay in sync: same file names, and the same YAML apart from `description`, rule `condition` text, and comments. The workflow YAMLs are the builtin `en` / `ja` workflows with the same edits applied, so change both when you change structure. `.takt/{workflows,steps,facets}` are generated by `scripts/use-lang.sh` and are not tracked.
+- **Two languages, one structure.** `en/` and `ja/` must stay in sync: same file names, and the same YAML apart from `description`, rule `condition` text, and comments. The workflow YAMLs are the builtin `en` / `ja` workflows with the same edits applied, so change both when you change structure. In this repository, `.takt/{workflows,steps,facets}` are generated by `scripts/use-lang.sh` (run from the repository root) and are not tracked. `runtime.project.yaml` is the step-assignment template the installer copies into projects.
 - Design notes and the `runtime.yaml` template: header comment of [`en/workflows/flash-default.yaml`](en/workflows/flash-default.yaml).
 - Before submitting a change, run `scripts/use-lang.sh <lang>` followed by `takt workflow doctor flash-default` and `takt workflow inspect flash-default` for both languages.
 
