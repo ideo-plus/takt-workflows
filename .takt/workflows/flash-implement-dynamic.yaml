@@ -69,7 +69,7 @@ steps:
       - edit
       - enable-skills
     uses: development-core-implement
-    # runtime.yaml: flash-implement-dynamic/implement → profile <t0-impl>
+    # runtime.yaml: flash-implement-dynamic/implement → profile <t0-production-code>
     instruction:
       - $param: implementation_instruction
     with:

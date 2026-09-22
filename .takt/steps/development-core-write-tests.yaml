@@ -4,7 +4,7 @@
 # development-core をコピーせずに write_tests へ promotion を注入できる。
 #
 # 本文は builtin を写し、`promotion: [{at: 2}, {at: 3}]` のみ追加している。
-# runtime.yaml: development-core/write_tests → ladder [<t0-code>, <t1>, <t2>]
+# runtime.yaml: development-core/write_tests → ladder [<t0-test-code>, <t1>, <t2>]
 #
 # 注意: project 層 shadowing のため、このプロジェクト内で development-core を使う全 workflow
 # （builtin default など）の write_tests にも同じ promotion が適用される。ladder が runtime.yaml に
