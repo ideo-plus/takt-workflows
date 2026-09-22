@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  workflows:
+    name: takt doctor (${{ matrix.lang }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        lang: [en, ja]
+    env:
+      TAKT_VERSION: 0.66.0
+      T0_BUDGET_BYTES: "25000"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install TAKT
+        run: npm install -g "takt@${TAKT_VERSION}"
+      - name: Select bundle language
+        run: |
+          mkdir -p ~/.takt
+          printf 'language: %s\n' "${{ matrix.lang }}" > ~/.takt/config.yaml
+          scripts/use-lang.sh "${{ matrix.lang }}"
+      - name: Validate workflows
+        run: takt workflow doctor flash-default flash-implement-dynamic flash-remediation-dynamic
+      - name: Inspect root workflow
+        run: takt workflow inspect flash-default > /dev/null
+      - name: T0 context budget
+        run: |
+          builtin="$(npm root -g)/takt/builtins/${{ matrix.lang }}/facets"
+          common=(
+            "$builtin/policies/contract-change.md"
+            .takt/facets/policies/coding-lite.md
+            .takt/facets/policies/testing-lite.md
+            "$builtin/knowledge/implementation-semantics.md"
+          )
+          echo "== write_tests"
+          node scripts/check-facet-budget.mjs "$T0_BUDGET_BYTES" "${common[@]}" .takt/facets/instructions/write-tests-flash.md
+          echo "== implement / reimplement"
+          node scripts/check-facet-budget.mjs "$T0_BUDGET_BYTES" "${common[@]}" .takt/facets/instructions/implement-flash.md
+
+  scripts:
+    name: node --test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: node --test
