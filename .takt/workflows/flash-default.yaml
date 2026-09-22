@@ -4,7 +4,7 @@ max_steps: 51
 initial_step: develop
 
 # provider / model は workflow YAML では指定できない（TAKT 0.66 の契約。promotion も `{at: N}` のみ）。
-# tier の実体は runtime.yaml で与える。<t0-code> <t0-impl> <t1> <t2> は利用環境の profile 名へ置き換える。
+# tier の実体は runtime.yaml で与える。<t0-test-code> <t0-production-code> <t1> <t2> は利用環境の profile 名へ置き換える。
 #
 #   version: 1
 #   companion:
@@ -12,14 +12,14 @@ initial_step: develop
 #   provider:
 #     defaults: { profile: <t2> }          # plan / replan / peer-review 以下全 step / final gate
 #     profiles:
-#       <t0-code>: { provider: ..., model: ... }
-#       <t0-impl>: { provider: ..., model: ... }
-#       <t1>:      { provider: ..., model: ... }
-#       <t2>:      { provider: ..., model: ... }
+#       <t0-test-code>:       { provider: ..., model: ... }   # write_tests 用
+#       <t0-production-code>: { provider: ..., model: ... }   # implement 用
+#       <t1>:                 { provider: ..., model: ... }
+#       <t2>:                 { provider: ..., model: ... }
 #     targets:
 #       steps:
-#         development-core/write_tests:              { ladder: [<t0-code>, <t1>, <t2>] }
-#         flash-implement-dynamic/implement:         { profile: <t0-impl> }
+#         development-core/write_tests:              { ladder: [<t0-test-code>, <t1>, <t2>] }
+#         flash-implement-dynamic/implement:         { profile: <t0-production-code> }
 #         flash-implement-dynamic/reimplement:       { profile: <t1> }
 #         flash-implement-dynamic/reimplement_final: { profile: <t2> }
 #         flash-remediation-dynamic/fix:             { ladder: [<t1>, <t2>] }
