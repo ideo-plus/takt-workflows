@@ -1,0 +1,94 @@
+name: flash-default
+description: Flash variant of the builtin default. Same development-core structure as default, but test generation and implementation start on a Flash-class model (T0, e.g. on a DGX Spark) and escalate to T1 -> T2 on failure. Providers are resolved by the step assignments in runtime.yaml.
+max_steps: 51
+initial_step: develop
+
+# provider / model cannot be specified in workflow YAML (TAKT 0.66 contract; promotion accepts only `{at: N}`).
+# Tiers are given by runtime.yaml. Replace <t0-test-code> <t0-production-code> <t1> <t2> with the profile names of your environment.
+#
+#   version: 1
+#   companion:
+#     enabled: true
+#   provider:
+#     defaults: { profile: <t2> }          # plan / replan / every step under peer-review / final gate
+#     profiles:
+#       <t0-test-code>:       { provider: ..., model: ... }   # for write_tests
+#       <t0-production-code>: { provider: ..., model: ... }   # for implement
+#       <t1>:                 { provider: ..., model: ... }
+#       <t2>:                 { provider: ..., model: ... }
+#     targets:
+#       steps:
+#         development-core/write_tests:              { ladder: [<t0-test-code>, <t1>, <t2>] }
+#         flash-implement-dynamic/implement:         { profile: <t0-production-code> }
+#         flash-implement-dynamic/reimplement:       { profile: <t1> }
+#         flash-implement-dynamic/reimplement_final: { profile: <t2> }
+#         flash-remediation-dynamic/fix:             { ladder: [<t1>, <t2>] }
+#       internal_agents:
+#         selector: { profile: <t1> }          # dynamic_facets selector (pin to a provider with structured output)
+#       companions:
+#         ai-antipattern-review-companion: { profile: <t1> }
+#         testing-review-companion:        { profile: <t1> }
+#         review-companion-moderator:      { profile: <t1> }
+#
+# Tier escalation for implementation is expressed as the step sequence of flash-implement-dynamic
+# (implement -> reimplement -> reimplement_final), not as promotion. A child workflow's
+# stepIterations start empty on every workflow_call, so `promotion: {at: N}` on a child step never
+# fires in non-interactive runs, and the parent's workflow_call step cannot carry promotion (the
+# schema rejects it on anything but agent steps). Re-entry after a replan restarts at T0 and
+# escalates up to T2 within each cycle.
+#
+# The promotion of write_tests is declared without copying the builtin development-core, through the
+# project-layer step fragment `.takt/steps/development-core-write-tests.yaml` (shadowing of the builtin
+# fragment plus promotion). See workflow-maker-doctor.md for details.
+
+steps:
+  - name: develop
+    kind: workflow_call
+    call: development-core
+    args:
+      implementation_pool: coding-facets
+      implementation_workflow: flash-implement-dynamic
+      remediation_workflow: flash-remediation-dynamic
+      plan_instruction: plan-flash
+      plan_report_format: scenario-based-plan
+      replan_instruction: replan-flash
+      testing_policy:
+        - coding-lite
+        - testing-lite
+      testing_knowledge:
+        - implementation-semantics
+      testing_instruction: write-tests-flash
+      testing_report_format: scenario-based-test-report
+      development_policy:
+        - coding-lite
+        - testing-lite
+      development_knowledge:
+        - implementation-semantics
+      implementation_instruction: implement-flash
+      reimplementation_instruction: implement-flash
+      fix_plan_instruction: scenario-based-fix-plan-from-review-resolution
+      fix_replan_instruction: scenario-based-fix-replan
+      fix_plan_report_format: scenario-based-fix-plan
+      final_gate_instruction: scenario-based-supervise-review-resolution
+      implementation_companions:
+        fixed:
+          - ai-antipattern-review-companion
+          - testing-review-companion
+        pool: []
+        moderator: review-companion-moderator
+      reviewer_suite: development-review
+      review_policy_additions: []
+      review_policy:
+        - coding
+        - testing
+        - review
+        - architecture
+      review_knowledge:
+        - architecture
+        - unit-testing
+        - e2e-testing
+    rules:
+      - condition: COMPLETE
+        next: COMPLETE
+      - condition: ABORT
+        next: ABORT

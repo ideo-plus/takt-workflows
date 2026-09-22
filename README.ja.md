@@ -16,12 +16,15 @@
 - T0 用の provider は何でも可。OpenCode → ローカル Ollama サーバー → Ollama Cloud の構成は動作確認済みです。
 
 ### インストール
-このリポジトリを clone するか、`.takt/workflows`、`.takt/steps`、`.takt/facets` を自分のプロジェクトの `.takt/` にコピーします。
+バンドルは TAKT 本体の `builtins/{en,ja}` と同じ考え方で、同一構造の `en/` と `ja/` の 2 言語で提供しています。TAKT 設定の `language` に合う方を選び、`.takt/` へコピーします:
 
 ```sh
 git clone https://github.com/ideo-plus/takt-workflows.git
 cd takt-workflows
+scripts/use-lang.sh ja      # または en（ja/{workflows,steps,facets} を .takt/ へコピー）
 ```
+
+別のプロジェクトで使うときは、`<lang>/workflows`、`<lang>/steps`、`<lang>/facets` をそのプロジェクトの `.takt/` にコピーしてください。TAKT はプロジェクト層のリソースを `.takt/` からしか読まず、言語で切り替える仕組みも無く、シンボリックリンクのリソースディレクトリを拒否するため、使用中の言語は常にコピーになります。
 
 ### 実行
 1. `~/.takt/runtime.yaml` に tier の profile を定義する（[使い方](#使い方) 参照）。
@@ -105,8 +108,9 @@ provider:
 - **昇格は `promotion` ではなくステップで表現する。** `promotion: [{at: N}]` は `ladder` を進めるだけで、子ワークフローの iteration カウンタは `workflow_call` のたびにリセットされます。そのため `implement → reimplement → reimplement_final` は別ステップです。`write_tests` と `fix` は 1 つのワークフロー内でループするので本物の ladder を使っています。
 - **`write_tests` の promotion は step fragment で与える。** `.takt/steps/development-core-write-tests.yaml` が builtin の fragment を shadowing して `promotion` を足しているので、`development-core` 自体はコピーしていません。この shadowing はこのプロジェクト内で `development-core` を使うすべてのワークフローに効く点に注意してください。
 - **T0 の文脈予算。** `write_tests`、`implement`、`reimplement` に注入する policy + knowledge + instruction は 25 KB 以下に保ちます（`coding-lite`、`testing-lite`、`implementation-semantics`）。T0 のステップにフルサイズの builtin policy を足さないでください。
-- 設計メモと `runtime.yaml` の雛形: [`.takt/workflows/flash-default.yaml`](.takt/workflows/flash-default.yaml) の冒頭コメント。
-- 変更を出す前に `takt workflow doctor flash-default` と `takt workflow inspect flash-default` を通してください。
+- **2 言語、1 構造。** `en/` と `ja/` は常に同期させます。ファイル名は同一で、YAML は `description`、rule の `condition` 文、コメント以外は同じにします。workflow YAML は builtin の `en` / `ja` workflow に同じ改変を加えたものなので、構造を変えるときは両方を変えてください。`.takt/{workflows,steps,facets}` は `scripts/use-lang.sh` が生成するもので、追跡しません。
+- 設計メモと `runtime.yaml` の雛形: [`ja/workflows/flash-default.yaml`](ja/workflows/flash-default.yaml) の冒頭コメント。
+- 変更を出す前に、両言語について `scripts/use-lang.sh <lang>` のあと `takt workflow doctor flash-default` と `takt workflow inspect flash-default` を通してください。
 
 ## ライセンス
 未定です。
