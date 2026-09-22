@@ -42,8 +42,8 @@ takt -w flash-default -t "〜をテスト付きで追加する"
 ### 階層（Tier）
 | Tier | 用途 | 置くべきモデル | 動作確認済みの例（provider / model） |
 |---|---|---|---|
-| T0 | `write_tests`、初回の `implement` | Flash 級モデル（DGX Spark、Ollama Cloud、LM Studio） | `opencode` / `ollama/glm-5.3-flash:cloud` |
-| T1 | `reimplement`、`fix`、review companion、facet selector | 構造化出力に対応した中規模モデル | `codex` / `gpt-5.6-sol` |
+| T0 | `write_tests`、初回の `implement` | Flash 級モデル（DGX Spark、Ollama Cloud、LM Studio） | `opencode` / `ollama/glm-5.3-flash:cloud`（テスト）、`opencode` / `opencode-go/gpt-5.6-luna`（実装） |
+| T1 | `reimplement`、`fix`、review companion、facet selector | 構造化出力に対応した中規模モデル | `claude` / `claude-sonnet-5` |
 | T2 | `reimplement_final`、`fix` の昇格先、その他すべてのステップの既定 | 最も強い汎用モデル | `claude` / `claude-opus-5` |
 | T3（任意） | `plan`、`replan`、裁定、`final-gate` | トークン消費が少なく判断の影響が大きいステップ向けの最上位モデル | `claude` / `claude-fable-5-1`（計画）、`codex` / `gpt-6-astra`（検収） |
 
@@ -57,10 +57,10 @@ companion:
 provider:
   defaults: { profile: t2 }
   profiles:
-    # T0: OpenCode -> ローカル ollama サーバー -> Ollama Cloud で動作確認済み
+    # T0: ローカル ollama サーバー経由の Ollama Cloud と OpenCode Go を、どちらも OpenCode 経由で使う
     t0-test-code:       { provider: opencode, model: ollama/glm-5.3-flash:cloud }
-    t0-production-code: { provider: opencode, model: ollama/glm-5.3-flash:cloud }
-    t1: { provider: codex,  model: gpt-5.6-sol }
+    t0-production-code: { provider: opencode, model: opencode-go/gpt-5.6-luna }
+    t1: { provider: claude, model: claude-sonnet-5 }
     t2: { provider: claude, model: claude-opus-5 }
     # T3（任意）: 計画と検収を別ベンダーにし、計画を書いたモデルに承認させない
     t3-plan:  { provider: claude, model: claude-fable-5-1 }

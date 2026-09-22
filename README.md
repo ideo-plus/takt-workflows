@@ -42,8 +42,8 @@ takt -w flash-default -t "Add ... with tests"
 ### Tiers
 | Tier | Used for | What to put there | Verified example (provider / model) |
 |---|---|---|---|
-| T0 | `write_tests`, first `implement` | Flash-class model (DGX Spark, Ollama Cloud, LM Studio) | `opencode` / `ollama/glm-5.3-flash:cloud` |
-| T1 | `reimplement`, `fix`, review companions, facet selector | Mid-size model with structured output | `codex` / `gpt-5.6-sol` |
+| T0 | `write_tests`, first `implement` | Flash-class model (DGX Spark, Ollama Cloud, LM Studio) | `opencode` / `ollama/glm-5.3-flash:cloud` (tests), `opencode` / `opencode-go/gpt-5.6-luna` (implement) |
+| T1 | `reimplement`, `fix`, review companions, facet selector | Mid-size model with structured output | `claude` / `claude-sonnet-5` |
 | T2 | `reimplement_final`, `fix` escalation, default for every other step | Strongest general model | `claude` / `claude-opus-5` |
 | T3 (optional) | `plan`, `replan`, adjudication, `final-gate` | Top model for low-token, high-leverage judgment steps | `claude` / `claude-fable-5-1` (plan), `codex` / `gpt-6-astra` (judge) |
 
@@ -57,10 +57,10 @@ companion:
 provider:
   defaults: { profile: t2 }
   profiles:
-    # T0: verified with OpenCode -> local ollama server -> Ollama Cloud
+    # T0: Ollama Cloud through the local ollama server, and OpenCode Go, both via OpenCode
     t0-test-code:       { provider: opencode, model: ollama/glm-5.3-flash:cloud }
-    t0-production-code: { provider: opencode, model: ollama/glm-5.3-flash:cloud }
-    t1: { provider: codex,  model: gpt-5.6-sol }
+    t0-production-code: { provider: opencode, model: opencode-go/gpt-5.6-luna }
+    t1: { provider: claude, model: claude-sonnet-5 }
     t2: { provider: claude, model: claude-opus-5 }
     # T3 (optional): planning and sign-off on different vendors, so the model that wrote the plan does not approve it
     t3-plan:  { provider: claude, model: claude-fable-5-1 }
