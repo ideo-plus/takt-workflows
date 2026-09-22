@@ -1,32 +1,32 @@
-Process the completion contract table in the plan (`plan.md`) from top to bottom, and finish implementation and verification one contract row at a time.
-Refer only to the reports in the Report Directory named in the Workflow Context and to the upstream artifacts injected below. Do not search or read any other report directory.
+計画 `plan.md` の完了契約表を上から順に処理し、契約行ごとに実装と検証を完了してください。
+Workflow Context に示された Report Directory 内のレポートと、下記に注入された上流成果物だけを参照してください。他のレポートディレクトリは検索・参照しないでください。
 
-**Handling a contract row:**
-- Edit only the files listed in that row's 「実装箇所」 (implementation location) column.
-- Run the verification command in that row's 「完了証拠」 (completion evidence) column and paste the command and its output verbatim into your result.
-- Do not explore or edit files that are not listed in 「実装箇所」, do not investigate responsibility boundaries, do not root-cause pre-existing problems, and do not judge whether the plan is sound.
+**契約行の処理:**
+- 各行の「実装箇所」列に記載されたファイルだけを編集する
+- 各行の「完了証拠」列の検証コマンドを実行し、コマンドと出力をそのまま結果に貼る
+- 「実装箇所」に無いファイルの探索・編集、責務境界の探索、既存問題の因果切り分け、計画の妥当性判断は行わない
 
-**When to stop and report:**
-If a contract row lacks an 「実装箇所」 entry or a 「完了証拠」 verification command, or if running the verification command produces a result that contradicts the contract, stop working, report the following three items, and return need_replan.
-1. The contract ID concerned
-2. The command you ran and its output
-3. What cannot be decided
+**作業を止めて報告する条件:**
+契約行が「実装箇所」または「完了証拠」の検証コマンドを欠く、あるいは検証コマンドを実行して契約と矛盾する結果が出た場合は作業を止め、次の 3 項目で報告して need_replan を返してください。
+1. 対象契約 ID
+2. 実行したコマンドと出力
+3. 何が決められないか
 
-**Completion check:**
-Run the verification command of every contract row you changed. If any of them has not been run, return need_replan.
+**完了確認:**
+変更した契約行の検証コマンドをすべて実行してください。未実行のものがあれば need_replan を返してください。
 
-### Plan
+### 計画
 {report:plan.md}
 
-### Test report
+### テスト報告
 {report:test-report.md}
 
-**Change scope record (create when you start implementing):**
+**変更範囲の記録（実装開始時に作成）:**
 ```markdown
 # 変更スコープ宣言
 
 ## タスク
-{one-line summary of the task}
+{タスクの1行要約}
 
 ## 変更予定
 | 種別 | ファイル |
@@ -38,15 +38,15 @@ Run the verification command of every contract row you changed. If any of them h
 Small / Medium / Large
 
 ## 影響範囲
-- {affected modules or features}
+- {影響するモジュールや機能}
 ```
 
-**Required output (include these headings verbatim):**
+**必須出力（見出しを含める）**
 ## 作業結果
-- {summary of what was done, per contract ID}
+- {実施内容の要約。契約 ID ごとの処理結果}
 ## 変更内容
-- {summary of the changes}
+- {変更内容の要約}
 ## ビルド結果
-- {build result}
+- {ビルド実行結果}
 ## テスト結果
-- {verification command and output for each contract row}
+- {契約行ごとに実行した検証コマンドと出力}
