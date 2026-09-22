@@ -44,7 +44,7 @@ takt -w flash-default -t "Add ... with tests"
 |---|---|---|---|
 | T0 | `write_tests`, first `implement` | Flash-class model (DGX Spark, Ollama Cloud, LM Studio) | `opencode` / `ollama/glm-5.3-flash:cloud` |
 | T1 | `reimplement`, `fix`, review companions, facet selector | Mid-size model with structured output | `codex` / `gpt-5.6-sol` |
-| T2 | `reimplement_final`, `fix` escalation, default for every other step | Strongest general model | `claude` / `opus` |
+| T2 | `reimplement_final`, `fix` escalation, default for every other step | Strongest general model | `claude` / `claude-opus-5` |
 | T3 (optional) | `plan`, `replan`, adjudication, `final-gate` | Top model for low-token, high-leverage judgment steps | `claude` / `claude-fable-5-1` (plan), `codex` / `gpt-6-astra` (judge) |
 
 The examples are the exact profiles used in the verified full runs of this workflow; the `runtime.yaml` snippets use the same names.
@@ -61,7 +61,7 @@ provider:
     t0-test-code:       { provider: opencode, model: ollama/glm-5.3-flash:cloud }
     t0-production-code: { provider: opencode, model: ollama/glm-5.3-flash:cloud }
     t1: { provider: codex,  model: gpt-5.6-sol }
-    t2: { provider: claude, model: opus }
+    t2: { provider: claude, model: claude-opus-5 }
     # T3 (optional): planning and sign-off on different vendors, so the model that wrote the plan does not approve it
     t3-plan:  { provider: claude, model: claude-fable-5-1 }
     t3-judge: { provider: codex,  model: gpt-6-astra }
@@ -97,7 +97,7 @@ provider:
 - A non-loopback `base_url` (for example a DGX Spark on the LAN) is only accepted in the global `~/.takt/runtime.yaml`.
 - `runtime.yaml` is outside the `.takt/.gitignore` allowlist on purpose: it is per-environment and never committed.
 - To switch T0 to a DGX Spark later, change only the two `t0-*` profiles.
-- Top models hit rate limits sooner. Set `rate_limit_fallback.switch_chain` in `~/.takt/config.yaml` (for example `[{provider: claude, model: opus}, {provider: codex, model: gpt-5.6-sol}]`) so a step that hits a limit is re-run on the next provider instead of failing.
+- Top models hit rate limits sooner. Set `rate_limit_fallback.switch_chain` in `~/.takt/config.yaml` (for example `[{provider: claude, model: claude-opus-5}, {provider: codex, model: gpt-5.6-sol}]`) so a step that hits a limit is re-run on the next provider instead of failing.
 
 ## Getting help
 - Issues: https://github.com/ideo-plus/takt-workflows/issues
