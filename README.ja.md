@@ -121,4 +121,4 @@ provider:
 - 変更を出す前に、両言語について `scripts/use-lang.sh <lang>` のあと `takt workflow doctor flash-default` と `takt workflow inspect flash-default` を通してください。
 
 ## ライセンス
-未定です。
+Apache License 2.0 です。[LICENSE](LICENSE) を参照してください。

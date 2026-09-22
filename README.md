@@ -121,4 +121,4 @@ provider:
 - Before submitting a change, run `scripts/use-lang.sh <lang>` followed by `takt workflow doctor flash-default` and `takt workflow inspect flash-default` for both languages.
 
 ## License
-Not yet specified.
+Apache License 2.0. See [LICENSE](LICENSE).
