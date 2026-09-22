@@ -44,6 +44,40 @@ takt -w flash-default -t "Add ... with tests"
 | T2 | `reimplement_final`, `fix` escalation, default for every other step | Strongest general model |
 | T3 (optional) | `plan`, `replan`, adjudication, `final-gate` | Top model for low-token, high-leverage judgment steps |
 
+### Where the top models go (T3)
+T3 is for the handful of steps whose output steers everything else but which consume few tokens: writing the plan, adjudicating the parallel reviews, and the final gate. In the verified setup they are split across two vendors on purpose, so the model that wrote the plan is not the one that signs it off.
+
+| Profile | Steps | Verified model |
+|---|---|---|
+| `t3-plan` | `development-core/plan`, `development-core/replan` | `claude` / `claude-fable-5-1` |
+| `t3-judge` | `peer-review/review-adjudication`, `peer-review/final-gate` | `codex` / `gpt-6-astra` |
+
+Add the profiles to `~/.takt/runtime.yaml` and the step targets to the project file:
+
+```yaml
+# ~/.takt/runtime.yaml
+    t3-plan:  { provider: claude, model: claude-fable-5-1 }
+    t3-judge: { provider: codex,  model: gpt-6-astra }
+```
+
+```yaml
+# <project>/.takt/runtime.yaml  (add under provider.targets.steps)
+      development-core/plan:                     { profile: t3-plan }
+      development-core/replan:                   { profile: t3-plan }
+      peer-review/review-adjudication:           { profile: t3-judge }
+      peer-review/final-gate:                    { profile: t3-judge }
+```
+
+Everything not listed (parallel reviewers, `fix-plan`, `fix-verifier`) still falls back to `defaults`, which is T2. Top models hit rate limits sooner, so pair T3 with a fallback chain in `~/.takt/config.yaml`; a step that hits a limit is re-run on the next provider instead of failing:
+
+```yaml
+# ~/.takt/config.yaml
+rate_limit_fallback:
+  switch_chain:
+    - { provider: claude, model: opus }
+    - { provider: codex,  model: gpt-5.6-sol }
+```
+
 ### `~/.takt/runtime.yaml` — profiles (environment specific, not committed)
 ```yaml
 version: 1
