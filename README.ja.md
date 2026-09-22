@@ -13,29 +13,31 @@
 ### 必要なもの
 - TAKT 0.66 以降（`npm i -g takt`）
 - T1 用に構造化出力へ対応した provider を 1 つ: `claude`、`claude-sdk`、`claude-terminal`、`codex`、`opencode` のいずれか
-- T0 用の provider は何でも可。OpenCode → ローカル Ollama サーバー → Ollama Cloud の構成は動作確認済みです。
+- T0 用の provider は何でも可。OpenCode → ローカル Ollama サーバー → Ollama Cloud、および OpenCode → OpenCode Go の構成は動作確認済みです。
 
-### インストール
-バンドルは TAKT 本体の `builtins/{en,ja}` と同じ考え方で、同一構造の `en/` と `ja/` の 2 言語で提供しています。TAKT 設定の `language` に合う方を選び、`.takt/` へコピーします:
+### バンドルを取得する（マシンごとに一度）
+このリポジトリを任意の場所に clone します。ここはコピー元でしかなく、TAKT がこの場所を直接読むことはありません。
 
 ```sh
-git clone https://github.com/ideo-plus/takt-workflows.git
-cd takt-workflows
-scripts/use-lang.sh ja      # または en（ja/{workflows,steps,facets} を .takt/ へコピー）
+git clone https://github.com/ideo-plus/takt-workflows.git ~/src/takt-workflows
 ```
 
-別のプロジェクトで使うときは、`<lang>/workflows`、`<lang>/steps`、`<lang>/facets` をそのプロジェクトの `.takt/` にコピーしてください。TAKT はプロジェクト層のリソースを `.takt/` からしか読まず、言語で切り替える仕組みも無く、シンボリックリンクのリソースディレクトリを拒否するため、使用中の言語は常にコピーになります。
+続けて、tier の profile を `~/.takt/runtime.yaml` に一度だけ定義します（[使い方](#使い方) 参照）。
 
-### 実行
-1. `~/.takt/runtime.yaml` に tier の profile を定義する（[使い方](#使い方) 参照）。
-2. `<project>/.takt/runtime.yaml` で profile をステップに割り当てる。
-3. 検証して実行する:
+### 作業するプロジェクトに導入する
+作業プロジェクトの中でインストーラを実行します。`<lang>/{workflows,steps,facets}` をそのプロジェクトの `.takt/` にコピーし、無ければ `.takt/runtime.yaml`（step の割り当て）も作ります:
 
 ```sh
-takt workflow doctor flash-default    # スキーマと参照の検証
-takt workflow inspect flash-default   # ステップごとに解決された provider / model を表示
+cd ~/work/my-app
+~/src/takt-workflows/scripts/use-lang.sh ja        # または en
+git add .takt && git commit -m "chore: add takt flash-default workflow bundle"
+takt workflow doctor flash-default
 takt -w flash-default -t "〜をテスト付きで追加する"
 ```
+
+コピーしたファイルはコミットしてください。TAKT はタスクをリポジトリの worktree クローンで実行するため、`.takt/` 配下の未追跡ファイルは実行時に見えません。TAKT が置く既定の `.takt/.gitignore` は `workflows/`、`steps/`、`facets/` を最初から追跡対象にしています。
+
+バンドルの更新や言語の切り替えは、インストーラをもう一度実行するだけです。自分のファイルだけを置き換え、`.takt/` にある他の workflow には触れず、導入した言語とバンドルのコミットを `.takt/.takt-workflows` に記録します。
 
 ## 使い方
 
@@ -68,6 +70,8 @@ provider:
 ```
 
 ### `<project>/.takt/runtime.yaml` — ステップへの割り当て
+中身は [`runtime.project.yaml`](runtime.project.yaml) で、`.takt/runtime.yaml` が無いときにインストーラがプロジェクトへコピーします。
+
 ```yaml
 version: 1
 provider:
@@ -95,7 +99,7 @@ provider:
 - `ladder` から参照する profile は `provider` と `model` の両方が必須です。
 - 両方のファイルに `targets` があると、プロジェクト側がグローバル側を置き換えます。`profiles` はマージされ、同名はプロジェクト側が優先です。
 - ループバック以外の `base_url`（LAN 上の DGX Spark など）はグローバルの `~/.takt/runtime.yaml` でしか受け付けません。
-- `runtime.yaml` は意図的に `.takt/.gitignore` の許可リスト外です。環境ごとの設定なのでコミットしません。
+- `~/.takt/runtime.yaml`（profile）はマシンごとの設定でコミットしません。`<project>/.takt/runtime.yaml`（step の割り当て）は profile 名しか書かないのでチームで共有できます。既定の `.takt/.gitignore` は無視するので、共有する場合は `!runtime.yaml` を足してください。
 - あとで T0 を DGX Spark に切り替えるときは、`t0-*` の 2 つの profile だけを書き換えます。
 - 最上位モデルはレート制限に早く当たります。`~/.takt/config.yaml` に `rate_limit_fallback.switch_chain`（例: `[{provider: claude, model: claude-opus-5}, {provider: codex, model: gpt-5.6-sol}]`）を置くと、制限に当たったステップは失敗せず次の provider で再実行されます。
 
@@ -108,7 +112,7 @@ provider:
 - **昇格は `promotion` ではなくステップで表現する。** `promotion: [{at: N}]` は `ladder` を進めるだけで、子ワークフローの iteration カウンタは `workflow_call` のたびにリセットされます。そのため `implement → reimplement → reimplement_final` は別ステップです。`write_tests` と `fix` は 1 つのワークフロー内でループするので本物の ladder を使っています。
 - **`write_tests` の promotion は step fragment で与える。** `.takt/steps/development-core-write-tests.yaml` が builtin の fragment を shadowing して `promotion` を足しているので、`development-core` 自体はコピーしていません。この shadowing はこのプロジェクト内で `development-core` を使うすべてのワークフローに効く点に注意してください。
 - **T0 の文脈予算。** `write_tests`、`implement`、`reimplement` に注入する policy + knowledge + instruction は 25 KB 以下に保ちます（`coding-lite`、`testing-lite`、`implementation-semantics`）。T0 のステップにフルサイズの builtin policy を足さないでください。
-- **2 言語、1 構造。** `en/` と `ja/` は常に同期させます。ファイル名は同一で、YAML は `description`、rule の `condition` 文、コメント以外は同じにします。workflow YAML は builtin の `en` / `ja` workflow に同じ改変を加えたものなので、構造を変えるときは両方を変えてください。`.takt/{workflows,steps,facets}` は `scripts/use-lang.sh` が生成するもので、追跡しません。
+- **2 言語、1 構造。** `en/` と `ja/` は常に同期させます。ファイル名は同一で、YAML は `description`、rule の `condition` 文、コメント以外は同じにします。workflow YAML は builtin の `en` / `ja` workflow に同じ改変を加えたものなので、構造を変えるときは両方を変えてください。このリポジトリ内の `.takt/{workflows,steps,facets}` は `scripts/use-lang.sh`（リポジトリ直下で実行）が生成するもので、追跡しません。`runtime.project.yaml` はインストーラがプロジェクトへコピーする step 割り当てのテンプレートです。
 - 設計メモと `runtime.yaml` の雛形: [`ja/workflows/flash-default.yaml`](ja/workflows/flash-default.yaml) の冒頭コメント。
 - 変更を出す前に、両言語について `scripts/use-lang.sh <lang>` のあと `takt workflow doctor flash-default` と `takt workflow inspect flash-default` を通してください。
 
