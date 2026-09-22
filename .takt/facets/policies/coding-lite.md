@@ -1,43 +1,43 @@
-# コーディングポリシー（lite）
+# Coding policy (lite)
 
-速さより丁寧さ、実装の楽さよりコードの正確さを優先する。
+Prefer care over speed, and correct code over easy implementation.
 
-## 変更範囲の最小化
+## Keep the change minimal
 
-- ボーイスカウト: 今回の変更が依存・影響拡大・新規露出する問題だけを改善する
-- 最小とは行数の少なさではなく、要件と実在する安全条件を満たす直接的な差分を指す。将来の柔軟性や品質指標だけを理由に構造を増やさない一方、変更した信頼境界の検証、認可、後片付け、エラー処理は省略しない
-- 契約定義だけを変更し、呼び出し元・生成元・読み取り側を更新しない状態は REJECT。契約変更と呼び出し元・生成元・テスト更新は同じ変更で行う
-- **未使用コード** - 「念のため」のコードは書かない
-- **未完成コード** - 必要な処理を TODO/FIXME で先送りせず、空実装やコメントアウト旧実装を残さない
-- **リファクタリング後の旧コード残存** - 置き換えたコード・エクスポートは削除する
-- **配線忘れ** - 新しいパラメータやフィールドの producer、伝播、consumer が同じ契約を共有しない状態は禁止
+- Boy scout rule: improve only the problems that this change depends on, spreads, or newly exposes.
+- Minimal does not mean few lines. It means the direct diff that satisfies the requirement and the safety conditions that actually exist. Do not add structure only for future flexibility or quality metrics, but never skip validation at a changed trust boundary, authorization, cleanup, or error handling.
+- Changing only a contract definition without updating its callers, producers, and readers is REJECT. Change the contract, its callers and producers, and the tests in the same change.
+- **Unused code** - do not write code "just in case".
+- **Unfinished code** - do not defer required logic with TODO/FIXME, and do not leave empty implementations or commented-out old code.
+- **Leftovers after refactoring** - delete the code and exports you replaced.
+- **Missing wiring** - a new parameter or field whose producer, propagation, and consumer do not share the same contract is not allowed.
 
-## 命名
+## Naming
 
-名前は実装機構ではなく、実際の役割・効果を表す。読み手が名前から挙動、責務、副作用を誤読するコードは悪いコード。
+A name describes the actual role and effect, not the implementation mechanism. Code whose names make the reader misjudge behavior, responsibility, or side effects is bad code.
 
-| パターン | 例 | 判定 |
-|---------|-----|------|
-| 名前が実際の効果と矛盾 | 毎回副作用を起こすように読めるが、実体はキャッシュ済み値の取得 | REJECT |
-| 副作用や実行頻度が読めない | 初期化、取得、更新のどれが起きるか名前から判断できない | REJECT |
-| 近接する API と区別できない | ラップ元や委譲先と同じ名前で、どちらの責務か読めない | REJECT |
-| 役割・効果で命名 | 実際に提供する値、状態変化、責務が名前から読める | OK |
-| 既存コードの命名慣習と矛盾 | 同種操作の並びで一部だけ命名規則が異なる | REJECT。揃える |
+| Pattern | Example | Verdict |
+|---------|---------|---------|
+| Name contradicts the actual effect | Reads as if it has a side effect every call, but actually returns a cached value | REJECT |
+| Side effects or frequency cannot be read | Cannot tell from the name whether it initializes, fetches, or updates | REJECT |
+| Indistinguishable from a nearby API | Same name as what it wraps or delegates to, so the responsibility is unclear | REJECT |
+| Named by role and effect | The value provided, the state change, and the responsibility are clear from the name | OK |
+| Contradicts the existing naming convention | One item in a family of similar operations follows a different naming rule | REJECT. Align it |
 
-## エラー処理
+## Error handling
 
-値の流れを不明瞭にするコードは書かない。エラーは上位に伝播させる。
+Do not write code that obscures the flow of values. Propagate errors upward.
 
-| パターン | 例 | 問題 |
-|---------|-----|------|
-| 必須データへのフォールバック | `user?.id ?? 'unknown'` | エラーになるべき状態で処理が進む |
-| try-catch で空値返却 | `catch { return ''; }` | エラーを握りつぶす |
-| 不整合な値のサイレントスキップ | `if (a !== expected) return undefined` | 設定ミスが実行時に黙って無視される |
+| Pattern | Example | Problem |
+|---------|---------|---------|
+| Fallback for required data | `user?.id ?? 'unknown'` | Processing continues in a state that should be an error |
+| try-catch returning an empty value | `catch { return ''; }` | Swallows the error |
+| Silently skipping an inconsistent value | `if (a !== expected) return undefined` | A configuration mistake is ignored at runtime without a trace |
 
-同じ外部契約へのエラー変換は、その契約を所有する境界へ集約する。
+Concentrate error translation for one external contract at the boundary that owns that contract.
 
-| 層 | 責務 |
-|----|------|
-| ドメイン/サービス層 | ビジネスルール違反時に例外をスロー |
-| Application層 | 例外を握りつぶさず、必要な補償や再試行だけを明示的に扱う |
-| Adapter境界 | 例外をプロトコル固有のレスポンスや表示に変換 |
+| Layer | Responsibility |
+|-------|----------------|
+| Domain / service layer | Throw on business rule violations |
+| Application layer | Do not swallow exceptions; handle only the compensation or retry that is explicitly needed |
+| Adapter boundary | Translate exceptions into protocol-specific responses or presentation |

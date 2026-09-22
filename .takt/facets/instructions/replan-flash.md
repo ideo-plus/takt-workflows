@@ -1,10 +1,10 @@
 {extends:scenario-based-replan-implementation}
 
-## Flash 実装向けの追記
+## Additional rules for Flash implementation
 
-実装は閉じた契約行だけを処理する Flash 級モデルが担当します。完了契約表と実装ガイドラインは次を満たしてください。
+Implementation is done by a Flash-class model that processes only closed contract rows. The completion contract table and the implementation guidelines must satisfy the following.
 
-- 完了契約表の「実装箇所」はファイル単位で必ず埋める。「検討中」「該当箇所」等の曖昧表現は禁止
-- 「完了証拠」は 1 行で実行できるコマンドにする
-- 「Coder 向け実装ガイドライン」は小規模タスクでも省略しない。参照すべき既存パターンの file:line、新規関数のシグネチャ、配線が必要な全箇所を列挙する
-- 1 契約行あたりの変更ファイルが 5 を超える場合は契約行を分割する
+- Always fill 「実装箇所」 (implementation location) in the completion contract table at file granularity. Vague entries such as "under consideration" or "the relevant place" are not allowed.
+- Make 「完了証拠」 (completion evidence) a command that can be run as a single line.
+- Never omit 「Coder 向け実装ガイドライン」 (implementation guidelines for the coder), even for small tasks. List the file:line of existing patterns to follow, the signatures of new functions, and every place that needs wiring.
+- If one contract row would change more than 5 files, split the row.

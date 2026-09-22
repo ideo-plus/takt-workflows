@@ -1,30 +1,30 @@
-# テストポリシー（lite）
+# Testing policy (lite)
 
-## 原則
+## Principles
 
-| 原則 | 基準 |
-|------|------|
-| Given-When-Then | テストは3段階で構造化する |
-| 1テスト1概念 | 複数の関心事を1テストに混ぜない |
-| 振る舞いを検証 | 実装の詳細ではなく振る舞いをテストする |
-| 内部構造を契約化しない | 行数・ソース文言・import・helper名・ファイル配置・参照同一性を、観測可能な契約の代用品にしない |
-| 独立性・再現性 | 他のテストや実行順序、時間やランダム性に依存せず、毎回同じ結果 |
-| モック契約一致 | 外部SDK・APIのモックは実契約と一致させ、誤った前提をテストで固定しない |
+| Principle | Criterion |
+|-----------|-----------|
+| Given-When-Then | Structure every test in three stages |
+| One concept per test | Do not mix several concerns in one test |
+| Verify behavior | Test behavior, not implementation details |
+| Do not turn internals into contracts | Line counts, source wording, imports, helper names, file layout, and reference identity are not substitutes for an observable contract |
+| Independent and repeatable | No dependence on other tests, execution order, time, or randomness; same result every run |
+| Mocks match the real contract | Mocks of external SDKs and APIs match the real contract; do not freeze a wrong assumption in a test |
 
-## 配置（テストレイヤーの選択）
+## Placement (choosing the test layer)
 
-- ロジックにはユニットテスト、境界にはインテグレーションテストを優先。ユニットテストでカバーできるものにE2Eテストを使いすぎない
-- 同じ失敗を既存の unit、integration、E2E のいずれかで検出できる場合、別レイヤーや consumer ごとの重複テストを追加しない
-- プロジェクト固有のテスト方針（AGENTS.md、CLAUDE.md 等）がテストレイヤーの責務を定義している場合、そちらを優先する
+- Prefer unit tests for logic and integration tests for boundaries. Do not overuse E2E tests for what a unit test can cover.
+- If an existing unit, integration, or E2E test already detects the same failure, do not add a duplicate in another layer or per consumer.
+- If a project-specific testing policy (AGENTS.md, CLAUDE.md, etc.) defines the responsibilities of each test layer, it takes precedence.
 
-## 観測可能な契約の検証
+## Verifying observable contracts
 
-各 assertion を、正本が明示した不変条件、正本から不可欠に直接導出した不変条件、または変更対象外の観測可能な既存契約へ対応付ける。対応先を示せない assertion は追加しない。
+Map every assertion to an invariant stated by the source of truth, an invariant derived directly and necessarily from it, or an observable existing contract outside the scope of the change. Do not add an assertion whose mapping you cannot show.
 
-| 基準 | 判定 |
-|------|------|
-| 期待する戻り値・例外・副作用が直接検証されている | OK |
-| 境界変更の成功/失敗、許可/拒否の両側が検証されている | OK |
-| 対象操作を通さず設定値・内部状態を読むだけ、または別の作用が契約なのに内部状態で代用している | REJECT |
-| 防御的実装から入力分類、振る舞い、エラー種別、文言、内部表現を推測し、新しいテスト契約として固定 | REJECT |
-| 完全一致文字列の不在だけで、禁止値や非継承値が使われていないと判断している | REJECT |
+| Criterion | Verdict |
+|-----------|---------|
+| The expected return value, exception, or side effect is verified directly | OK |
+| Both sides of a boundary change are verified: success/failure, allow/deny | OK |
+| Only reads configuration or internal state without going through the operation, or substitutes internal state for a contract that is really a different effect | REJECT |
+| Infers input classification, behavior, error kind, wording, or internal representation from defensive code and freezes it as a new test contract | REJECT |
+| Concludes that a forbidden or non-inherited value is unused only because an exact string is absent | REJECT |
