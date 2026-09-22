@@ -63,8 +63,9 @@ else
   runtime_note="runtime.yaml not touched (--no-runtime)"
 fi
 
-version="$(git -C "$bundle" rev-parse --short HEAD 2>/dev/null || echo unknown)"
-printf 'lang: %s\nsource: %s\nversion: %s\n' "$lang" "$bundle" "$version" > "$target/.takt-workflows"
+version="${TAKT_WORKFLOWS_VERSION:-$(git -C "$bundle" rev-parse --short HEAD 2>/dev/null || echo unknown)}"
+source="${TAKT_WORKFLOWS_SOURCE:-$bundle}"
+printf 'lang: %s\nsource: %s\nversion: %s\n' "$lang" "$source" "$version" > "$target/.takt-workflows"
 
 echo "takt-workflows ($lang, $version) installed into $target"
 echo "  workflows/steps/facets copied; $runtime_note"

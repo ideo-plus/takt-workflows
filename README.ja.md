@@ -15,29 +15,33 @@
 - T1 用に構造化出力へ対応した provider を 1 つ: `claude`、`claude-sdk`、`claude-terminal`、`codex`、`opencode` のいずれか
 - T0 用の provider は何でも可。OpenCode → ローカル Ollama サーバー → Ollama Cloud、および OpenCode → OpenCode Go の構成は動作確認済みです。
 
-### バンドルを取得する（マシンごとに一度）
-このリポジトリを任意の場所に clone します。ここはコピー元でしかなく、TAKT がこの場所を直接読むことはありません。
-
-```sh
-git clone https://github.com/ideo-plus/takt-workflows.git ~/src/takt-workflows
-```
-
-続けて、tier の profile を `~/.takt/runtime.yaml` に一度だけ定義します（[使い方](#使い方) 参照）。
-
 ### 作業するプロジェクトに導入する
-作業プロジェクトの中でインストーラを実行します。`<lang>/{workflows,steps,facets}` をそのプロジェクトの `.takt/` にコピーし、無ければ `.takt/runtime.yaml`（step の割り当て）も作ります:
+作業プロジェクトの中でワンライナーのインストーラを実行します。バンドルを tarball で取得し（git clone 不要）、`<lang>/{workflows,steps,facets}` をプロジェクトの `.takt/` にコピーし、無ければ `.takt/runtime.yaml`（step の割り当て）も作ります:
 
 ```sh
 cd ~/work/my-app
-~/src/takt-workflows/scripts/use-lang.sh ja        # または en
+curl -fsSL https://raw.githubusercontent.com/ideo-plus/takt-workflows/main/scripts/install.sh | sh -s -- ja    # または en
+```
+
+バージョンを固定するには `--ref`（ブランチ、タグ、コミットのいずれか）を付けます: `... | sh -s -- ja --ref v1.0.0`。導入した言語と ref は `.takt/.takt-workflows` に記録されます。
+
+手元に checkout を置きたい場合は、このリポジトリをプロジェクトの**外**に clone してください（git リポジトリの中に clone すると入れ子の埋め込みリポジトリになり、git はその中身を追跡しません）。そこから同じインストーラを実行します:
+
+```sh
+git clone https://github.com/ideo-plus/takt-workflows.git ~/src/takt-workflows
+cd ~/work/my-app && ~/src/takt-workflows/scripts/use-lang.sh ja
+```
+
+### コミット・設定・実行
+```sh
 git add .takt && git commit -m "chore: add takt flash-default workflow bundle"
 takt workflow doctor flash-default
 takt -w flash-default -t "〜をテスト付きで追加する"
 ```
 
-コピーしたファイルはコミットしてください。TAKT はタスクをリポジトリの worktree クローンで実行するため、`.takt/` 配下の未追跡ファイルは実行時に見えません。TAKT が置く既定の `.takt/.gitignore` は `workflows/`、`steps/`、`facets/` を最初から追跡対象にしています。
-
-バンドルの更新や言語の切り替えは、インストーラをもう一度実行するだけです。自分のファイルだけを置き換え、`.takt/` にある他の workflow には触れず、導入した言語とバンドルのコミットを `.takt/.takt-workflows` に記録します。
+- コピーしたファイルはコミットしてください。TAKT はタスクをリポジトリの worktree クローンで実行するため、`.takt/` 配下の未追跡ファイルは実行時に見えません。TAKT が置く既定の `.takt/.gitignore` は `workflows/`、`steps/`、`facets/` を最初から追跡対象にしています。
+- tier の profile はマシンごとに一度、`~/.takt/runtime.yaml` に定義します（[使い方](#使い方) 参照）。
+- バンドルの更新や言語の切り替えは、インストーラをもう一度実行するだけです。自分のファイルだけを置き換え、`.takt/` にある他の workflow には触れません。
 
 ## 使い方
 

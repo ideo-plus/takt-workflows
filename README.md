@@ -15,29 +15,33 @@ Tiered development workflows for [TAKT](https://github.com/nrslib/takt): start t
 - One provider with structured output for T1: `claude`, `claude-sdk`, `claude-terminal`, `codex`, or `opencode`
 - Any provider for T0. OpenCode → local Ollama server → Ollama Cloud, and OpenCode → OpenCode Go, are verified options.
 
-### Get the bundle (once per machine)
-Clone this repository anywhere. It is only a source to copy from; TAKT never reads it directly.
-
-```sh
-git clone https://github.com/ideo-plus/takt-workflows.git ~/src/takt-workflows
-```
-
-Then define the tier profiles once in `~/.takt/runtime.yaml` (see [Usage](#usage)).
-
 ### Add it to the project you work in
-Run the installer from that project. It copies `<lang>/{workflows,steps,facets}` into the project's `.takt/` and creates `.takt/runtime.yaml` (step assignments) if there is none:
+Run the one-line installer inside the project. It downloads the bundle as a tarball (no git clone), copies `<lang>/{workflows,steps,facets}` into the project's `.takt/`, and creates `.takt/runtime.yaml` (step assignments) if there is none:
 
 ```sh
 cd ~/work/my-app
-~/src/takt-workflows/scripts/use-lang.sh ja        # or: en
+curl -fsSL https://raw.githubusercontent.com/ideo-plus/takt-workflows/main/scripts/install.sh | sh -s -- ja    # or: en
+```
+
+Pin a version with `--ref` (any branch, tag, or commit): `... | sh -s -- ja --ref v1.0.0`. The installed language and ref are recorded in `.takt/.takt-workflows`.
+
+Prefer a local checkout? Clone this repository **outside** the project (a clone inside a git repository becomes an embedded repository that git does not track) and run the same installer from it:
+
+```sh
+git clone https://github.com/ideo-plus/takt-workflows.git ~/src/takt-workflows
+cd ~/work/my-app && ~/src/takt-workflows/scripts/use-lang.sh ja
+```
+
+### Commit, configure, run
+```sh
 git add .takt && git commit -m "chore: add takt flash-default workflow bundle"
 takt workflow doctor flash-default
 takt -w flash-default -t "Add ... with tests"
 ```
 
-Commit the copied files. TAKT runs tasks in worktree clones of the repository, so untracked files under `.takt/` are invisible to a run; TAKT's default `.takt/.gitignore` already tracks `workflows/`, `steps/`, and `facets/`.
-
-To update the bundle or switch language later, run the installer again. It replaces only its own files, leaves other workflows in `.takt/` untouched, and records the installed language and bundle commit in `.takt/.takt-workflows`.
+- Commit the copied files. TAKT runs tasks in worktree clones of the repository, so untracked files under `.takt/` are invisible to a run; TAKT's default `.takt/.gitignore` already tracks `workflows/`, `steps/`, and `facets/`.
+- Define the tier profiles once per machine in `~/.takt/runtime.yaml` (see [Usage](#usage)).
+- To update the bundle or switch language, run the installer again. It replaces only its own files and leaves other workflows in `.takt/` untouched.
 
 ## Usage
 
