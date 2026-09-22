@@ -37,12 +37,14 @@ takt -w flash-default -t "〜をテスト付きで追加する"
 ## 使い方
 
 ### 階層（Tier）
-| Tier | 用途 | 想定モデル |
-|---|---|---|
-| T0 | `write_tests`、初回の `implement` | Flash 級モデル（DGX Spark、Ollama Cloud、LM Studio） |
-| T1 | `reimplement`、`fix`、review companion、facet selector | 構造化出力に対応した中規模モデル |
-| T2 | `reimplement_final`、`fix` の昇格先、その他すべてのステップの既定 | 最も強い汎用モデル |
-| T3（任意） | `plan`、`replan`、裁定、`final-gate` | トークン消費が少なく判断の影響が大きいステップ向けの最上位モデル |
+| Tier | 用途 | 置くべきモデル | 動作確認済みの例（provider / model） |
+|---|---|---|---|
+| T0 | `write_tests`、初回の `implement` | Flash 級モデル（DGX Spark、Ollama Cloud、LM Studio） | `opencode` / `ollama/glm-5.3-flash:cloud` |
+| T1 | `reimplement`、`fix`、review companion、facet selector | 構造化出力に対応した中規模モデル | `codex` / `gpt-5.6-sol` |
+| T2 | `reimplement_final`、`fix` の昇格先、その他すべてのステップの既定 | 最も強い汎用モデル | `claude` / `opus` |
+| T3（任意） | `plan`、`replan`、裁定、`final-gate` | トークン消費が少なく判断の影響が大きいステップ向けの最上位モデル | `claude` / `claude-fable-5-1`（計画）、`codex` / `gpt-6-astra`（検収） |
+
+この例はこのワークフローの実走で実際に使った profile そのもので、`runtime.yaml` の例も同じ名前を使っています。
 
 ### 最上位モデルはどこに入るか（T3）
 T3 は、出力がその後の全工程を左右するのにトークン消費は少ない、ごく少数のステップに使います。計画の作成、並列レビューの裁定、final gate の 3 つです。動作確認済みの構成では、計画を書いたモデルがそのまま検収しないよう、意図的に 2 ベンダーへ分けています。
