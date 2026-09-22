@@ -23,7 +23,7 @@ cd ~/work/my-app
 curl -fsSL https://raw.githubusercontent.com/ideo-plus/takt-workflows/main/scripts/install.sh | sh -s -- ja    # or: en
 ```
 
-Pin a version with `--ref` (any branch, tag, or commit): `... | sh -s -- ja --ref v1.0.0`. The installed language and ref are recorded in `.takt/.takt-workflows`.
+Pin a version with `--ref` (any branch, tag, or commit): `... | sh -s -- ja --ref v0.1.0`. The installed language and ref are recorded in `.takt/.takt-workflows`.
 
 Prefer a local checkout? Clone this repository **outside** the project (a clone inside a git repository becomes an embedded repository that git does not track) and run the same installer from it:
 
