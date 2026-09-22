@@ -1,0 +1,17 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+*~
+.idea/
+.vscode/
+
+# Node (scripts/ use only node:test; no dependencies are expected)
+node_modules/
+npm-debug.log*
+
+# Logs and temp files
+*.log
+.tmp/
+
+# TAKT project state is governed by .takt/.gitignore (allowlist); nothing else to add here.
