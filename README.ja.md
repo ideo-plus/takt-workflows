@@ -23,7 +23,7 @@ cd ~/work/my-app
 curl -fsSL https://raw.githubusercontent.com/ideo-plus/takt-workflows/main/scripts/install.sh | sh -s -- ja    # または en
 ```
 
-バージョンを固定するには `--ref`（ブランチ、タグ、コミットのいずれか）を付けます: `... | sh -s -- ja --ref v1.0.0`。導入した言語と ref は `.takt/.takt-workflows` に記録されます。
+バージョンを固定するには `--ref`（ブランチ、タグ、コミットのいずれか）を付けます: `... | sh -s -- ja --ref v0.1.0`。導入した言語と ref は `.takt/.takt-workflows` に記録されます。
 
 手元に checkout を置きたい場合は、このリポジトリをプロジェクトの**外**に clone してください（git リポジトリの中に clone すると入れ子の埋め込みリポジトリになり、git はその中身を追跡しません）。そこから同じインストーラを実行します:
 
