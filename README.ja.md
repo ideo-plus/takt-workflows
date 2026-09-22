@@ -44,7 +44,7 @@ takt -w flash-default -t "〜をテスト付きで追加する"
 |---|---|---|---|
 | T0 | `write_tests`、初回の `implement` | Flash 級モデル（DGX Spark、Ollama Cloud、LM Studio） | `opencode` / `ollama/glm-5.3-flash:cloud` |
 | T1 | `reimplement`、`fix`、review companion、facet selector | 構造化出力に対応した中規模モデル | `codex` / `gpt-5.6-sol` |
-| T2 | `reimplement_final`、`fix` の昇格先、その他すべてのステップの既定 | 最も強い汎用モデル | `claude` / `opus` |
+| T2 | `reimplement_final`、`fix` の昇格先、その他すべてのステップの既定 | 最も強い汎用モデル | `claude` / `claude-opus-5` |
 | T3（任意） | `plan`、`replan`、裁定、`final-gate` | トークン消費が少なく判断の影響が大きいステップ向けの最上位モデル | `claude` / `claude-fable-5-1`（計画）、`codex` / `gpt-6-astra`（検収） |
 
 この例はこのワークフローの実走で実際に使った profile そのもので、`runtime.yaml` の例も同じ名前を使っています。
@@ -61,7 +61,7 @@ provider:
     t0-test-code:       { provider: opencode, model: ollama/glm-5.3-flash:cloud }
     t0-production-code: { provider: opencode, model: ollama/glm-5.3-flash:cloud }
     t1: { provider: codex,  model: gpt-5.6-sol }
-    t2: { provider: claude, model: opus }
+    t2: { provider: claude, model: claude-opus-5 }
     # T3（任意）: 計画と検収を別ベンダーにし、計画を書いたモデルに承認させない
     t3-plan:  { provider: claude, model: claude-fable-5-1 }
     t3-judge: { provider: codex,  model: gpt-6-astra }
@@ -97,7 +97,7 @@ provider:
 - ループバック以外の `base_url`（LAN 上の DGX Spark など）はグローバルの `~/.takt/runtime.yaml` でしか受け付けません。
 - `runtime.yaml` は意図的に `.takt/.gitignore` の許可リスト外です。環境ごとの設定なのでコミットしません。
 - あとで T0 を DGX Spark に切り替えるときは、`t0-*` の 2 つの profile だけを書き換えます。
-- 最上位モデルはレート制限に早く当たります。`~/.takt/config.yaml` に `rate_limit_fallback.switch_chain`（例: `[{provider: claude, model: opus}, {provider: codex, model: gpt-5.6-sol}]`）を置くと、制限に当たったステップは失敗せず次の provider で再実行されます。
+- 最上位モデルはレート制限に早く当たります。`~/.takt/config.yaml` に `rate_limit_fallback.switch_chain`（例: `[{provider: claude, model: claude-opus-5}, {provider: codex, model: gpt-5.6-sol}]`）を置くと、制限に当たったステップは失敗せず次の provider で再実行されます。
 
 ## ヘルプ
 - Issues: https://github.com/ideo-plus/takt-workflows/issues
