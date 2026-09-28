@@ -16,7 +16,7 @@
 - T0 用の provider は何でも可。OpenCode → ローカル Ollama サーバー → Ollama Cloud、および OpenCode → OpenCode Go の構成は動作確認済みです。
 
 ### 作業するプロジェクトに導入する
-作業プロジェクトの中でワンライナーのインストーラを実行します。バンドルを tarball で取得し（git clone 不要）、`<lang>/{workflows,steps,facets}` をプロジェクトの `.takt/` にコピーし、無ければ `.takt/runtime.yaml`（step の割り当て）も作ります:
+作業プロジェクトの中でワンライナーのインストーラを実行します。バンドルを tarball で取得し（git clone 不要）、`<lang>/{workflows,steps,facets}` をプロジェクトの `.takt/` にコピーし、無ければ `.takt/runtime.yaml` と `.takt/config.yaml` も作ります:
 
 ```sh
 cd ~/work/my-app
@@ -39,9 +39,9 @@ takt workflow doctor flash-default
 takt -w flash-default -t "〜をテスト付きで追加する"
 ```
 
-- コピーしたファイルはコミットしてください。TAKT はタスクをリポジトリの worktree クローンで実行するため、`.takt/` 配下の未追跡ファイルは実行時に見えません。TAKT が置く既定の `.takt/.gitignore` は `workflows/`、`steps/`、`facets/` を最初から追跡対象にしています。
-- tier の profile はマシンごとに一度、`~/.takt/runtime.yaml` に定義します（[使い方](#使い方) 参照）。
-- バンドルの更新や言語の切り替えは、インストーラをもう一度実行するだけです。自分のファイルだけを置き換え、`.takt/` にある他の workflow には触れません。
+- インストーラが書いたもの（`workflows/`、`steps/`、`facets/`、`runtime.yaml`、`config.yaml`、`.takt-workflows`）をコミットしてください。TAKT はタスクをリポジトリの worktree クローンで実行するため、`.takt/` 配下の未追跡ファイルは実行時に見えません。`runtime.yaml` はインストーラが `.takt/.gitignore` の許可リストに追加します。
+- 初回実行の前に、`.takt/runtime.yaml` のモデルが自分の環境で使えるか確認してください（[使い方](#使い方) 参照）。
+- バンドルの更新や言語の切り替えは、インストーラをもう一度実行するだけです。自分のファイルだけを置き換え、既存の `runtime.yaml` と `config.yaml` は残し、`.takt/` にある他の workflow には触れません。
 
 ## 使い方
 
@@ -53,39 +53,41 @@ takt -w flash-default -t "〜をテスト付きで追加する"
 | T2 | `reimplement_final`、`fix` の昇格先、その他すべてのステップの既定 | 最も強い汎用モデル | `claude` / `claude-opus-5` |
 | T3（任意） | `plan`、`replan`、裁定、`final-gate` | トークン消費が少なく判断の影響が大きいステップ向けの最上位モデル | `claude` / `claude-fable-5-1`（計画）、`codex` / `gpt-6-astra`（検収） |
 
-この例はこのワークフローの実走で実際に使った profile そのもので、`runtime.yaml` の例も同じ名前を使っています。
+この例は、このワークフローの実走で実際に使った profile そのものです。
 
-### `~/.takt/runtime.yaml` — profile（環境依存、コミットしない）
+### 設定はプロジェクトに閉じる
+このバンドルの TAKT 設定はすべてプロジェクト内に置き、プロジェクトと一緒にコミットします。`~/.takt` を介してプロジェクト同士が影響し合うことはありません。
+
+| ファイル | 内容 | テンプレート |
+|---|---|---|
+| `.takt/runtime.yaml` | profile（tier ごとの provider と model）と step の割り当て | [`runtime.project.yaml`](runtime.project.yaml) |
+| `.takt/config.yaml` | 言語とレート制限時のフォールバック連鎖 | [`config.project.yaml`](config.project.yaml) |
+
 ```yaml
 version: 1
 companion:
-  enabled: true                       # review companion を使うために必須
+  enabled: true
 provider:
   defaults: { profile: t2 }
   profiles:
-    # T0: ローカル ollama サーバー経由の Ollama Cloud と OpenCode Go を、どちらも OpenCode 経由で使う
+    # T0: Flash-class models for closed, well-specified work
     t0-test-code:       { provider: opencode, model: ollama/glm-5.3-flash:cloud }
     t0-production-code: { provider: opencode, model: opencode-go/gpt-5.6-luna }
+    # T1: mid-size model with structured output (companions and the facet selector need it)
     t1: { provider: claude, model: claude-sonnet-5 }
+    # T2: strongest general model; default for every step not listed below
     t2: { provider: claude, model: claude-opus-5 }
-    # T3（任意）: 計画と検収を別ベンダーにし、計画を書いたモデルに承認させない
+    # T3 (optional): planning and sign-off on different vendors
     t3-plan:  { provider: claude, model: claude-fable-5-1 }
     t3-judge: { provider: codex,  model: gpt-6-astra }
-```
-
-### `<project>/.takt/runtime.yaml` — ステップへの割り当て
-中身は [`runtime.project.yaml`](runtime.project.yaml) で、`.takt/runtime.yaml` が無いときにインストーラがプロジェクトへコピーします。
-
-```yaml
-version: 1
-provider:
-  defaults: { profile: t2 }
   targets:
     steps:
+      # T3 (optional): remove these four lines to run them on t2 instead
       development-core/plan:                     { profile: t3-plan }
       development-core/replan:                   { profile: t3-plan }
       peer-review/review-adjudication:           { profile: t3-judge }
       peer-review/final-gate:                    { profile: t3-judge }
+      # Tiers
       development-core/write_tests:              { ladder: [t0-test-code, t1, t2] }
       flash-implement-dynamic/implement:         { profile: t0-production-code }
       flash-implement-dynamic/reimplement:       { profile: t1 }
@@ -99,13 +101,35 @@ provider:
       review-companion-moderator:      { profile: t1 }
 ```
 
+`~/.takt/runtime.yaml` や `~/.takt/config.yaml` があると、TAKT はそれもマージします。他のプロジェクトの設定を完全に締め出すには、`TAKT_CONFIG_DIR` をプロジェクト内のディレクトリに向けます。たとえば direnv を使う場合は次のとおりです。`.takt/.gitignore` はこのディレクトリを最初から無視します。
+
+```sh
+# .envrc
+export TAKT_CONFIG_DIR="$PWD/.takt/home"
+```
+
 ### 知っておくこと
 - `ladder` から参照する profile は `provider` と `model` の両方が必須です。
-- 両方のファイルに `targets` があると、プロジェクト側がグローバル側を置き換えます。`profiles` はマージされ、同名はプロジェクト側が優先です。
-- ループバック以外の `base_url`（LAN 上の DGX Spark など）はグローバルの `~/.takt/runtime.yaml` でしか受け付けません。
-- `~/.takt/runtime.yaml`（profile）はマシンごとの設定でコミットしません。`<project>/.takt/runtime.yaml`（step の割り当て）は profile 名しか書かないのでチームで共有できます。既定の `.takt/.gitignore` は無視するので、共有する場合は `!runtime.yaml` を足してください。
+- `TAKT_CONFIG_DIR` を設定しないと、既存の `~/.takt/runtime.yaml` も効きます。同名の profile はプロジェクト側が優先し、`defaults` と `targets` はプロジェクト側が置き換えますが、グローバル側の `companion.enabled: false` はすべてのプロジェクトで companion を無効にします。
+- ループバック以外の `base_url`（LAN 上の DGX Spark など）は、`TAKT_CONFIG_DIR` 層の runtime.yaml でしか受け付けられません。`TAKT_CONFIG_DIR` をプロジェクト内に向けていれば、この設定もプロジェクトに閉じます。
 - あとで T0 を DGX Spark に切り替えるときは、`t0-*` の 2 つの profile だけを書き換えます。
-- 最上位モデルはレート制限に早く当たります。`~/.takt/config.yaml` に `rate_limit_fallback.switch_chain`（例: `[{provider: claude, model: claude-opus-5}, {provider: codex, model: gpt-5.6-sol}]`）を置くと、制限に当たったステップは失敗せず次の provider で再実行されます。
+- 最上位モデルはレート制限に早く当たります。`.takt/config.yaml` のフォールバック連鎖により、制限に当たったステップは失敗せず次の provider で再実行されます。
+
+## サンドボックスで検証する
+[`scripts/sandbox-verify.sh`](scripts/sandbox-verify.sh) は、使い捨ての git プロジェクトにバンドルを導入し、空の `TAKT_CONFIG_DIR` で実行します。そのためプロジェクトの設定だけが使われます。`flash-default` を実走させ、実行ログを検査します。
+
+```sh
+scripts/sandbox-verify.sh --mode mock    # TAKT の mock provider。ネットワーク不要、数秒
+scripts/sandbox-verify.sh --mode real    # runtime.project.yaml の provider を使う。約 1 時間
+```
+
+- 実行が exit 0 で完走すること。
+- 各ステップが `runtime.yaml` の割り当てどおりの provider と model で動くこと。`ladder` のステップはどの段でもよい。
+- 正常系の経路（`plan`、`write_tests`、`implement`、`review-adjudication`、`final-gate`）を通ること。
+- companion が割り当てどおりの profile で動くこと。
+- real モードのみ: テストファイルが作られ、サンドボックス内で `node --test` が通ること。
+
+結果はサンドボックス内の `report.md` に書かれます。サンドボックスは失敗時か `--keep` 指定時に残ります。`--lang`、`--task`、`--timeout` で言語・タスク・制限時間を変えられます。mock モードは経路をそのまま保ち（各 profile を「provider は mock、model は profile 名」に置き換える）、judge の答えを台本化して正常系を通します。確かめるのは配線で、モデルの品質ではありません。
 
 ## ヘルプ
 - Issues: https://github.com/ideo-plus/takt-workflows/issues
@@ -116,9 +140,9 @@ provider:
 - **昇格は `promotion` ではなくステップで表現する。** `promotion: [{at: N}]` は `ladder` を進めるだけで、子ワークフローの iteration カウンタは `workflow_call` のたびにリセットされます。そのため `implement → reimplement → reimplement_final` は別ステップです。`write_tests` と `fix` は 1 つのワークフロー内でループするので本物の ladder を使っています。
 - **`write_tests` の promotion は step fragment で与える。** `.takt/steps/development-core-write-tests.yaml` が builtin の fragment を shadowing して `promotion` を足しているので、`development-core` 自体はコピーしていません。この shadowing はこのプロジェクト内で `development-core` を使うすべてのワークフローに効く点に注意してください。
 - **T0 の文脈予算。** `write_tests`、`implement`、`reimplement` に注入する policy + knowledge + instruction は 25 KB 以下に保ちます（`coding-lite`、`testing-lite`、`implementation-semantics`）。T0 のステップにフルサイズの builtin policy を足さないでください。
-- **2 言語、1 構造。** `en/` と `ja/` は常に同期させます。ファイル名は同一で、YAML は `description`、rule の `condition` 文、コメント以外は同じにします。workflow YAML は builtin の `en` / `ja` workflow に同じ改変を加えたものなので、構造を変えるときは両方を変えてください。このリポジトリ内の `.takt/{workflows,steps,facets}` は `scripts/use-lang.sh`（リポジトリ直下で実行）が生成するもので、追跡しません。`runtime.project.yaml` はインストーラがプロジェクトへコピーする step 割り当てのテンプレートです。
+- **2 言語、1 構造。** `en/` と `ja/` は常に同期させます。ファイル名は同一で、YAML は `description`、rule の `condition` 文、コメント以外は同じにします。workflow YAML は builtin の `en` / `ja` workflow に同じ改変を加えたものなので、構造を変えるときは両方を変えてください。このリポジトリ内の `.takt/{workflows,steps,facets}` は `scripts/use-lang.sh`（リポジトリ直下で実行）が生成するもので、追跡しません。`runtime.project.yaml` と `config.project.yaml` はインストーラがプロジェクトへコピーするテンプレートです。
 - 設計メモと `runtime.yaml` の雛形: [`ja/workflows/flash-default.yaml`](ja/workflows/flash-default.yaml) の冒頭コメント。
-- 変更を出す前に、両言語について `scripts/use-lang.sh <lang>` のあと `takt workflow doctor flash-default` と `takt workflow inspect flash-default` を通してください。
+- 変更を出す前に、両言語で `scripts/sandbox-verify.sh --mode mock --lang <en|ja>` を通してください。CI でも実行します。facet や tier を変えたときは `--mode real` も実行してください。
 
 ## ライセンス
 Apache License 2.0 です。[LICENSE](LICENSE) を参照してください。

@@ -6,8 +6,8 @@ on:
   pull_request:
 
 jobs:
-  workflows:
-    name: takt doctor (${{ matrix.lang }})
+  sandbox:
+    name: sandbox (mock, ${{ matrix.lang }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -23,28 +23,35 @@ jobs:
           node-version: 24
       - name: Install TAKT
         run: npm install -g "takt@${TAKT_VERSION}"
-      - name: Select bundle language
-        run: |
-          mkdir -p ~/.takt
-          printf 'language: %s\n' "${{ matrix.lang }}" > ~/.takt/config.yaml
-          scripts/use-lang.sh "${{ matrix.lang }}" --no-runtime
-      - name: Validate workflows
-        run: takt workflow doctor flash-default flash-implement-dynamic flash-remediation-dynamic
-      - name: Inspect root workflow
-        run: takt workflow inspect flash-default > /dev/null
+      # Installs the bundle into a fresh git project with project-closed configuration and an
+      # empty TAKT_CONFIG_DIR, runs takt workflow doctor, runs flash-default on the mock
+      # provider, and checks step routing, the happy path, and the companions.
+      - name: Sandbox verification (mock provider)
+        run: scripts/sandbox-verify.sh --mode mock --lang "${{ matrix.lang }}" --dir "$RUNNER_TEMP/sandbox" --keep
       - name: T0 context budget
         run: |
+          project="$RUNNER_TEMP/sandbox/project"
           builtin="$(npm root -g)/takt/builtins/${{ matrix.lang }}/facets"
           common=(
             "$builtin/policies/contract-change.md"
-            .takt/facets/policies/coding-lite.md
-            .takt/facets/policies/testing-lite.md
+            "$project/.takt/facets/policies/coding-lite.md"
+            "$project/.takt/facets/policies/testing-lite.md"
             "$builtin/knowledge/implementation-semantics.md"
           )
           echo "== write_tests"
-          node scripts/check-facet-budget.mjs "$T0_BUDGET_BYTES" "${common[@]}" .takt/facets/instructions/write-tests-flash.md
+          node scripts/check-facet-budget.mjs "$T0_BUDGET_BYTES" "${common[@]}" "$project/.takt/facets/instructions/write-tests-flash.md"
           echo "== implement / reimplement"
-          node scripts/check-facet-budget.mjs "$T0_BUDGET_BYTES" "${common[@]}" .takt/facets/instructions/implement-flash.md
+          node scripts/check-facet-budget.mjs "$T0_BUDGET_BYTES" "${common[@]}" "$project/.takt/facets/instructions/implement-flash.md"
+      - name: Upload sandbox report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sandbox-${{ matrix.lang }}
+          path: |
+            ${{ runner.temp }}/sandbox/report.md
+            ${{ runner.temp }}/sandbox/run.log
+            ${{ runner.temp }}/sandbox/doctor.log
+          if-no-files-found: ignore
 
   scripts:
     name: node --test

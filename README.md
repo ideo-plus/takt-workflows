@@ -16,7 +16,7 @@ Tiered development workflows for [TAKT](https://github.com/nrslib/takt): start t
 - Any provider for T0. OpenCode → local Ollama server → Ollama Cloud, and OpenCode → OpenCode Go, are verified options.
 
 ### Add it to the project you work in
-Run the one-line installer inside the project. It downloads the bundle as a tarball (no git clone), copies `<lang>/{workflows,steps,facets}` into the project's `.takt/`, and creates `.takt/runtime.yaml` (step assignments) if there is none:
+Run the one-line installer inside the project. It downloads the bundle as a tarball (no git clone), copies `<lang>/{workflows,steps,facets}` into the project's `.takt/`, and creates `.takt/runtime.yaml` and `.takt/config.yaml` if they do not exist:
 
 ```sh
 cd ~/work/my-app
@@ -39,9 +39,9 @@ takt workflow doctor flash-default
 takt -w flash-default -t "Add ... with tests"
 ```
 
-- Commit the copied files. TAKT runs tasks in worktree clones of the repository, so untracked files under `.takt/` are invisible to a run; TAKT's default `.takt/.gitignore` already tracks `workflows/`, `steps/`, and `facets/`.
-- Define the tier profiles once per machine in `~/.takt/runtime.yaml` (see [Usage](#usage)).
-- To update the bundle or switch language, run the installer again. It replaces only its own files and leaves other workflows in `.takt/` untouched.
+- Commit what the installer wrote: `workflows/`, `steps/`, `facets/`, `runtime.yaml`, `config.yaml`, and `.takt-workflows`. TAKT runs tasks in worktree clones of the repository, so untracked files under `.takt/` are invisible to a run. The installer adds `runtime.yaml` to the `.takt/.gitignore` allowlist.
+- Before the first run, check that the models in `.takt/runtime.yaml` are available in your environment (see [Usage](#usage)).
+- To update the bundle or switch language, run the installer again. It replaces only its own files, keeps your `runtime.yaml` and `config.yaml`, and leaves other workflows in `.takt/` untouched.
 
 ## Usage
 
@@ -53,39 +53,41 @@ takt -w flash-default -t "Add ... with tests"
 | T2 | `reimplement_final`, `fix` escalation, default for every other step | Strongest general model | `claude` / `claude-opus-5` |
 | T3 (optional) | `plan`, `replan`, adjudication, `final-gate` | Top model for low-token, high-leverage judgment steps | `claude` / `claude-fable-5-1` (plan), `codex` / `gpt-6-astra` (judge) |
 
-The examples are the exact profiles used in the verified full runs of this workflow; the `runtime.yaml` snippets use the same names.
+The examples are the exact profiles used in the verified full runs of this workflow.
 
-### `~/.takt/runtime.yaml` — profiles (environment specific, not committed)
+### Configuration stays in the project
+All TAKT configuration for this bundle lives in the project and is committed with it, so projects do not affect each other through `~/.takt`.
+
+| File | Contents | Template |
+|---|---|---|
+| `.takt/runtime.yaml` | Profiles (provider and model per tier) and step assignments | [`runtime.project.yaml`](runtime.project.yaml) |
+| `.takt/config.yaml` | Language and the rate-limit fallback chain | [`config.project.yaml`](config.project.yaml) |
+
 ```yaml
 version: 1
 companion:
-  enabled: true                       # required for the review companions
+  enabled: true
 provider:
   defaults: { profile: t2 }
   profiles:
-    # T0: Ollama Cloud through the local ollama server, and OpenCode Go, both via OpenCode
+    # T0: Flash-class models for closed, well-specified work
     t0-test-code:       { provider: opencode, model: ollama/glm-5.3-flash:cloud }
     t0-production-code: { provider: opencode, model: opencode-go/gpt-5.6-luna }
+    # T1: mid-size model with structured output (companions and the facet selector need it)
     t1: { provider: claude, model: claude-sonnet-5 }
+    # T2: strongest general model; default for every step not listed below
     t2: { provider: claude, model: claude-opus-5 }
-    # T3 (optional): planning and sign-off on different vendors, so the model that wrote the plan does not approve it
+    # T3 (optional): planning and sign-off on different vendors
     t3-plan:  { provider: claude, model: claude-fable-5-1 }
     t3-judge: { provider: codex,  model: gpt-6-astra }
-```
-
-### `<project>/.takt/runtime.yaml` — step assignments
-This is [`runtime.project.yaml`](runtime.project.yaml), which the installer copies into the project when no `.takt/runtime.yaml` exists.
-
-```yaml
-version: 1
-provider:
-  defaults: { profile: t2 }
   targets:
     steps:
+      # T3 (optional): remove these four lines to run them on t2 instead
       development-core/plan:                     { profile: t3-plan }
       development-core/replan:                   { profile: t3-plan }
       peer-review/review-adjudication:           { profile: t3-judge }
       peer-review/final-gate:                    { profile: t3-judge }
+      # Tiers
       development-core/write_tests:              { ladder: [t0-test-code, t1, t2] }
       flash-implement-dynamic/implement:         { profile: t0-production-code }
       flash-implement-dynamic/reimplement:       { profile: t1 }
@@ -99,13 +101,35 @@ provider:
       review-companion-moderator:      { profile: t1 }
 ```
 
+TAKT still merges `~/.takt/runtime.yaml` and `~/.takt/config.yaml` when they exist. To keep other projects' settings out completely, point `TAKT_CONFIG_DIR` at a directory inside the project, for example with direnv. `.takt/.gitignore` already ignores it.
+
+```sh
+# .envrc
+export TAKT_CONFIG_DIR="$PWD/.takt/home"
+```
+
 ### Things to know
 - Every profile referenced from a `ladder` must define both `provider` and `model`.
-- When both files define `targets`, the project file replaces the global one. `profiles` are merged, project wins.
-- A non-loopback `base_url` (for example a DGX Spark on the LAN) is only accepted in the global `~/.takt/runtime.yaml`.
-- `~/.takt/runtime.yaml` (profiles) is per machine and never committed. `<project>/.takt/runtime.yaml` (step assignments) only names profiles, so a team can share it: add `!runtime.yaml` to the project's `.takt/.gitignore`, which ignores it by default.
+- Without `TAKT_CONFIG_DIR`, an existing `~/.takt/runtime.yaml` still applies: project profiles override global profiles of the same name, project `defaults` and `targets` replace the global ones, and `companion.enabled: false` in the global file disables companions for every project.
+- TAKT accepts a non-loopback `base_url` (for example a DGX Spark on the LAN) only in the runtime.yaml of the `TAKT_CONFIG_DIR` layer. With a project-local `TAKT_CONFIG_DIR`, that setting also stays in the project.
 - To switch T0 to a DGX Spark later, change only the two `t0-*` profiles.
-- Top models hit rate limits sooner. Set `rate_limit_fallback.switch_chain` in `~/.takt/config.yaml` (for example `[{provider: claude, model: claude-opus-5}, {provider: codex, model: gpt-5.6-sol}]`) so a step that hits a limit is re-run on the next provider instead of failing.
+- Top models hit rate limits sooner. The fallback chain in `.takt/config.yaml` re-runs a step that hits a limit on the next provider instead of failing it.
+
+## Verify in a sandbox
+[`scripts/sandbox-verify.sh`](scripts/sandbox-verify.sh) installs the bundle into a throwaway git project with an empty `TAKT_CONFIG_DIR`, so only the project configuration is used. It runs `flash-default` and checks the run log.
+
+```sh
+scripts/sandbox-verify.sh --mode mock    # TAKT's mock provider: no network, a few seconds
+scripts/sandbox-verify.sh --mode real    # the providers in runtime.project.yaml: about an hour
+```
+
+- The run exits 0 and completes.
+- Every step runs on the provider and model that `runtime.yaml` assigns to it. A `ladder` step may run on any of its rungs.
+- The happy path is visited: `plan`, `write_tests`, `implement`, `review-adjudication`, `final-gate`.
+- The companions run on their assigned profile.
+- Real mode only: test files are created and `node --test` passes in the sandbox.
+
+The report is written to `report.md` in the sandbox, which is kept on failure or with `--keep`. `--lang`, `--task`, and `--timeout` change the language, the task, and the time limit. Mock mode keeps the routing (each profile becomes the mock provider with the profile name as model) and scripts the judge to take the happy path, so it checks the wiring, not model quality.
 
 ## Getting help
 - Issues: https://github.com/ideo-plus/takt-workflows/issues
@@ -116,9 +140,9 @@ provider:
 - **Escalation is modelled as steps, not `promotion`.** `promotion: [{at: N}]` only advances a `ladder`, and a child workflow's iteration counter resets on every `workflow_call`, so `implement → reimplement → reimplement_final` are separate steps. `write_tests` and `fix` keep a real ladder because they loop inside one workflow.
 - **`write_tests` promotion via step fragment.** `.takt/steps/development-core-write-tests.yaml` shadows the builtin fragment and adds `promotion`, so `development-core` itself is not copied. Note that this shadowing applies to every workflow in this project that uses `development-core`.
 - **T0 context budget.** Policy + knowledge + instruction injected into `write_tests`, `implement`, and `reimplement` stay under 25 KB (`coding-lite`, `testing-lite`, `implementation-semantics`). Do not add full builtin policies to T0 steps.
-- **Two languages, one structure.** `en/` and `ja/` must stay in sync: same file names, and the same YAML apart from `description`, rule `condition` text, and comments. The workflow YAMLs are the builtin `en` / `ja` workflows with the same edits applied, so change both when you change structure. In this repository, `.takt/{workflows,steps,facets}` are generated by `scripts/use-lang.sh` (run from the repository root) and are not tracked. `runtime.project.yaml` is the step-assignment template the installer copies into projects.
+- **Two languages, one structure.** `en/` and `ja/` must stay in sync: same file names, and the same YAML apart from `description`, rule `condition` text, and comments. The workflow YAMLs are the builtin `en` / `ja` workflows with the same edits applied, so change both when you change structure. In this repository, `.takt/{workflows,steps,facets}` are generated by `scripts/use-lang.sh` (run from the repository root) and are not tracked. `runtime.project.yaml` and `config.project.yaml` are the templates the installer copies into projects.
 - Design notes and the `runtime.yaml` template: header comment of [`en/workflows/flash-default.yaml`](en/workflows/flash-default.yaml).
-- Before submitting a change, run `scripts/use-lang.sh <lang>` followed by `takt workflow doctor flash-default` and `takt workflow inspect flash-default` for both languages.
+- Before submitting a change, run `scripts/sandbox-verify.sh --mode mock --lang <en|ja>` for both languages; CI runs it too. When you change facets or tiers, also run `--mode real`.
 
 ## License
 Apache License 2.0. See [LICENSE](LICENSE).
