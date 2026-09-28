@@ -1,19 +1,26 @@
 # takt-workflows
-Tiered development workflows for [TAKT](https://github.com/nrslib/takt): start test generation and implementation on a cheap Flash-class model, and escalate to stronger models only when a step fails.
+A collection of [TAKT](https://github.com/nrslib/takt) workflows, facets, and hands-on know-how for running them, packaged so any project can install and verify them.
 
 [English](README.md) | [日本語](README.ja.md)
 
+## Workflows
+| Workflow | What it does |
+|---|---|
+| [`flash-default`](#flash-default) | The builtin `default` development workflow with model tiers: tests and implementation start on a cheap Flash-class model and escalate to stronger models only when a step fails. |
+
+More workflows will be added to this collection over time.
+
 ## Highlights
-- **Cheap first, strong when needed.** `write_tests` and the first `implement` run on a Flash-class model (T0). Re-implementation, fixes, and review run on mid (T1) and top (T2) models only when the cheap attempt does not pass.
-- **Swap models without touching the workflow.** Which provider and model each tier uses lives in `runtime.yaml`, so the same workflow runs on a DGX Spark, on Ollama Cloud, or on any other provider.
-- **Same quality gates as TAKT's `default`.** Scenario-based planning, test-first implementation, parallel peer review, adjudication, a convergent fix loop, and a final gate are all kept.
+- **Install into the project you work in.** A one-line installer copies a bundle into the project's `.takt/`. No clone inside your repository.
+- **Configuration stays in the project.** Models and step assignments live in the project's committed `.takt/runtime.yaml`, so projects do not affect each other through `~/.takt`.
+- **English and Japanese bundles.** `en/` and `ja/` have the same structure, like TAKT's own builtins.
+- **Verified end to end.** A sandbox script runs a workflow in a throwaway project, on TAKT's mock provider or on real providers, and checks which model each step actually used.
 
 ## Quickstart
 
 ### Requirements
 - TAKT 0.66 or later (`npm i -g takt`)
-- One provider with structured output for T1: `claude`, `claude-sdk`, `claude-terminal`, `codex`, or `opencode`
-- Any provider for T0. OpenCode → local Ollama server → Ollama Cloud, and OpenCode → OpenCode Go, are verified options.
+- The providers named in the workflow's `runtime.yaml` (see the workflow's section below)
 
 ### Add it to the project you work in
 Run the one-line installer inside the project. It downloads the bundle as a tarball (no git clone), copies `<lang>/{workflows,steps,facets}` into the project's `.takt/`, and creates `.takt/runtime.yaml` and `.takt/config.yaml` if they do not exist:
@@ -34,16 +41,37 @@ cd ~/work/my-app && ~/src/takt-workflows/scripts/use-lang.sh ja
 
 ### Commit, configure, run
 ```sh
-git add .takt && git commit -m "chore: add takt flash-default workflow bundle"
+git add .takt && git commit -m "chore: add takt-workflows bundle"
 takt workflow doctor flash-default
 takt -w flash-default -t "Add ... with tests"
 ```
 
 - Commit what the installer wrote: `workflows/`, `steps/`, `facets/`, `runtime.yaml`, `config.yaml`, and `.takt-workflows`. TAKT runs tasks in worktree clones of the repository, so untracked files under `.takt/` are invisible to a run. The installer adds `runtime.yaml` to the `.takt/.gitignore` allowlist.
-- Before the first run, check that the models in `.takt/runtime.yaml` are available in your environment (see [Usage](#usage)).
+- Before the first run, check that the models in `.takt/runtime.yaml` are available in your environment.
 - To update the bundle or switch language, run the installer again. It replaces only its own files, keeps your `runtime.yaml` and `config.yaml`, and leaves other workflows in `.takt/` untouched.
 
-## Usage
+## Configuration stays in the project
+All TAKT configuration for the bundle lives in the project and is committed with it.
+
+| File | Contents | Template |
+|---|---|---|
+| `.takt/runtime.yaml` | Profiles (provider and model) and the step assignments of each workflow | [`runtime.project.yaml`](runtime.project.yaml) |
+| `.takt/config.yaml` | Language and the rate-limit fallback chain | [`config.project.yaml`](config.project.yaml) |
+
+TAKT still merges `~/.takt/runtime.yaml` and `~/.takt/config.yaml` when they exist. To keep other projects' settings out completely, point `TAKT_CONFIG_DIR` at a directory inside the project, for example with direnv. `.takt/.gitignore` already ignores it.
+
+```sh
+# .envrc
+export TAKT_CONFIG_DIR="$PWD/.takt/home"
+```
+
+- Without `TAKT_CONFIG_DIR`, an existing `~/.takt/runtime.yaml` still applies: project profiles override global profiles of the same name, project `defaults` and `targets` replace the global ones, and `companion.enabled: false` in the global file disables companions for every project.
+- TAKT accepts a non-loopback `base_url` (for example a DGX Spark on the LAN) only in the runtime.yaml of the `TAKT_CONFIG_DIR` layer. With a project-local `TAKT_CONFIG_DIR`, that setting also stays in the project.
+- Every profile referenced from a `ladder` must define both `provider` and `model`.
+- Top models hit rate limits sooner. The fallback chain in `.takt/config.yaml` re-runs a step that hits a limit on the next provider instead of failing it.
+
+## flash-default
+The builtin `default` workflow (scenario-based planning, test-first implementation, parallel peer review, adjudication, a convergent fix loop, and a final gate) with its implementation steps split into model tiers.
 
 ### Tiers
 | Tier | Used for | What to put there | Verified example (provider / model) |
@@ -53,16 +81,9 @@ takt -w flash-default -t "Add ... with tests"
 | T2 | `reimplement_final`, `fix` escalation, default for every other step | Strongest general model | `claude` / `claude-opus-5-5` |
 | T3 (optional) | `plan`, `replan`, adjudication, `final-gate` | Top model for low-token, high-leverage judgment steps | `claude` / `claude-fable-5-1` (plan), `codex` / `gpt-6-astra` (judge) |
 
-The examples are the exact profiles used in the verified full runs of this workflow.
+The examples are the exact profiles used in the verified full runs. T1 needs a provider with structured output: `claude`, `claude-sdk`, `claude-terminal`, `codex`, or `opencode`.
 
-### Configuration stays in the project
-All TAKT configuration for this bundle lives in the project and is committed with it, so projects do not affect each other through `~/.takt`.
-
-| File | Contents | Template |
-|---|---|---|
-| `.takt/runtime.yaml` | Profiles (provider and model per tier) and step assignments | [`runtime.project.yaml`](runtime.project.yaml) |
-| `.takt/config.yaml` | Language and the rate-limit fallback chain | [`config.project.yaml`](config.project.yaml) |
-
+### `.takt/runtime.yaml`
 ```yaml
 version: 1
 companion:
@@ -101,19 +122,7 @@ provider:
       review-companion-moderator:      { profile: t1 }
 ```
 
-TAKT still merges `~/.takt/runtime.yaml` and `~/.takt/config.yaml` when they exist. To keep other projects' settings out completely, point `TAKT_CONFIG_DIR` at a directory inside the project, for example with direnv. `.takt/.gitignore` already ignores it.
-
-```sh
-# .envrc
-export TAKT_CONFIG_DIR="$PWD/.takt/home"
-```
-
-### Things to know
-- Every profile referenced from a `ladder` must define both `provider` and `model`.
-- Without `TAKT_CONFIG_DIR`, an existing `~/.takt/runtime.yaml` still applies: project profiles override global profiles of the same name, project `defaults` and `targets` replace the global ones, and `companion.enabled: false` in the global file disables companions for every project.
-- TAKT accepts a non-loopback `base_url` (for example a DGX Spark on the LAN) only in the runtime.yaml of the `TAKT_CONFIG_DIR` layer. With a project-local `TAKT_CONFIG_DIR`, that setting also stays in the project.
-- To switch T0 to a DGX Spark later, change only the two `t0-*` profiles.
-- Top models hit rate limits sooner. The fallback chain in `.takt/config.yaml` re-runs a step that hits a limit on the next provider instead of failing it.
+To switch T0 to a DGX Spark later, change only the two `t0-*` profiles.
 
 ## Verify in a sandbox
 [`scripts/sandbox-verify.sh`](scripts/sandbox-verify.sh) installs the bundle into a throwaway git project with an empty `TAKT_CONFIG_DIR`, so only the project configuration is used. It runs `flash-default` and checks the run log.
@@ -136,13 +145,19 @@ The report is written to `report.md` in the sandbox, which is kept on failure or
 - TAKT itself: [nrslib/takt](https://github.com/nrslib/takt)
 
 ## For workflow developers
-- **Builtins are referenced, not copied.** Only `development-implement-dynamic` and `development-remediation-dynamic` are copied (as `flash-implement-dynamic` / `flash-remediation-dynamic`) to add the tier steps. Builtin facets are referenced through one-line `{extends:...}` files with a `builtin-` prefix.
+
+### Repository conventions
+- **Two languages, one structure.** `en/` and `ja/` must stay in sync: same file names, and the same YAML apart from `description`, rule `condition` text, and comments. When a workflow copies a builtin, it is the builtin `en` / `ja` file with the same edits applied, so change both when you change structure.
+- **Builtins are referenced, not copied.** Copy a builtin workflow only when you must change its steps. Builtin facets are referenced through one-line `{extends:...}` files with a `builtin-` prefix.
+- **Templates.** `runtime.project.yaml` and `config.project.yaml` are what the installer copies into projects. In this repository, `.takt/{workflows,steps,facets}` are generated by `scripts/use-lang.sh` (run from the repository root) and are not tracked.
+- **Verification.** Before submitting a change, run `scripts/sandbox-verify.sh --mode mock --lang <en|ja>` for both languages; CI runs it too. When you change facets or tiers, also run `--mode real`.
+
+### flash-default design notes
+- **Only two builtins are copied.** `development-implement-dynamic` and `development-remediation-dynamic` become `flash-implement-dynamic` / `flash-remediation-dynamic` to add the tier steps; `flash-default` calls the builtin `development-core` with different arguments.
 - **Escalation is modelled as steps, not `promotion`.** `promotion: [{at: N}]` only advances a `ladder`, and a child workflow's iteration counter resets on every `workflow_call`, so `implement → reimplement → reimplement_final` are separate steps. `write_tests` and `fix` keep a real ladder because they loop inside one workflow.
-- **`write_tests` promotion via step fragment.** `.takt/steps/development-core-write-tests.yaml` shadows the builtin fragment and adds `promotion`, so `development-core` itself is not copied. Note that this shadowing applies to every workflow in this project that uses `development-core`.
+- **`write_tests` promotion via step fragment.** `steps/development-core-write-tests.yaml` shadows the builtin fragment and adds `promotion`, so `development-core` itself is not copied. This shadowing applies to every workflow in a project that uses `development-core`.
 - **T0 context budget.** Policy + knowledge + instruction injected into `write_tests`, `implement`, and `reimplement` stay under 25 KB (`coding-lite`, `testing-lite`, `implementation-semantics`). Do not add full builtin policies to T0 steps.
-- **Two languages, one structure.** `en/` and `ja/` must stay in sync: same file names, and the same YAML apart from `description`, rule `condition` text, and comments. The workflow YAMLs are the builtin `en` / `ja` workflows with the same edits applied, so change both when you change structure. In this repository, `.takt/{workflows,steps,facets}` are generated by `scripts/use-lang.sh` (run from the repository root) and are not tracked. `runtime.project.yaml` and `config.project.yaml` are the templates the installer copies into projects.
-- Design notes and the `runtime.yaml` template: header comment of [`en/workflows/flash-default.yaml`](en/workflows/flash-default.yaml).
-- Before submitting a change, run `scripts/sandbox-verify.sh --mode mock --lang <en|ja>` for both languages; CI runs it too. When you change facets or tiers, also run `--mode real`.
+- More design notes and the `runtime.yaml` template: header comment of [`en/workflows/flash-default.yaml`](en/workflows/flash-default.yaml).
 
 ## License
 Apache License 2.0. See [LICENSE](LICENSE).

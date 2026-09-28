@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repository is
 
-A distributable TAKT (0.66) workflow bundle, not an application. The root workflow `flash-default` is the builtin `default` workflow with its implementation steps split into model tiers (T0 Flash-class → T1 → T2, optional T3 for plan/judge steps). Users install it into *their own* project's `.takt/`; TAKT never reads this repository directly.
+A growing collection of TAKT (0.66) workflows, facets, and operational know-how, distributed as a bundle, not an application. Users install it into *their own* project's `.takt/`; TAKT never reads this repository directly. The first workflow is `flash-default`: the builtin `default` workflow with its implementation steps split into model tiers (T0 Flash-class → T1 → T2, optional T3 for plan/judge steps). More workflows will be added (see `TODO.md`); keep repository-wide mechanisms (installer, project-closed config, sandbox verification) generic, and keep workflow-specific notes under that workflow. Several architecture notes below are specific to `flash-default`.
 
 ## Commands
 
