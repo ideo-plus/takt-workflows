@@ -149,7 +149,7 @@ provider:
 takt -w ddd-rust-default -t "〜を追加する"        # または ddd-typescript-default
 ```
 
-builtin の facet は、DDD の規約と一致するものを再利用しています（coding、testing、review、ai-antipattern、contract-change、implementation-semantics、architecture）。builtin の backend と CQRS+ES の facet は使いません。これらは Kotlin 上の Axon を前提とし、業務エラーを例外で投げる、集約がイベントを返して不変のまま保たれる、ユースケースが読み取りモデルを見て判断する、と定めているためです。再利用する builtin の一般的な規則を DDD の規約が上書きする箇所（業務エラーを例外にする、コマンド側のユースケースに入力 DTO を渡す、infrastructure を公開しない、ディレクトリの例）は、DDD の policy に明記しています。
+builtin の facet は、DDD の規約と一致するものを再利用しています（coding、testing、review、ai-antipattern、contract-change、implementation-semantics、architecture）。builtin の backend と CQRS+ES の facet は使いません。これらは Kotlin 上の Axon を前提とし、業務エラーを例外で投げる、集約がイベントを返す、ユースケースが読み取りモデルを見て判断する、と定めているためです。再利用する builtin の一般的な規則を DDD の規約が上書きする箇所（業務エラーを例外にする、コマンド側のユースケースに入力 DTO を渡す、infrastructure を公開しない、ディレクトリの例）は、DDD の policy に明記しています。集約を可変にするかは言語で分けています。Rust の集約は、借用検査で排他が保証される `&mut self` で変えます。TypeScript の集約は不変で、コマンドは新しいインスタンスを返します。
 
 ## サンドボックスで検証する
 [`scripts/sandbox-verify.sh`](scripts/sandbox-verify.sh) は、使い捨ての git プロジェクトにバンドルを導入し、空の `TAKT_CONFIG_DIR` で実行します。そのためプロジェクトの設定だけが使われます。ワークフローを 1 本（`--workflow`、既定は `flash-default`）実走させ、実行ログを検査します。

@@ -16,7 +16,7 @@
 
 ### class 表現
 
-`open` は検証して非公開のコンストラクタで組み立て、`Result` を返す。`restore` は状態全体を検証してから永続化された請求書を組み立て直し、壊れた状態では throw する。これは業務上の失敗ではない。`addLine` はコマンド `command.invoice.add-line` で、読み取り専用の配列を置き換える。`lines()` は複製を返し、`total()` は各明細に加算を頼む。
+`open` は検証して非公開のコンストラクタで組み立て、`Result` を返す。`restore` は状態全体を検証してから永続化された請求書を組み立て直し、壊れた状態では throw する。これは業務上の失敗ではない。`addLine` はコマンド `command.invoice.add-line` で、`issue` と同じく、非公開のコンストラクタで新しい請求書を組み立てて返し、元の請求書は変えない。`#` フィールドはすべて `readonly` にする。`lines()` は複製を返し、`total()` は各明細に加算を頼む。
 
 ```ts
 import type { Result } from "@acme/language-extensions";
@@ -31,9 +31,9 @@ function sumOf(lines: readonly InvoiceLine[]): number {
 }
 
 export class Invoice {
-  #customer: string;
-  #lines: readonly InvoiceLine[];
-  #issued: boolean;
+  readonly #customer: string;
+  readonly #lines: readonly InvoiceLine[];
+  readonly #issued: boolean;
 
   private constructor(customer: string, lines: readonly InvoiceLine[], issued: boolean) {
     this.#customer = customer;
@@ -53,18 +53,16 @@ export class Invoice {
     return new Invoice(customer, lines, issued);
   }
 
-  addLine(line: InvoiceLine): Result<void, AddInvoiceLineError> {
+  addLine(line: InvoiceLine): Result<Invoice, AddInvoiceLineError> {
     if (this.#issued) return { ok: false, error: "already-issued" };
     if (line.addTo(sumOf(this.#lines)) < 0) return { ok: false, error: "negative-total" };
-    this.#lines = [...this.#lines, line];
-    return { ok: true, value: undefined };
+    return { ok: true, value: new Invoice(this.#customer, [...this.#lines, line], false) };
   }
 
-  issue(): Result<void, IssueInvoiceError> {
+  issue(): Result<Invoice, IssueInvoiceError> {
     if (this.#issued) return { ok: false, error: "already-issued" };
     if (this.#lines.length === 0) return { ok: false, error: "empty-lines" };
-    this.#issued = true;
-    return { ok: true, value: undefined };
+    return { ok: true, value: new Invoice(this.#customer, this.#lines, true) };
   }
 
   isBilledTo(customer: string): boolean {
@@ -83,7 +81,7 @@ export class Invoice {
 
 ### companion 表現
 
-状態全体を受け取るファクトリ（`restore`）が完全コンストラクタである。検証し、入力を複製してクロージャの状態に入れ、型の注釈を付けたリテラルでインスタンスを書く。`open` はそれを経由して組み立てる。読み取り専用の型はコレクション自身の変数に付け、状態のオブジェクトには注釈を付けない。
+状態全体を受け取るファクトリ（`restore`）が完全コンストラクタである。検証し、入力を複製してクロージャの状態に入れ、型の注釈を付けたリテラルでインスタンスを書く。`open` とコマンドはそれを経由して組み立てるので、コマンドは新しいインスタンスを返し、クロージャの状態には書き込まない。読み取り専用の型はコレクション自身の変数に付け、状態のオブジェクトには注釈を付けない。
 
 ```ts
 import type { Result } from "@acme/language-extensions";
@@ -101,8 +99,8 @@ const brand: unique symbol = Symbol("Invoice");
 
 export type Invoice = {
   readonly [brand]: true;
-  addLine(line: InvoiceLine): Result<void, AddInvoiceLineError>;
-  issue(): Result<void, IssueInvoiceError>;
+  addLine(line: InvoiceLine): Result<Invoice, AddInvoiceLineError>;
+  issue(): Result<Invoice, IssueInvoiceError>;
   isBilledTo(customer: string): boolean;
   total(): number;
   lines(): readonly InvoiceLine[];
@@ -121,17 +119,15 @@ export const Invoice = {
     const state = { customer, lines: kept, issued };
     const instance: Invoice = {
       [brand]: true,
-      addLine(line: InvoiceLine): Result<void, AddInvoiceLineError> {
+      addLine(line: InvoiceLine): Result<Invoice, AddInvoiceLineError> {
         if (state.issued) return { ok: false, error: "already-issued" };
         if (line.addTo(sumOf(state.lines)) < 0) return { ok: false, error: "negative-total" };
-        state.lines = [...state.lines, line];
-        return { ok: true, value: undefined };
+        return { ok: true, value: Invoice.restore(state.customer, [...state.lines, line], false) };
       },
-      issue(): Result<void, IssueInvoiceError> {
+      issue(): Result<Invoice, IssueInvoiceError> {
         if (state.issued) return { ok: false, error: "already-issued" };
         if (state.lines.length === 0) return { ok: false, error: "empty-lines" };
-        state.issued = true;
-        return { ok: true, value: undefined };
+        return { ok: true, value: Invoice.restore(state.customer, state.lines, true) };
       },
       isBilledTo(customer: string): boolean {
         return state.customer === customer;
@@ -162,7 +158,7 @@ export type Result<T, E> =
 
 ## 所有
 
-ファクトリやコマンドが受け取った配列やオブジェクトは複製して持ち（`[...lines]`）、状態として持つものではなく複製か読み取り専用の値を返す。`#` フィールドやクロージャでも、呼び出し側が同じ可変の値への参照を持っていれば変わってしまう。業務上の失敗は、状態を変える前に返す。
+ファクトリやコマンドが受け取った配列やオブジェクトは複製して持ち（`[...lines]`）、状態として持つものではなく複製か読み取り専用の値を返す。`#` フィールドやクロージャでも、呼び出し側が同じ可変の値への参照を持っていれば変わってしまう。業務上の失敗は、新しいインスタンスを組み立てる前に返す。
 
 ## モジュール配置と指定子
 
@@ -207,7 +203,7 @@ export interface InvoiceRepository {
 }
 ```
 
-`execute` は ID を受け取り、集約は受け取らない。ユースケースはポートを `#` フィールドに持ち、すべての受け手に 1 つの型を明記し、集約にコマンドの実行を頼む。
+`execute` は ID を受け取り、集約は受け取らない。ユースケースはポートを `#` フィールドに持ち、すべての受け手に 1 つの型を明記し、集約にコマンドの実行を頼み、コマンドが返したインスタンスを保存する。
 
 ```ts
 import type { Invoice, IssueInvoiceError } from "@acme/billing-domain";
@@ -227,9 +223,9 @@ export class IssueInvoice {
     const found: Result<Invoice, InvoiceNotFound> = this.#invoices.findById(invoiceId);
     if (!found.ok) return found;
     const invoice: Invoice = found.value;
-    const issued: Result<void, IssueInvoiceError> = invoice.issue();
+    const issued: Result<Invoice, IssueInvoiceError> = invoice.issue();
     if (!issued.ok) return issued;
-    this.#invoices.store(invoiceId, invoice);
+    this.#invoices.store(invoiceId, issued.value);
     return { ok: true, value: undefined };
   }
 }

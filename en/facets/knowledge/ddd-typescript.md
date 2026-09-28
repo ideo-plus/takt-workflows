@@ -16,7 +16,7 @@ The examples below keep the customer and the amounts as bare `string` and `numbe
 
 ### Class representation
 
-`open` validates and builds through the private constructor and returns `Result`. `restore` rebuilds a persisted invoice after validating the whole state and throws on a corrupt one, which is not a business failure. `addLine` is the command `command.invoice.add-line` and replaces the readonly array. `lines()` returns a copy, and `total()` asks each line to add itself.
+`open` validates and builds through the private constructor and returns `Result`. `restore` rebuilds a persisted invoice after validating the whole state and throws on a corrupt one, which is not a business failure. `addLine` is the command `command.invoice.add-line`; like `issue`, it returns a new invoice built through the private constructor and leaves the current one unchanged. Every `#` field is `readonly`. `lines()` returns a copy, and `total()` asks each line to add itself.
 
 ```ts
 import type { Result } from "@acme/language-extensions";
@@ -31,9 +31,9 @@ function sumOf(lines: readonly InvoiceLine[]): number {
 }
 
 export class Invoice {
-  #customer: string;
-  #lines: readonly InvoiceLine[];
-  #issued: boolean;
+  readonly #customer: string;
+  readonly #lines: readonly InvoiceLine[];
+  readonly #issued: boolean;
 
   private constructor(customer: string, lines: readonly InvoiceLine[], issued: boolean) {
     this.#customer = customer;
@@ -53,18 +53,16 @@ export class Invoice {
     return new Invoice(customer, lines, issued);
   }
 
-  addLine(line: InvoiceLine): Result<void, AddInvoiceLineError> {
+  addLine(line: InvoiceLine): Result<Invoice, AddInvoiceLineError> {
     if (this.#issued) return { ok: false, error: "already-issued" };
     if (line.addTo(sumOf(this.#lines)) < 0) return { ok: false, error: "negative-total" };
-    this.#lines = [...this.#lines, line];
-    return { ok: true, value: undefined };
+    return { ok: true, value: new Invoice(this.#customer, [...this.#lines, line], false) };
   }
 
-  issue(): Result<void, IssueInvoiceError> {
+  issue(): Result<Invoice, IssueInvoiceError> {
     if (this.#issued) return { ok: false, error: "already-issued" };
     if (this.#lines.length === 0) return { ok: false, error: "empty-lines" };
-    this.#issued = true;
-    return { ok: true, value: undefined };
+    return { ok: true, value: new Invoice(this.#customer, this.#lines, true) };
   }
 
   isBilledTo(customer: string): boolean {
@@ -83,7 +81,7 @@ export class Invoice {
 
 ### Companion representation
 
-The factory that takes the whole state (`restore`) is the full constructor: it validates, copies its input into the closure state, and writes the instance as a literal annotated with the type. `open` builds through it. The readonly type is stated on the collection's own variable, and the state object is left unannotated.
+The factory that takes the whole state (`restore`) is the full constructor: it validates, copies its input into the closure state, and writes the instance as a literal annotated with the type. `open` and the commands build through it, so a command returns a new instance and the closure state is never written. The readonly type is stated on the collection's own variable, and the state object is left unannotated.
 
 ```ts
 import type { Result } from "@acme/language-extensions";
@@ -101,8 +99,8 @@ const brand: unique symbol = Symbol("Invoice");
 
 export type Invoice = {
   readonly [brand]: true;
-  addLine(line: InvoiceLine): Result<void, AddInvoiceLineError>;
-  issue(): Result<void, IssueInvoiceError>;
+  addLine(line: InvoiceLine): Result<Invoice, AddInvoiceLineError>;
+  issue(): Result<Invoice, IssueInvoiceError>;
   isBilledTo(customer: string): boolean;
   total(): number;
   lines(): readonly InvoiceLine[];
@@ -121,17 +119,15 @@ export const Invoice = {
     const state = { customer, lines: kept, issued };
     const instance: Invoice = {
       [brand]: true,
-      addLine(line: InvoiceLine): Result<void, AddInvoiceLineError> {
+      addLine(line: InvoiceLine): Result<Invoice, AddInvoiceLineError> {
         if (state.issued) return { ok: false, error: "already-issued" };
         if (line.addTo(sumOf(state.lines)) < 0) return { ok: false, error: "negative-total" };
-        state.lines = [...state.lines, line];
-        return { ok: true, value: undefined };
+        return { ok: true, value: Invoice.restore(state.customer, [...state.lines, line], false) };
       },
-      issue(): Result<void, IssueInvoiceError> {
+      issue(): Result<Invoice, IssueInvoiceError> {
         if (state.issued) return { ok: false, error: "already-issued" };
         if (state.lines.length === 0) return { ok: false, error: "empty-lines" };
-        state.issued = true;
-        return { ok: true, value: undefined };
+        return { ok: true, value: Invoice.restore(state.customer, state.lines, true) };
       },
       isBilledTo(customer: string): boolean {
         return state.customer === customer;
@@ -162,7 +158,7 @@ Each mapped factory and command states its own error type: the union of the stri
 
 ## Ownership
 
-Copy an array or object a factory or command receives (`[...lines]`), and return a copy or a readonly value instead of the one held in state. A `#` field or a closure still changes when a caller keeps a reference to the same mutable value. Return a business failure before changing any state.
+Copy an array or object a factory or command receives (`[...lines]`), and return a copy or a readonly value instead of the one held in state. A `#` field or a closure still changes when a caller keeps a reference to the same mutable value. Return a business failure before building the new instance.
 
 ## Module Layouts and Specifiers
 
@@ -207,7 +203,7 @@ export interface InvoiceRepository {
 }
 ```
 
-`execute` takes an ID and never an aggregate. The use case holds the port in a `#` field, states one named type on every receiver, and asks the aggregate to run the command.
+`execute` takes an ID and never an aggregate. The use case holds the port in a `#` field, states one named type on every receiver, asks the aggregate to run the command, and stores the instance the command returns.
 
 ```ts
 import type { Invoice, IssueInvoiceError } from "@acme/billing-domain";
@@ -227,9 +223,9 @@ export class IssueInvoice {
     const found: Result<Invoice, InvoiceNotFound> = this.#invoices.findById(invoiceId);
     if (!found.ok) return found;
     const invoice: Invoice = found.value;
-    const issued: Result<void, IssueInvoiceError> = invoice.issue();
+    const issued: Result<Invoice, IssueInvoiceError> = invoice.issue();
     if (!issued.ok) return issued;
-    this.#invoices.store(invoiceId, invoice);
+    this.#invoices.store(invoiceId, issued.value);
     return { ok: true, value: undefined };
   }
 }
