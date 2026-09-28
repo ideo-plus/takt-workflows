@@ -14,3 +14,4 @@
 - `## DDD Use Cases` の節を設け、変更が追加・変更するユースケースごとに、`use_case_id`、`name`、`target_aggregates`、`commands`、`re_execution_basis`、`recovery_policy`、複数の集約を対象にするときの `multi_aggregate_strategy`、`read_model_exposure` を宣言する。
 - 完了契約表では、最初の行で DDD モデルの変更を反映する。実装の各行は実装するモデル ID を引用し、実装箇所は集約写像と選んだモジュール配置に従う。
 - 要求が業務上の規則（不変条件、エラーの条件、冪等性の要件）を決めていないときは、計画が置く前提とともに未決事項として挙げる。作り出した規則を要件として示さない。
+- `.takt/` の中は読まない。DDD の規則はこのステップに渡された policy と knowledge にあり、ddd-lint の検査はソースを読まず実行して確かめる。

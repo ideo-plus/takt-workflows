@@ -42,12 +42,13 @@ cd ~/work/my-app && ~/src/takt-workflows/scripts/use-lang.sh ja
 
 ### コミット・設定・実行
 ```sh
-git add .takt && git commit -m "chore: add takt-workflows bundle"
+git add .takt .claude && git commit -m "chore: add takt-workflows bundle"
 takt workflow doctor flash-default
 takt -w flash-default -t "〜をテスト付きで追加する"
 ```
 
-- インストーラが書いたもの（`workflows/`、`steps/`、`facets/`、`runtime.yaml`、`config.yaml`、`.takt-workflows`）をコミットしてください。TAKT はタスクをリポジトリの worktree クローンで実行するため、`.takt/` 配下の未追跡ファイルは実行時に見えません。`runtime.yaml` はインストーラが `.takt/.gitignore` の許可リストに追加します。
+- インストーラが書いたもの（`workflows/`、`steps/`、`facets/`、`tools/`、`runtime.yaml`、`config.yaml`、`.takt-workflows`、`.claude/settings.json`）をコミットしてください。TAKT はタスクをリポジトリの worktree クローンで実行するため、`.takt/` 配下の未追跡ファイルは実行時に見えません。`runtime.yaml` はインストーラが `.takt/.gitignore` の許可リストに追加します。
+- インストーラは、TAKT の Claude のステップが読み込む `.claude/settings.json` に、`.takt/tools`、`.takt/facets`、`.takt/workflows`、`.takt/steps` の Read を禁止するルールをマージします。これで各ステップは ddd-lint のソースを読まずに実行し、渡された facet を読み直しません。`.takt/` のレポートと品質ゲートのログは読めます。プロジェクトで対話的に使う Claude Code にも同じルールが効くので、そこでバンドルを編集するときは `.claude/settings.json` から外してください。
 - 初回実行の前に、`.takt/runtime.yaml` のモデルが自分の環境で使えるか確認してください。
 - バンドルの更新や言語の切り替えは、インストーラをもう一度実行するだけです。自分のファイルだけを置き換え、既存の `runtime.yaml` と `config.yaml` は残し、`.takt/` にある他の workflow には触れません。
 

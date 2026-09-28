@@ -65,8 +65,8 @@ T={
  }}
 LINT="bun .takt/tools/ddd-lint/ddd-lint.ts --project ."
 def gate_block(lang):
-    text={"en":f"Running `{LINT}` reports no findings; when the ddd-lint gate fails, read the output log it names and fix every finding",
-          "ja":f"`{LINT}` の実行で指摘がない。ddd-lint のゲートが失敗したら、示された出力ログを読み、すべての指摘を直す"}[lang]
+    text={"en":f"Running `{LINT}` reports no findings; when the ddd-lint gate fails, read the output log it names and fix every finding. Do not read the ddd-lint sources under `.takt/tools/`",
+          "ja":f"`{LINT}` の実行で指摘がない。ddd-lint のゲートが失敗したら、示された出力ログを読み、すべての指摘を直す。`.takt/tools/` の ddd-lint のソースは読まない"}[lang]
     return (f"    quality_gates:\n      - \"{text}\"\n      - type: command\n        name: ddd-lint\n"
             f"        command: \"{LINT}\"\n        cwd: \".\"\n        timeout_ms: 300000\n")
 def add_gates(s, lang, steps, success):

@@ -42,12 +42,13 @@ cd ~/work/my-app && ~/src/takt-workflows/scripts/use-lang.sh ja
 
 ### Commit, configure, run
 ```sh
-git add .takt && git commit -m "chore: add takt-workflows bundle"
+git add .takt .claude && git commit -m "chore: add takt-workflows bundle"
 takt workflow doctor flash-default
 takt -w flash-default -t "Add ... with tests"
 ```
 
-- Commit what the installer wrote: `workflows/`, `steps/`, `facets/`, `runtime.yaml`, `config.yaml`, and `.takt-workflows`. TAKT runs tasks in worktree clones of the repository, so untracked files under `.takt/` are invisible to a run. The installer adds `runtime.yaml` to the `.takt/.gitignore` allowlist.
+- Commit what the installer wrote: `workflows/`, `steps/`, `facets/`, `tools/`, `runtime.yaml`, `config.yaml`, `.takt-workflows`, and `.claude/settings.json`. TAKT runs tasks in worktree clones of the repository, so untracked files under `.takt/` are invisible to a run. The installer adds `runtime.yaml` to the `.takt/.gitignore` allowlist.
+- The installer merges Read deny rules for `.takt/tools`, `.takt/facets`, `.takt/workflows`, and `.takt/steps` into `.claude/settings.json`, which TAKT's Claude steps load. A step then runs ddd-lint instead of reading its sources and does not reread the facets it was given; reports and quality gate logs under `.takt/` stay readable. Your interactive Claude Code sessions in the project get the same rules; remove them from `.claude/settings.json` if you edit the bundle there.
 - Before the first run, check that the models in `.takt/runtime.yaml` are available in your environment.
 - To update the bundle or switch language, run the installer again. It replaces only its own files, keeps your `runtime.yaml` and `config.yaml`, and leaves other workflows in `.takt/` untouched.
 
