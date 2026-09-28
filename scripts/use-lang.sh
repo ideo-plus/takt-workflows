@@ -51,6 +51,11 @@ for l in en ja; do
   done
 done
 
+# Files earlier versions of the bundle installed under another name.
+for rel in facets/policies/ddd-application.md facets/policies/ddd-adapter.md; do
+  rm -f "$target/$rel"
+done
+
 # Copy the selected language.
 for dir in workflows steps facets; do
   (cd "$bundle/$lang" && find "$dir" -type d) | while IFS= read -r d; do mkdir -p "$target/$d"; done

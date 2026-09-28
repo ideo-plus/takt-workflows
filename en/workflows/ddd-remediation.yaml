@@ -75,8 +75,8 @@ policies:
   architecture: ../facets/policies/builtin-architecture.md
   ddd-model: ../facets/policies/ddd-model.md
   ddd-domain: ../facets/policies/ddd-domain.md
-  ddd-application: ../facets/policies/ddd-application.md
-  ddd-adapter: ../facets/policies/ddd-adapter.md
+  ddd-use-case: ../facets/policies/ddd-use-case.md
+  ddd-interface-adapter: ../facets/policies/ddd-interface-adapter.md
   ddd-structure: ../facets/policies/ddd-structure.md
   ddd-rust: ../facets/policies/ddd-rust.md
   ddd-typescript: ../facets/policies/ddd-typescript.md

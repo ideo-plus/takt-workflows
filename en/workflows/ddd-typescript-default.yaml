@@ -49,8 +49,8 @@ steps:
         - ai-antipattern
         - ddd-model
         - ddd-domain
-        - ddd-application
-        - ddd-adapter
+        - ddd-use-case
+        - ddd-interface-adapter
         - ddd-structure
         - ddd-typescript
       development_knowledge:
@@ -73,8 +73,8 @@ steps:
       review_policy_additions:
         - ddd-model
         - ddd-domain
-        - ddd-application
-        - ddd-adapter
+        - ddd-use-case
+        - ddd-interface-adapter
         - ddd-structure
         - ddd-typescript
       review_policy:
@@ -84,8 +84,8 @@ steps:
         - architecture
         - ddd-model
         - ddd-domain
-        - ddd-application
-        - ddd-adapter
+        - ddd-use-case
+        - ddd-interface-adapter
         - ddd-structure
         - ddd-typescript
       review_knowledge:

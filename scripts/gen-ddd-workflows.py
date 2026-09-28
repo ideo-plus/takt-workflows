@@ -39,7 +39,7 @@ def find_builtins():
 
 os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 BUILTIN = find_builtins()
-DDD_POL=["ddd-model","ddd-domain","ddd-application","ddd-adapter","ddd-structure","ddd-rust","ddd-typescript"]
+DDD_POL=["ddd-model","ddd-domain","ddd-use-case","ddd-interface-adapter","ddd-structure","ddd-rust","ddd-typescript"]
 DDD_KNOW=["ddd-modeling","ddd-rust","ddd-typescript"]
 REVIEW_INSTR=[p+n for n in ["architecture-review","security-review","testing-review","coding-review","frontend-review","cqrs-es-review"] for p in ("","follow-up-")]+["initial-ai-antipattern-review","follow-up-ai-antipattern-review"]
 T={

@@ -1,4 +1,4 @@
-# DDD Application Layer Policy
+# DDD Use-Case Layer Policy
 
 Keep use cases as orchestrators that load, ask the domain to decide, and persist, with every step safe to re-execute.
 
