@@ -184,13 +184,21 @@ function verify() {
 
   // Completion.
   add('run', 'takt exit code 0', exitCode === 0, `exit ${exitCode}`);
-  add('run', 'workflow completed', /Workflow completed/.test(runLog), (runLog.match(/Workflow (completed|failed)[^\n]*/) ?? ['no completion line'])[0]);
 
   const latest = latestRunLog(project);
   if (!latest) {
     add('run', 'run log present', false, 'no .takt/runs/*/logs/*.jsonl');
   } else {
     const events = readEvents(latest.file);
+
+    // The jsonl `workflow_complete` event is authoritative; the console log is only for the detail line.
+    const completed = events.find((e) => e.type === 'workflow_complete');
+    add(
+      'run',
+      'workflow completed',
+      Boolean(completed),
+      (runLog.match(/Workflow (completed|failed)[^\n]*/) ?? [completed ? `workflow_complete (${completed.iterations} iterations)` : 'no workflow_complete event'])[0],
+    );
 
     // Step routing.
     const starts = events.filter((e) => e.type === 'step_start' && e.model);
