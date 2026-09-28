@@ -126,7 +126,7 @@ provider:
 あとで T0 を DGX Spark に切り替えるときは、`t0-*` の 2 つの profile だけを書き換えます。
 
 ## ddd-rust-default / ddd-typescript-default
-ドメイン駆動設計の規約に従う Rust または TypeScript のコードを書くための、builtin `default` と同じ開発ワークフローです。規約は AI-DLC の DDD プラグインに由来します。常に有効なドメインモデル、宣言済みのコマンドだけによる状態変更、操作ごとのエラー型を持つ `Result` で返す業務上の失敗、調整だけを行うユースケース、集約ごとのリポジトリ、コマンド側とクエリ側の分離、ユビキタス言語によるパッケージ名がその中身です。
+ドメイン駆動設計の規約に従う Rust または TypeScript のコードを書くための、builtin `default` と同じ開発ワークフローです。規約の中身は、常に有効なドメインモデル、宣言済みのコマンドだけによる状態変更、操作ごとのエラー型を持つ `Result` で返す業務上の失敗、調整だけを行うユースケース、集約ごとのリポジトリ、コマンド側とクエリ側の分離、ユビキタス言語によるパッケージ名です。
 
 | ステップ | 変わること |
 |---|---|
@@ -149,7 +149,7 @@ provider:
 takt -w ddd-rust-default -t "〜を追加する"        # または ddd-typescript-default
 ```
 
-builtin の facet は、DDD の規約と一致するものを再利用しています（coding、testing、review、ai-antipattern、contract-change、implementation-semantics、architecture）。builtin の backend と CQRS+ES の facet は使いません。これらは Kotlin 上の Axon を前提とし、業務エラーを例外で投げる、集約がイベントを返して不変のまま保たれる、ユースケースが読み取りモデルを見て判断する、と定めているためです。再利用する builtin の一般的な規則を DDD の規約が上書きする箇所（業務エラーを例外にする、コマンド側のユースケースに入力 DTO を渡す、infrastructure を公開しない、ディレクトリの例）は、DDD の policy に明記しています。
+builtin の facet は、DDD の規約と一致するものを再利用しています（coding、testing、review、ai-antipattern、contract-change、implementation-semantics、architecture）。builtin の backend と CQRS+ES の facet は使いません。これらは Kotlin 上の Axon を前提とし、業務エラーを例外で投げる、集約がイベントを返す、ユースケースが読み取りモデルを見て判断する、と定めているためです。再利用する builtin の一般的な規則を DDD の規約が上書きする箇所（業務エラーを例外にする、コマンド側のユースケースに入力 DTO を渡す、infrastructure を公開しない、ディレクトリの例）は、DDD の policy に明記しています。集約を可変にするかは言語で分けています。Rust の集約は、借用検査で排他が保証される `&mut self` で変えます。TypeScript の集約は不変で、コマンドは新しいインスタンスを返します。
 
 ## サンドボックスで検証する
 [`scripts/sandbox-verify.sh`](scripts/sandbox-verify.sh) は、使い捨ての git プロジェクトにバンドルを導入し、空の `TAKT_CONFIG_DIR` で実行します。そのためプロジェクトの設定だけが使われます。ワークフローを 1 本（`--workflow`、既定は `flash-default`）実走させ、実行ログを検査します。
@@ -191,7 +191,6 @@ scripts/sandbox-verify.sh --mode real --workflow ddd-rust-default   # 結果を 
 ### ddd ワークフローの設計メモ
 - **facet の分担。** 判定は policy が持ちます。`ddd-model`（モデル宣言と写像）、`ddd-domain`、`ddd-application`、`ddd-adapter`、`ddd-structure`、そして言語の policy 1 つ（`ddd-rust` か `ddd-typescript`）です。選択肢と例は knowledge が持ちます。`ddd-modeling`（プロジェクトのファイルの形、モデリングの選択肢）と `ddd-rust` / `ddd-typescript` です。ルートを言語ごとに分けているので、別の言語の facet はプロンプトに入りません。
 - **複製した builtin。** `ddd-implement` と `ddd-remediation` は、衝突する builtin の backend knowledge を注入しうる動的 facet プールを外しています。`ddd-review` は backend と CQRS+ES のレビュアーを外し、`steps/ddd-reviewer.yaml` を固定のレビュアーとして加えています。複製は builtin のワークフローから生成しており、section map に builtin の親が渡す facet をすべて宣言しています。
-- **モデルのファイルはプラグインと互換。** `docs/ddd/*.yaml` と `.ddd.toml` は AI-DLC の DDD プラグインのスキーマ バージョン 2 に従っており、後からその検査ツールを組み込めます。
 
 ## ライセンス
 Apache License 2.0 です。[LICENSE](LICENSE) を参照してください。

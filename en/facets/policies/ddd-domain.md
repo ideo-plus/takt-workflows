@@ -33,7 +33,7 @@ Keep the domain model always valid: state is hidden, built only through a full c
 | A method changes state but is not the method mapped to a declared command | REJECT |
 | A setter or a generic update method exists on an aggregate or Entity | REJECT |
 | A method is treated as replay only because of its name (`apply`, `on_event`, and so on) | REJECT. Replay is allowed only for methods declared in `replay_methods` of an event-sourced aggregate |
-| An aggregate changes its own state inside a command | OK. Aggregates and Entities may be mutable through commands; generic advice to keep domain models immutable applies to value objects and Domain Primitives only |
+| An aggregate or Entity changes state inside a command | Decided by the language policy. Rust changes it through `&mut self`, which the borrow checker keeps exclusive; TypeScript returns a new instance, because references are shared freely |
 | A value object or Domain Primitive changes after construction | REJECT |
 | Interior mutability or a shared reference hides a business state change | REJECT |
 | Replay makes a new business decision or rejects a stored event as a business failure | REJECT. Replay only applies facts; a corrupt history aborts restoration |

@@ -1,6 +1,6 @@
 # DDD TypeScript Policy
 
-Apply the DDD layer rules to TypeScript with one code representation per project, runtime-private state, method-specific Result errors, and explicit package boundaries.
+Apply the DDD layer rules to TypeScript with one code representation per project, runtime-private and immutable state, method-specific Result errors, and explicit package boundaries.
 
 ## Principles
 
@@ -8,6 +8,7 @@ Apply the DDD layer rules to TypeScript with one code representation per project
 |-----------|-----------|
 | One representation | The project settings choose `class` or `companion`; every aggregate, Entity, Domain Primitive, and value object uses it |
 | Runtime-private state | State is hidden by `#` fields or a factory closure; `private`, `protected`, and `readonly` do not hide state |
+| Immutable instances | No domain instance, aggregates and Entities included, changes after construction; a command returns a new instance |
 | Result from infrastructure | `Result` is declared once in the infrastructure language-extensions package |
 | Closed error unions | Each mapped operation returns its own union of string literals |
 | Explicit boundaries | Packages are reached only by package name and published `exports` |
@@ -20,6 +21,7 @@ Apply the DDD layer rules to TypeScript with one code representation per project
 | State is held in a property that is not a `#` field (including `private`, `protected`, `readonly`, or parameter properties) | REJECT |
 | The constructor is not `private`, or does not take the whole state | REJECT |
 | `new` of a domain type appears outside its own class body | REJECT |
+| A `#` field is not declared `readonly` | REJECT |
 | A domain class uses accessors (`get`/`set`), `extends`, `implements`, decorators, `declare`, `abstract` members, or computed member names | REJECT |
 
 ## Companion Representation
@@ -37,8 +39,12 @@ Apply the DDD layer rules to TypeScript with one code representation per project
 
 | Criterion | Judgment |
 |-----------|----------|
-| A method that changes state is not named by a command slug of the model (`command.invoice.add-line` is `addLine`) and is not a declared replay method | REJECT |
-| A collection in state is mutated in place instead of replaced (`[...lines, line]`) | REJECT |
+| A method that returns a changed instance is not named by a command slug of the model (`command.invoice.add-line` is `addLine`) and is not a declared replay method | REJECT |
+| A method writes a `#` field or closure state outside the constructor or the full-constructor factory, including inside a command or a replay method | REJECT. Build the changed state into a new instance through the full constructor |
+| A method calls a changing method (`push`, `splice`, `sort`, `set`, `add`, `delete`) on state | REJECT |
+| A command's success value is not the aggregate type (`Result<void, E>`) | REJECT. Return the new instance: `Result<Invoice, E>` |
+| A command recognizes a duplicate request and returns the same instance unchanged | OK |
+| A use case stores, or keeps using, the instance it loaded instead of the one the command returned | REJECT |
 | A domain method calls a getter of another domain object | REJECT |
 | A receiver of a domain method has no annotation naming one type | REJECT |
 

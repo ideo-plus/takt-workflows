@@ -2,7 +2,7 @@
 
 ## プロジェクトのファイル
 
-DDD のプロジェクトは、タスクをまたいで育てるモデルと設定をファイルで持つ。形は AI-DLC の DDD プラグイン（スキーマ バージョン 2）に合わせており、後からその検査ツールで読める。
+DDD のプロジェクトは、タスクをまたいで育てるモデルと設定をファイルで持つ。
 
 | ファイル | 役割 |
 |----------|------|
@@ -14,7 +14,6 @@ DDD のプロジェクトは、タスクをまたいで育てるモデルと設�
 ### .ddd.toml
 
 ```toml
-schema_version = 2
 languages = ["rust", "typescript"]
 
 [rust]
@@ -30,7 +29,6 @@ code_representation = "class"     # または "companion"
 ### ドメインモデル宣言
 
 ```yaml
-schema_version: 2
 bounded_contexts:
   - element_id: bc.billing
     name: Billing
@@ -85,7 +83,6 @@ lineage: []
 ### 集約写像
 
 ```yaml
-schema_version: 2
 model_ref: docs/ddd/domain-model.yaml
 aggregate_mappings:
   - aggregate_ref: aggregate.invoice
@@ -111,7 +108,6 @@ domain_packages:
 ### 層構造
 
 ```yaml
-schema_version: 2
 model_ref: docs/ddd/domain-model.yaml
 layer_structures:
   - context_ref: bc.billing
