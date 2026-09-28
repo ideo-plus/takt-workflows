@@ -188,7 +188,7 @@ steps:
     companion:
       $param: fix_companions
     quality_gates:
-      - "`bun .takt/tools/ddd-lint/ddd-lint.ts --project .` の実行で指摘がない。ddd-lint のゲートが失敗したら、示された出力ログを読み、すべての指摘を直す"
+      - "`bun .takt/tools/ddd-lint/ddd-lint.ts --project .` の実行で指摘がない。ddd-lint のゲートが失敗したら、示された出力ログを読み、すべての指摘を直す。`.takt/tools/` の ddd-lint のソースは読まない"
       - type: command
         name: ddd-lint
         command: "bun .takt/tools/ddd-lint/ddd-lint.ts --project ."
@@ -231,7 +231,7 @@ steps:
     companion:
       $param: fix_companions
     quality_gates:
-      - "`bun .takt/tools/ddd-lint/ddd-lint.ts --project .` の実行で指摘がない。ddd-lint のゲートが失敗したら、示された出力ログを読み、すべての指摘を直す"
+      - "`bun .takt/tools/ddd-lint/ddd-lint.ts --project .` の実行で指摘がない。ddd-lint のゲートが失敗したら、示された出力ログを読み、すべての指摘を直す。`.takt/tools/` の ddd-lint のソースは読まない"
       - type: command
         name: ddd-lint
         command: "bun .takt/tools/ddd-lint/ddd-lint.ts --project ."

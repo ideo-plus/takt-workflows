@@ -5,6 +5,7 @@
 - 変更されたドメイン層、ユースケース層、インターフェイスアダプタ層のソースごとに、写像の行と照らし合わせる。パッケージ、モジュールのパス、型、写像された操作のメソッド、エラー型と case、replay メソッド、復元経路が対象である。
 - 変更が触れるすべてのパッケージについて、モジュールの配置とパッケージ名を確かめる。変更が編集していなくても、到達できなくなったり配置がずれたりしたファイルも含む。
 - 各指摘に、違反した規則と、関係するモデル ID または写像の項目を示す。
+- `.takt/` の中は読まない。DDD の規則はこのステップに渡された policy と knowledge にある。ddd-lint の指摘を見るときは `bun .takt/tools/ddd-lint/ddd-lint.ts --project .` を実行する。
 
 {{include:instructions/review-path-check}}
 {{include:instructions/review-investigation-discipline}}
