@@ -58,6 +58,9 @@ if [ "$workflow" = ddd-rust-default ]; then
   [ -n "$check_cmd" ] || check_cmd="cargo test --quiet"
   [ -n "$task" ] || task='Create a Cargo workspace with a domain crate `billing-domain` under `packages/command/billing-domain` that models an invoice aggregate: an invoice is opened for a customer with invoice lines, a line can be added while the invoice is a draft, and an issued invoice cannot take more lines. The total of the lines must never be negative, and issuing an invoice without lines must fail. Write unit tests for the aggregate; they must pass with `cargo test` run from the repository root.'
 fi
+if [ "$workflow" = ddd-typescript-default ]; then
+  [ -n "$task" ] || task='Create a TypeScript workspace (no build step; Node 24 runs the .ts sources directly) with a domain package `@acme/billing-domain` under `packages/command/billing-domain` that models an invoice aggregate: an invoice is opened for a customer with invoice lines, a line can be added while the invoice is a draft, and an issued invoice cannot take more lines. The total of the lines must never be negative, and issuing an invoice without lines must fail. Write unit tests for the aggregate with the built-in `node:test` runner outside `src`; they must pass with `node --test` run from the repository root.'
+fi
 [ -n "$check_cmd" ] || check_cmd="node --test"
 [ -n "$task" ] || task='Add a Node.js ES module `src/slug.mjs` (no dependencies, no package.json) that exports `slugify(text)`: lowercase the text, replace every run of characters other than a-z and 0-9 with a single hyphen, and trim leading and trailing hyphens. `slugify("  Hello, World!  ")` returns "hello-world" and `slugify("")` returns "". Throw a TypeError when the argument is not a string. Write unit tests with the built-in `node:test` runner in `test/slug.test.mjs`; they must pass with `node --test` run from the repository root.'
 
