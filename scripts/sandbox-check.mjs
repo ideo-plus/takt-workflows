@@ -81,6 +81,7 @@ const HAPPY_PATH_RULES = {
   'coding-review': 1,
   'review-adjudication': 2, // 修正対象なし / no findings to fix -> final-gate
   'final-gate': 1, // APPROVE -> COMPLETE
+  'ddd-review': 1, // approved
 };
 
 function mockify() {
@@ -157,6 +158,8 @@ function verify() {
   const mode = opts.mode ?? fail('--mode is required');
   const exitCode = Number(opts['exit-code'] ?? fail('--exit-code is required'));
   const runLog = opts['run-log'] ? readFileSync(opts['run-log'], 'utf8') : '';
+  const workflow = opts.workflow ?? 'flash-default';
+  const checkCmd = opts['check-cmd'] ?? 'node --test';
 
   const runtime = YAML.parse(readFileSync(runtimePath(project), 'utf8'));
   const provider = runtime.provider ?? {};
@@ -200,8 +203,14 @@ function verify() {
       add('routing', `${key} (#${e.iteration ?? '?'})`, expected.models.includes(actual),
         `${actual}  expected ${expected.models.join(' | ')} [${expected.source}: ${expected.names.join(' > ')}]`);
     }
-    for (const key of ['development-core/plan', 'development-core/write_tests', 'flash-implement-dynamic/implement', 'peer-review/review-adjudication', 'peer-review/final-gate']) {
-      add('path', `visited ${key}`, visited.has(key), visited.has(key) ? 'yes' : 'not visited');
+    // Parallel sub-steps (the reviewers) log phase events instead of step_start.
+    for (const e of events.filter((ev) => ev.type === 'phase_start' && ev.workflow && ev.step)) visited.add(`${e.workflow}/${e.step}`);
+    const visitedSteps = new Set([...visited].map((key) => key.split('/').pop()));
+    const requiredSteps = ['plan', 'write_tests', 'implement', 'review-adjudication', 'final-gate'];
+    if (workflow.startsWith('ddd-')) requiredSteps.push('ddd-review');
+    for (const step of requiredSteps) {
+      const where = [...visited].filter((key) => key.endsWith(`/${step}`));
+      add('path', `visited ${step}`, visitedSteps.has(step), where.join(', ') || 'not visited');
     }
 
     // Companions.
@@ -221,11 +230,17 @@ function verify() {
   if (mode === 'real') {
     const untracked = spawnSync('git', ['-C', project, 'ls-files', '--others', '--exclude-standard'], { encoding: 'utf8' }).stdout
       .split('\n').filter((f) => f && !f.startsWith('.takt/'));
-    const tests = untracked.filter((f) => /\.test\.[cm]?js$/.test(f));
+    const tests = untracked.filter((f) => /\.test\.[cm]?[jt]s$/.test(f) || (/\.rs$/.test(f) && /test/.test(readFileSync(join(project, f), 'utf8'))));
     add('output', 'test files created', tests.length > 0, tests.join(', ') || 'none');
-    const nodeTest = spawnSync('node', ['--test'], { cwd: project, encoding: 'utf8' });
-    const summary = (nodeTest.stdout.match(/^ℹ (tests|pass|fail) \d+/gm) ?? []).join(', ');
-    add('output', 'node --test passes', nodeTest.status === 0, summary || `exit ${nodeTest.status}`);
+    const check = spawnSync('sh', ['-c', checkCmd], { cwd: project, encoding: 'utf8' });
+    const out = `${check.stdout}\n${check.stderr}`;
+    const summary = (out.match(/^ℹ (tests|pass|fail) \d+/gm) ?? out.match(/^test result: .*$/gm) ?? []).join(', ');
+    add('output', `${checkCmd} passes`, check.status === 0, summary || `exit ${check.status}`);
+    if (workflow.startsWith('ddd-')) {
+      for (const file of ['.ddd.toml', 'docs/ddd/domain-model.yaml', 'docs/ddd/aggregate-mapping.yaml']) {
+        add('ddd', `${file} written`, existsSync(join(project, file)), existsSync(join(project, file)) ? 'present' : 'missing');
+      }
+    }
   }
 
   // Report.
@@ -235,6 +250,7 @@ function verify() {
     `# Sandbox verification: ${failed === 0 ? 'PASS' : 'FAIL'}`,
     '',
     `- mode: ${mode}`,
+    `- workflow: ${workflow}`,
     `- project: ${project}`,
     ...(opts.elapsed ? [`- elapsed: ${Math.round(Number(opts.elapsed) / 60)} min`] : []),
     `- checks: ${passed} passed, ${failed} failed`,
