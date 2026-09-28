@@ -185,13 +185,22 @@ steps:
       fix_instruction: apply-fix-plan
     companion:
       $param: fix_companions
+    quality_gates:
+      - "Running `bun .takt/tools/ddd-lint/ddd-lint.ts --project .` reports no findings; when the ddd-lint gate fails, read the output log it names and fix every finding"
+      - type: command
+        name: ddd-lint
+        command: "bun .takt/tools/ddd-lint/ddd-lint.ts --project ."
+        cwd: "."
+        timeout_ms: 300000
     rules:
       - condition: Fix complete
         next: fix-verifier
       - condition: Fix plan requires revision
         next: fix-replan
+        command_gates: skip
       - condition: Task-level replanning required
         return: need_replan
+        command_gates: skip
   - name: fix-verifier
     uses: peer-review-fix-verifier
     with:
@@ -219,10 +228,19 @@ steps:
       fix_instruction: apply-fix-verification
     companion:
       $param: fix_companions
+    quality_gates:
+      - "Running `bun .takt/tools/ddd-lint/ddd-lint.ts --project .` reports no findings; when the ddd-lint gate fails, read the output log it names and fix every finding"
+      - type: command
+        name: ddd-lint
+        command: "bun .takt/tools/ddd-lint/ddd-lint.ts --project ."
+        cwd: "."
+        timeout_ms: 300000
     rules:
       - condition: Fix complete
         next: fix-verifier
       - condition: Fix plan requires revision
         next: fix-replan
+        command_gates: skip
       - condition: Task-level replanning required
         return: need_replan
+        command_gates: skip

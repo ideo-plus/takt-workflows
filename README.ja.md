@@ -131,7 +131,7 @@ provider:
 | ステップ | 変わること |
 |---|---|
 | plan / replan | 計画担当がイベント、コマンド、集約、不変条件を導き、`.ddd.toml` と `docs/ddd/*.yaml` への正確な変更を計画に書く |
-| implement / reimplement | 実装担当がそのモデルの変更を先に反映し、集約写像どおりの名前で実装する |
+| implement / reimplement / fix | 実装担当がそのモデルの変更を先に反映し、集約写像どおりの名前で実装する。ステップの完了前に ddd-lint がコマンドの品質ゲートとして動き、指摘があれば実装担当に差し戻す |
 | review | builtin のレビュアーに加えて DDD レビュアーが必ず動く。backend と CQRS+ES のレビュアーは使わない |
 
 プロジェクトは DDD のモデルをタスクをまたいで持ちます。
@@ -149,7 +149,14 @@ provider:
 takt -w ddd-rust-default -t "〜を追加する"        # または ddd-typescript-default
 ```
 
-builtin の facet は、DDD の規約と一致するものを再利用しています（coding、testing、review、ai-antipattern、contract-change、implementation-semantics、architecture）。builtin の backend と CQRS+ES の facet は使いません。これらは Kotlin 上の Axon を前提とし、業務エラーを例外で投げる、集約がイベントを返す、ユースケースが読み取りモデルを見て判断する、と定めているためです。再利用する builtin の一般的な規則を DDD の規約が上書きする箇所（業務エラーを例外にする、コマンド側のユースケースに入力 DTO を渡す、infrastructure を公開しない、ディレクトリの例）は、DDD の policy に明記しています。集約を可変にするかは言語で分けています。Rust の集約は、借用検査で排他が保証される `&mut self` で変えます。TypeScript の集約は不変で、コマンドは新しいインスタンスを返します。
+builtin の facet は、DDD の規約と一致するものを再利用しています（coding、testing、review、ai-antipattern、contract-change、implementation-semantics、architecture）。builtin の backend と CQRS+ES の facet は使いません。これらは Kotlin 上の Axon を前提とし、業務エラーを例外で投げる、ユースケースが読み取りモデルを見て判断する、と定めているためです。再利用する builtin の一般的な規則を DDD の規約が上書きする箇所（業務エラーを例外にする、コマンド側のユースケースに入力 DTO を渡す、infrastructure を公開しない、ディレクトリの例）は、DDD の policy に明記しています。コマンドは、生んだ 1 つのイベントを返します。集約を可変にするかは言語で分けています。Rust のコマンドは、借用検査で排他が保証される `&mut self` で集約を変え、イベントを返します。TypeScript の集約は不変で、コマンドは新しいインスタンスとイベントを一緒に返します。
+
+### ddd-lint
+インストーラはリンターを `.takt/tools/ddd-lint/` にコピーします（TypeScript コンパイラと Rust の抽出器を同梱して約 13 MB）。`.takt/` のほかのファイルと一緒にコミットしてください。`.ddd.toml` に挙げた言語について、モデルのファイルとコードを検査します。検査するのは、モデルの形（不変条件、操作ごとのエラー、コマンドごとに 1 つのイベント、積み上げ型のコマンドの要求 ID の記憶）、写像がモデルを覆っていること、層構造の宣言、状態を隠し完全コンストラクタだけで組み立てていること、TypeScript のイミュータブル、写像した各操作が `Result<success_type, error_type>` を返すメソッドであること（Rust のコマンドは `&mut self`）、getter の使い方、依存の向き、ユビキタス言語によるパッケージ名、モジュール配置です。
+
+- [Bun](https://bun.sh) 1.4 以降が `PATH` にあることと、`.takt/config.yaml` の `workflow_command_gates.custom_scripts: true` が必要です。インストーラは新しく作る `config.yaml` にこれを書きます。既存の `config.yaml` には手で足してください。ないと DDD ワークフローを読み込めません。
+- Rust の抽出器は macOS arm64 版だけを同梱しています。ほかのプラットフォームでは `bun .takt/tools/ddd-lint/build-extractor.ts` を一度実行し（`cargo` が必要）、`.takt/tools/ddd-lint/bin/` をコミットしてください。
+- 手で実行するときは `bun .takt/tools/ddd-lint/ddd-lint.ts` です（`--json` で機械可読な出力）。
 
 ## サンドボックスで検証する
 [`scripts/sandbox-verify.sh`](scripts/sandbox-verify.sh) は、使い捨ての git プロジェクトにバンドルを導入し、空の `TAKT_CONFIG_DIR` で実行します。そのためプロジェクトの設定だけが使われます。ワークフローを 1 本（`--workflow`、既定は `flash-default`）実走させ、実行ログを検査します。
@@ -165,7 +172,7 @@ scripts/sandbox-verify.sh --mode real --workflow ddd-rust-default   # 結果を 
 - 正常系の経路（`plan`、`write_tests`、`implement`、`review-adjudication`、`final-gate`）を通ること。
 - companion が割り当てどおりの profile で動くこと。
 - real モードのみ: テストファイルが作られ、サンドボックス内で検証コマンドが通ること（`--check-cmd`。既定は `node --test`、`ddd-rust-default` では `cargo test`）。
-- DDD ワークフロー: DDD レビュアーが動くこと。real モードでは `.ddd.toml` と `docs/ddd/` のモデル文書が書かれること。
+- DDD ワークフロー: DDD レビュアーが動くこと、`.ddd.toml` と `docs/ddd/` のモデル文書が書かれること、プロジェクトが ddd-lint を通ること。mock モードでは実装担当が ddd-lint のサンプルプロジェクトを書くので、品質ゲートも実際に動く。
 
 結果はサンドボックス内の `report.md` に書かれます。サンドボックスは失敗時か `--keep` 指定時に残ります。`--lang`、`--task`、`--timeout` で言語・タスク・制限時間を変えられます。mock モードは経路をそのまま保ち（各 profile を「provider は mock、model は profile 名」に置き換える）、judge の答えを台本化して正常系を通します。確かめるのは配線で、モデルの品質ではありません。
 
@@ -189,8 +196,9 @@ scripts/sandbox-verify.sh --mode real --workflow ddd-rust-default   # 結果を 
 - 詳しい設計メモと `runtime.yaml` の雛形: [`ja/workflows/flash-default.yaml`](ja/workflows/flash-default.yaml) の冒頭コメント。
 
 ### ddd ワークフローの設計メモ
+- **ddd-lint。** `tools/ddd-lint/` は独自のテストを持つ Bun のプログラムです（`cd tools/ddd-lint && bun install && bun run typecheck && bun test`）。`test/samples/` に TypeScript と Rust の完全なサンプルプロジェクトがあります。knowledge の `ddd-typescript` と `ddd-rust` のコード例はその写しで、`ddd-modeling` の例はサンプルに対してリンターを通ること、モックのサンドボックスはそれを実装担当の出力として書きます。Rust の抽出器は `build-extractor.ts` で `rust-extractor/` からビルドします。
 - **facet の分担。** 判定は policy が持ちます。`ddd-model`（モデル宣言と写像）、`ddd-domain`、`ddd-application`、`ddd-adapter`、`ddd-structure`、そして言語の policy 1 つ（`ddd-rust` か `ddd-typescript`）です。選択肢と例は knowledge が持ちます。`ddd-modeling`（プロジェクトのファイルの形、モデリングの選択肢）と `ddd-rust` / `ddd-typescript` です。ルートを言語ごとに分けているので、別の言語の facet はプロンプトに入りません。
-- **複製した builtin。** `ddd-implement` と `ddd-remediation` は、衝突する builtin の backend knowledge を注入しうる動的 facet プールを外しています。`ddd-review` は backend と CQRS+ES のレビュアーを外し、`steps/ddd-reviewer.yaml` を固定のレビュアーとして加えています。複製は builtin のワークフローから生成しており、section map に builtin の親が渡す facet をすべて宣言しています。
+- **複製した builtin。** `ddd-implement` と `ddd-remediation` は、衝突する builtin の backend knowledge を注入しうる動的 facet プールを外し、implement、reimplement、fix、fix-retry に ddd-lint のゲートを加えています。ゲートは成功の遷移のときだけ動きます。`ddd-review` は backend と CQRS+ES のレビュアーを外し、`steps/ddd-reviewer.yaml` を固定のレビュアーとして加えています。複製は builtin のワークフローから生成しており、section map に builtin の親が渡す facet をすべて宣言しています。
 
 ## ライセンス
 Apache License 2.0 です。[LICENSE](LICENSE) を参照してください。

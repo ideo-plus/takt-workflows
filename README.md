@@ -131,7 +131,7 @@ The builtin `default` workflow for code that follows domain-driven design conven
 | Step | What changes |
 |---|---|
 | plan / replan | The planner derives events, commands, aggregates, and invariants, and writes the exact changes to `.ddd.toml` and `docs/ddd/*.yaml` into the plan |
-| implement / reimplement | The coder applies those model changes first, then implements names exactly as the aggregate mapping states |
+| implement / reimplement / fix | The coder applies those model changes first, then implements names exactly as the aggregate mapping states. Before the step completes, ddd-lint runs as a command quality gate; any finding sends the step back to the coder |
 | review | A DDD reviewer always runs beside the builtin reviewers; the backend and CQRS+ES reviewers are not used |
 
 The project keeps its DDD model across tasks:
@@ -149,7 +149,14 @@ The first run creates them when they are missing; commit them with the code.
 takt -w ddd-rust-default -t "Add ... "        # or ddd-typescript-default
 ```
 
-Builtin facets are reused where they agree with the DDD conventions (coding, testing, review, ai-antipattern, contract-change, implementation-semantics, architecture). The builtin backend and CQRS+ES facets are not used: they assume Axon on Kotlin, and state that business errors are thrown, aggregates return events, and use cases decide from read models. Where a reused builtin states a generic rule the DDD conventions override (business errors as exceptions, input DTOs for command-side use cases, not exporting infrastructure, directory examples), the DDD policies say so explicitly. Aggregate mutability follows the language: Rust aggregates change through `&mut self`, which the borrow checker keeps exclusive; TypeScript aggregates are immutable, and a command returns a new instance.
+Builtin facets are reused where they agree with the DDD conventions (coding, testing, review, ai-antipattern, contract-change, implementation-semantics, architecture). The builtin backend and CQRS+ES facets are not used: they assume Axon on Kotlin, and state that business errors are thrown and that use cases decide from read models. Where a reused builtin states a generic rule the DDD conventions override (business errors as exceptions, input DTOs for command-side use cases, not exporting infrastructure, directory examples), the DDD policies say so explicitly. A command returns the one event it produced. Aggregate mutability follows the language: a Rust command changes the aggregate through `&mut self`, which the borrow checker keeps exclusive, and returns its event; TypeScript aggregates are immutable, and a command returns a new instance together with its event.
+
+### ddd-lint
+The installer copies the linter to `.takt/tools/ddd-lint/` (about 13 MB, with a bundled TypeScript compiler and Rust extractor); commit it with the rest of `.takt/`. It checks the model files and the code of every language `.ddd.toml` lists: the shape of the model (invariants, one error set per operation, one event per command, request-ID memory for accumulating commands), that the mapping covers the model, the layer declaration, hidden state and construction only through the full constructor, TypeScript immutability, that each mapped operation is a method returning `Result<success_type, error_type>` (a Rust command takes `&mut self`), getter use, dependency direction, packages named by the ubiquitous language, and module layout.
+
+- Requires [Bun](https://bun.sh) 1.4 or later on `PATH`, and `workflow_command_gates.custom_scripts: true` in `.takt/config.yaml`. The installer writes it into a new `config.yaml`; add it to an existing one, or the DDD workflows do not load.
+- The Rust extractor ships for macOS arm64. On any other platform run `bun .takt/tools/ddd-lint/build-extractor.ts` once (needs `cargo`) and commit `.takt/tools/ddd-lint/bin/`.
+- Run it by hand with `bun .takt/tools/ddd-lint/ddd-lint.ts` (`--json` for machine-readable output).
 
 ## Verify in a sandbox
 [`scripts/sandbox-verify.sh`](scripts/sandbox-verify.sh) installs the bundle into a throwaway git project with an empty `TAKT_CONFIG_DIR`, so only the project configuration is used. It runs one workflow (`--workflow`, default `flash-default`) and checks the run log.
@@ -165,7 +172,7 @@ scripts/sandbox-verify.sh --mode real --workflow ddd-rust-default   # checks the
 - The happy path is visited: `plan`, `write_tests`, `implement`, `review-adjudication`, `final-gate`.
 - The companions run on their assigned profile.
 - Real mode only: test files are created and the check command passes in the sandbox (`--check-cmd`; `node --test` by default, `cargo test` for `ddd-rust-default`).
-- DDD workflows: the DDD reviewer runs, and in real mode `.ddd.toml` and the model files under `docs/ddd/` are written.
+- DDD workflows: the DDD reviewer runs, `.ddd.toml` and the model files under `docs/ddd/` are written, and the project passes ddd-lint. In mock mode the coder writes the ddd-lint sample project, so the quality gate runs for real.
 
 The report is written to `report.md` in the sandbox, which is kept on failure or with `--keep`. `--lang`, `--task`, and `--timeout` change the language, the task, and the time limit. Mock mode keeps the routing (each profile becomes the mock provider with the profile name as model) and scripts the judge to take the happy path, so it checks the wiring, not model quality.
 
@@ -189,8 +196,9 @@ The report is written to `report.md` in the sandbox, which is kept on failure or
 - More design notes and the `runtime.yaml` template: header comment of [`en/workflows/flash-default.yaml`](en/workflows/flash-default.yaml).
 
 ### ddd workflows design notes
+- **ddd-lint.** `tools/ddd-lint/` is a Bun program with its own tests (`cd tools/ddd-lint && bun install && bun run typecheck && bun test`). `test/samples/` holds complete TypeScript and Rust sample projects; the code examples of the `ddd-typescript` and `ddd-rust` knowledge are copies of them, the `ddd-modeling` examples must lint clean against them, and the mock sandbox writes them as the coder's output. The Rust extractor is built from `rust-extractor/` by `build-extractor.ts`.
 - **Facets.** Policies own the verdicts: `ddd-model` (model declaration and mapping), `ddd-domain`, `ddd-application`, `ddd-adapter`, `ddd-structure`, and one language policy (`ddd-rust` or `ddd-typescript`). Knowledge holds the choices and examples: `ddd-modeling` (project file shapes, modeling options) and `ddd-rust` / `ddd-typescript`. One root per language keeps the language facets out of the other language's prompts.
-- **Copied builtins.** `ddd-implement` and `ddd-remediation` drop the dynamic facet pool, which could inject the conflicting builtin backend knowledge. `ddd-review` removes the backend and CQRS+ES reviewers and adds `steps/ddd-reviewer.yaml` as a fixed reviewer. The copies are generated from the builtin workflows; their section maps declare every facet a builtin parent passes in.
+- **Copied builtins.** `ddd-implement` and `ddd-remediation` drop the dynamic facet pool, which could inject the conflicting builtin backend knowledge, and add the ddd-lint gate to implement, reimplement, fix, and fix-retry; only the success transition runs it. `ddd-review` removes the backend and CQRS+ES reviewers and adds `steps/ddd-reviewer.yaml` as a fixed reviewer. The copies are generated from the builtin workflows; their section maps declare every facet a builtin parent passes in.
 
 ## License
 Apache License 2.0. See [LICENSE](LICENSE).

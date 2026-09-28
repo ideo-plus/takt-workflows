@@ -16,14 +16,22 @@ jobs:
         workflow: [flash-default, ddd-rust-default, ddd-typescript-default]
     env:
       TAKT_VERSION: 0.66.0
+      BUN_VERSION: 1.4.2
       T0_BUDGET_BYTES: "25000"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
       - name: Install TAKT
         run: npm install -g "takt@${TAKT_VERSION}"
+      # ddd-lint ships the Rust extractor for darwin-arm64 only; build it for this runner.
+      - name: Build the ddd-lint Rust extractor
+        if: matrix.workflow == 'ddd-rust-default'
+        run: bun tools/ddd-lint/build-extractor.ts
       # Installs the bundle into a fresh git project with project-closed configuration and an
       # empty TAKT_CONFIG_DIR, runs takt workflow doctor, runs the workflow on the mock
       # provider, and checks step routing, the happy path, and the companions.
@@ -63,4 +71,21 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-      - run: node --test
+      - run: node --test 'scripts/**/*.test.mjs'
+
+  ddd-lint:
+    name: ddd-lint (typecheck, bun test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tools/ddd-lint
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+      # The Rust samples need the extractor, which ships for darwin-arm64 only.
+      - run: bun build-extractor.ts
+      - run: bun test
