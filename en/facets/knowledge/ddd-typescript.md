@@ -10,6 +10,8 @@ The project settings choose one representation for every aggregate, Entity, Doma
 | The team prefers plain types and functions | `companion`: a `type` literal plus a `const` object of the same name; the factory's closure holds the state |
 | Aggregate execution model or persistence differs between aggregates | Irrelevant to this choice; the representation is project-wide |
 
+The examples below keep the customer and the amounts as bare `string` and `number` to stay short. In real code, wrap values with business meaning in Domain Primitives (a `CustomerId`, a `Money`) built the same way as `InvoiceLine`.
+
 `private`, `protected`, and `readonly` are erased at run time; a `#` field and a closure are private at run time. A brand stops an object of the same shape from being assigned; it does not prove that a factory built the value.
 
 ### Class representation
