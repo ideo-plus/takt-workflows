@@ -148,6 +148,14 @@ else
   note: .takt/.gitignore does not allowlist workflows/**; the bundle files will not be committed"
 fi
 
+# A global gitignore can hide files the gate needs from the worktree clones TAKT runs in.
+if git -C "$project" rev-parse --git-dir >/dev/null 2>&1; then
+  ignored="$(cd "$project" && git ls-files --others --ignored --exclude-standard -- .takt/tools/ddd-lint | grep -v '/target/' | head -n 3)"
+  [ -z "$ignored" ] || notes="$notes
+  WARNING: git ignores files of .takt/tools/ddd-lint (for example $(echo "$ignored" | head -n 1));
+           force-add them (git add -f .takt/tools/ddd-lint) or the DDD quality gate cannot run"
+fi
+
 version="${TAKT_WORKFLOWS_VERSION:-$(git -C "$bundle" rev-parse --short HEAD 2>/dev/null || echo unknown)}"
 source="${TAKT_WORKFLOWS_SOURCE:-$bundle}"
 printf 'lang: %s\nsource: %s\nversion: %s\n' "$lang" "$source" "$version" > "$target/.takt-workflows"

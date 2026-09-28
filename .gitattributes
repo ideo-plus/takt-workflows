@@ -1,3 +1,3 @@
 # Vendored and built files of ddd-lint are checked by digest; never convert them.
-tools/ddd-lint/lib/typescript/vendor/** -text
+tools/ddd-lint/lib/typescript/bundled/** -text
 tools/ddd-lint/bin/** -text

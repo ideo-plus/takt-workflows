@@ -16,8 +16,8 @@ import { join, resolve } from "node:path";
 import type { ReasonCode } from "../../state-exposure/index.ts";
 import { type CompilerApi, Refusal, readCompilerCondition, SUPPORTED_COMPILER_API_VERSION } from "./settings.ts";
 
-/** `vendor/` sits beside `compiler/` in the distributed `tools/ddd/lib/typescript/` tree. */
-export const TYPESCRIPT_VENDOR_DIR = resolve(import.meta.dir, "../vendor");
+/** `bundled/` sits beside `compiler/` in `lib/typescript/`. It is not named `vendor/`, which many global gitignores drop. */
+export const TYPESCRIPT_VENDOR_DIR = resolve(import.meta.dir, "../bundled");
 export const COMPILER_NAME = "typescript.js";
 export const MANIFEST_NAME = "manifest.json";
 

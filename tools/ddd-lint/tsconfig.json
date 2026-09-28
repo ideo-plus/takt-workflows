@@ -15,5 +15,5 @@
     "types": ["bun"]
   },
   "include": ["*.ts", "lib/**/*.ts", "test/**/*.ts"],
-  "exclude": ["lib/typescript/vendor/**"]
+  "exclude": ["lib/typescript/bundled/**"]
 }
