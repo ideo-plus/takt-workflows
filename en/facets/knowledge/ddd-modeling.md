@@ -2,7 +2,7 @@
 
 ## Project Files
 
-A DDD project keeps its model and settings in files that live across tasks. The shapes follow the AI-DLC DDD plugin (schema version 2), so its checkers can read them later.
+A DDD project keeps its model and settings in files that live across tasks.
 
 | File | Role |
 |------|------|
@@ -14,7 +14,6 @@ A DDD project keeps its model and settings in files that live across tasks. The 
 ### .ddd.toml
 
 ```toml
-schema_version = 2
 languages = ["rust", "typescript"]
 
 [rust]
@@ -30,7 +29,6 @@ Keep only the tables of the languages listed. `file` and `named-file` are the us
 ### Domain model declaration
 
 ```yaml
-schema_version: 2
 bounded_contexts:
   - element_id: bc.billing
     name: Billing
@@ -85,7 +83,6 @@ Element IDs are `<kind>.<segments>` in lower kebab case. `bc`, `aggregate`, `ent
 ### Aggregate mapping
 
 ```yaml
-schema_version: 2
 model_ref: docs/ddd/domain-model.yaml
 aggregate_mappings:
   - aggregate_ref: aggregate.invoice
@@ -111,7 +108,6 @@ domain_packages:
 ### Layer structure
 
 ```yaml
-schema_version: 2
 model_ref: docs/ddd/domain-model.yaml
 layer_structures:
   - context_ref: bc.billing

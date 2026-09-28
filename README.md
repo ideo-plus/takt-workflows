@@ -126,7 +126,7 @@ provider:
 To switch T0 to a DGX Spark later, change only the two `t0-*` profiles.
 
 ## ddd-rust-default / ddd-typescript-default
-The builtin `default` workflow for code that follows domain-driven design conventions, in Rust or TypeScript. The conventions come from the AI-DLC DDD plugin: an always-valid domain model, state changed only by declared commands, business failures returned as `Result` with an error type per operation, use cases that only orchestrate, repositories per aggregate, command and query sides kept apart, and packages named by the ubiquitous language.
+The builtin `default` workflow for code that follows domain-driven design conventions, in Rust or TypeScript. The conventions: an always-valid domain model, state changed only by declared commands, business failures returned as `Result` with an error type per operation, use cases that only orchestrate, repositories per aggregate, command and query sides kept apart, and packages named by the ubiquitous language.
 
 | Step | What changes |
 |---|---|
@@ -191,7 +191,6 @@ The report is written to `report.md` in the sandbox, which is kept on failure or
 ### ddd workflows design notes
 - **Facets.** Policies own the verdicts: `ddd-model` (model declaration and mapping), `ddd-domain`, `ddd-application`, `ddd-adapter`, `ddd-structure`, and one language policy (`ddd-rust` or `ddd-typescript`). Knowledge holds the choices and examples: `ddd-modeling` (project file shapes, modeling options) and `ddd-rust` / `ddd-typescript`. One root per language keeps the language facets out of the other language's prompts.
 - **Copied builtins.** `ddd-implement` and `ddd-remediation` drop the dynamic facet pool, which could inject the conflicting builtin backend knowledge. `ddd-review` removes the backend and CQRS+ES reviewers and adds `steps/ddd-reviewer.yaml` as a fixed reviewer. The copies are generated from the builtin workflows; their section maps declare every facet a builtin parent passes in.
-- **Model files are plugin-compatible.** `docs/ddd/*.yaml` and `.ddd.toml` follow the AI-DLC DDD plugin's schema version 2, so its checkers can be wired in later.
 
 ## License
 Apache License 2.0. See [LICENSE](LICENSE).

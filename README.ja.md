@@ -126,7 +126,7 @@ provider:
 あとで T0 を DGX Spark に切り替えるときは、`t0-*` の 2 つの profile だけを書き換えます。
 
 ## ddd-rust-default / ddd-typescript-default
-ドメイン駆動設計の規約に従う Rust または TypeScript のコードを書くための、builtin `default` と同じ開発ワークフローです。規約は AI-DLC の DDD プラグインに由来します。常に有効なドメインモデル、宣言済みのコマンドだけによる状態変更、操作ごとのエラー型を持つ `Result` で返す業務上の失敗、調整だけを行うユースケース、集約ごとのリポジトリ、コマンド側とクエリ側の分離、ユビキタス言語によるパッケージ名がその中身です。
+ドメイン駆動設計の規約に従う Rust または TypeScript のコードを書くための、builtin `default` と同じ開発ワークフローです。規約の中身は、常に有効なドメインモデル、宣言済みのコマンドだけによる状態変更、操作ごとのエラー型を持つ `Result` で返す業務上の失敗、調整だけを行うユースケース、集約ごとのリポジトリ、コマンド側とクエリ側の分離、ユビキタス言語によるパッケージ名です。
 
 | ステップ | 変わること |
 |---|---|
@@ -191,7 +191,6 @@ scripts/sandbox-verify.sh --mode real --workflow ddd-rust-default   # 結果を 
 ### ddd ワークフローの設計メモ
 - **facet の分担。** 判定は policy が持ちます。`ddd-model`（モデル宣言と写像）、`ddd-domain`、`ddd-application`、`ddd-adapter`、`ddd-structure`、そして言語の policy 1 つ（`ddd-rust` か `ddd-typescript`）です。選択肢と例は knowledge が持ちます。`ddd-modeling`（プロジェクトのファイルの形、モデリングの選択肢）と `ddd-rust` / `ddd-typescript` です。ルートを言語ごとに分けているので、別の言語の facet はプロンプトに入りません。
 - **複製した builtin。** `ddd-implement` と `ddd-remediation` は、衝突する builtin の backend knowledge を注入しうる動的 facet プールを外しています。`ddd-review` は backend と CQRS+ES のレビュアーを外し、`steps/ddd-reviewer.yaml` を固定のレビュアーとして加えています。複製は builtin のワークフローから生成しており、section map に builtin の親が渡す facet をすべて宣言しています。
-- **モデルのファイルはプラグインと互換。** `docs/ddd/*.yaml` と `.ddd.toml` は AI-DLC の DDD プラグインのスキーマ バージョン 2 に従っており、後からその検査ツールを組み込めます。
 
 ## ライセンス
 Apache License 2.0 です。[LICENSE](LICENSE) を参照してください。
