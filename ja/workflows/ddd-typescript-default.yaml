@@ -7,7 +7,7 @@ initial_step: develop
 #   計画担当     : ddd-plan / ddd-replan が .ddd.toml と docs/ddd/*.yaml への変更を宣言する
 #   実装担当     : ddd-implement / ddd-reimplement がそれをコードより先に反映する
 #   レビュアー   : ddd-review が backend と CQRS+ES のレビュアーを DDD レビュアーに置き換える
-# builtin の architecture knowledge は残す。DDD を優先する箇所は ddd-structure policy に書いてある。
+# builtin の architecture knowledge は残す。DDD を優先する箇所は ddd-domain-packaging policy に書いてある。
 
 steps:
   - name: develop
@@ -23,8 +23,10 @@ steps:
       replan_instruction: ddd-replan
       plan_policy:
         - design-planning
-        - ddd-model
-        - ddd-structure
+        - ddd-domain-model
+        - ddd-layer-dependency
+        - ddd-domain-packaging
+        - ddd-module-layout
       plan_knowledge:
         - architecture
         - task-decomposition
@@ -35,7 +37,7 @@ steps:
       testing_policy:
         - coding
         - testing
-        - ddd-domain
+        - ddd-domain-layer
         - ddd-typescript
       testing_knowledge:
         - architecture
@@ -47,11 +49,13 @@ steps:
         - coding
         - testing
         - ai-antipattern
-        - ddd-model
-        - ddd-domain
-        - ddd-use-case
-        - ddd-interface-adapter
-        - ddd-structure
+        - ddd-domain-model
+        - ddd-domain-layer
+        - ddd-use-case-layer
+        - ddd-interface-adapter-layer
+        - ddd-layer-dependency
+        - ddd-domain-packaging
+        - ddd-module-layout
         - ddd-typescript
       development_knowledge:
         - architecture
@@ -71,22 +75,26 @@ steps:
         pool: []
         moderator: review-companion-moderator
       review_policy_additions:
-        - ddd-model
-        - ddd-domain
-        - ddd-use-case
-        - ddd-interface-adapter
-        - ddd-structure
+        - ddd-domain-model
+        - ddd-domain-layer
+        - ddd-use-case-layer
+        - ddd-interface-adapter-layer
+        - ddd-layer-dependency
+        - ddd-domain-packaging
+        - ddd-module-layout
         - ddd-typescript
       review_policy:
         - coding
         - testing
         - review
         - architecture
-        - ddd-model
-        - ddd-domain
-        - ddd-use-case
-        - ddd-interface-adapter
-        - ddd-structure
+        - ddd-domain-model
+        - ddd-domain-layer
+        - ddd-use-case-layer
+        - ddd-interface-adapter-layer
+        - ddd-layer-dependency
+        - ddd-domain-packaging
+        - ddd-module-layout
         - ddd-typescript
       review_knowledge:
         - architecture

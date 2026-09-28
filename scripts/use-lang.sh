@@ -52,7 +52,8 @@ for l in en ja; do
 done
 
 # Files earlier versions of the bundle installed under another name.
-for rel in facets/policies/ddd-application.md facets/policies/ddd-adapter.md; do
+for rel in facets/policies/ddd-application.md facets/policies/ddd-adapter.md \
+  facets/policies/ddd-domain.md facets/policies/ddd-model.md facets/policies/ddd-structure.md; do
   rm -f "$target/$rel"
 done
 

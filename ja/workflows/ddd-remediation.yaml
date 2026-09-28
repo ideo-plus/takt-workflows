@@ -73,11 +73,13 @@ policies:
   ai-antipattern: ../facets/policies/builtin-ai-antipattern.md
   review: ../facets/policies/builtin-review.md
   architecture: ../facets/policies/builtin-architecture.md
-  ddd-model: ../facets/policies/ddd-model.md
-  ddd-domain: ../facets/policies/ddd-domain.md
-  ddd-use-case: ../facets/policies/ddd-use-case.md
-  ddd-interface-adapter: ../facets/policies/ddd-interface-adapter.md
-  ddd-structure: ../facets/policies/ddd-structure.md
+  ddd-domain-model: ../facets/policies/ddd-domain-model.md
+  ddd-domain-layer: ../facets/policies/ddd-domain-layer.md
+  ddd-use-case-layer: ../facets/policies/ddd-use-case-layer.md
+  ddd-interface-adapter-layer: ../facets/policies/ddd-interface-adapter-layer.md
+  ddd-layer-dependency: ../facets/policies/ddd-layer-dependency.md
+  ddd-domain-packaging: ../facets/policies/ddd-domain-packaging.md
+  ddd-module-layout: ../facets/policies/ddd-module-layout.md
   ddd-rust: ../facets/policies/ddd-rust.md
   ddd-typescript: ../facets/policies/ddd-typescript.md
 knowledge:

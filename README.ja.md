@@ -197,7 +197,7 @@ scripts/sandbox-verify.sh --mode real --workflow ddd-rust-default   # 結果を 
 
 ### ddd ワークフローの設計メモ
 - **ddd-lint。** `tools/ddd-lint/` は独自のテストを持つ Bun のプログラムです（`cd tools/ddd-lint && bun install && bun run typecheck && bun test`）。`test/samples/` に TypeScript と Rust の完全なサンプルプロジェクトがあります。knowledge の `ddd-typescript` と `ddd-rust` のコード例はその写しで、`ddd-modeling` の例はサンプルに対してリンターを通ること、モックのサンドボックスはそれを実装担当の出力として書きます。Rust の抽出器は `build-extractor.ts` で `rust-extractor/` からビルドします。
-- **facet の分担。** 判定は policy が持ちます。`ddd-model`（モデル宣言と写像）、`ddd-domain`、`ddd-use-case`、`ddd-interface-adapter`、`ddd-structure`、そして言語の policy 1 つ（`ddd-rust` か `ddd-typescript`）です。選択肢と例は knowledge が持ちます。`ddd-modeling`（プロジェクトのファイルの形、モデリングの選択肢）と `ddd-rust` / `ddd-typescript` です。ルートを言語ごとに分けているので、別の言語の facet はプロンプトに入りません。
+- **facet の分担。** 判定は policy が持ちます。`ddd-domain-model`（モデル宣言と写像）、`ddd-domain-layer`、`ddd-use-case-layer`、`ddd-interface-adapter-layer`、`ddd-layer-dependency`、`ddd-domain-packaging`、`ddd-module-layout`、そして言語の policy 1 つ（`ddd-rust` か `ddd-typescript`）です。規則はどれか 1 つの policy にだけ書き、各 policy の冒頭に扱う範囲を書いています。言語の policy は規則を繰り返さず、その言語での読み替えと、その言語だけの規則を持ちます。選択肢と例は knowledge が持ちます。`ddd-modeling`（プロジェクトのファイルの形、モデリングの選択肢）と `ddd-rust` / `ddd-typescript` です。ルートを言語ごとに分けているので、別の言語の facet はプロンプトに入りません。
 - **複製した builtin。** `ddd-implement` と `ddd-remediation` は、衝突する builtin の backend knowledge を注入しうる動的 facet プールを外し、implement、reimplement、fix、fix-retry に ddd-lint のゲートを加えています。ゲートは成功の遷移のときだけ動きます。`ddd-review` は backend と CQRS+ES のレビュアーを外し、`steps/ddd-reviewer.yaml` を固定のレビュアーとして加えています。複製は builtin のワークフローから生成しており、section map に builtin の親が渡す facet をすべて宣言しています。
 
 ## ライセンス
