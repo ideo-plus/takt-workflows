@@ -3,19 +3,20 @@
 # with all TAKT configuration closed to that project.
 #
 # TAKT loads project resources only from <project>/.takt/{workflows,steps,facets}.
-# The DDD linter the DDD workflows run as a quality gate is copied to <project>/.takt/tools/ddd-lint.
 # It has no language-aware project layer and refuses symlinked resource directories,
 # so the bundle is materialized by copying. Only files that belong to this bundle
 # (the file names under en/ and ja/) are replaced; other files in .takt/ are left alone.
+# The DDD linter the DDD workflows run as a quality gate is copied to <project>/.takt/tools/ddd-lint.
 #
 # Configuration is written to the project, never to ~/.takt:
 #   .takt/runtime.yaml  profiles + step assignments (from runtime.project.yaml, if absent)
 #   .takt/config.yaml   language + rate-limit fallback (from config.project.yaml, if absent)
 #   .takt/.gitignore    allowlists runtime.yaml, config.yaml, .takt-workflows and tools/ for commit
+#   .claude/settings.json  denies Claude reads of .takt/{tools,facets,workflows,steps} (merged, not replaced)
 #
 # Usage: scripts/use-lang.sh <en|ja> [project-dir] [--no-config]
 #   project-dir   target project (default: current directory)
-#   --no-config   do not create runtime.yaml / config.yaml or edit .takt/.gitignore (alias: --no-runtime)
+#   --no-config   do not create runtime.yaml / config.yaml or edit .takt/.gitignore / .claude/settings.json (alias: --no-runtime)
 #
 # Examples:
 #   cd ~/work/my-app && /path/to/takt-workflows/scripts/use-lang.sh ja
@@ -29,7 +30,7 @@ with_config=1
 for arg in "$@"; do
   case "$arg" in
     --no-config|--no-runtime) with_config=0 ;;
-    -h|--help) sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     -*) echo "unknown option: $arg" >&2; exit 2 ;;
     *) if [ -z "$lang" ]; then lang="$arg"; elif [ -z "$project" ]; then project="$arg"; else echo "too many arguments" >&2; exit 2; fi ;;
   esac
@@ -154,6 +155,33 @@ else
   note: .takt/.gitignore does not allowlist workflows/**; the bundle files will not be committed"
 fi
 
+# Claude steps load the project's .claude/settings.json. Deny reading the bundle's own files, so a
+# step runs ddd-lint instead of reverse-engineering its sources and does not reread facets it was
+# given. Reports and quality gate logs under .takt/ stay readable.
+if [ "$with_config" -eq 1 ]; then
+  mkdir -p "$project/.claude"
+  if merged="$(node - "$project/.claude/settings.json" <<'NODE' 2>&1
+const fs = require('node:fs');
+const path = process.argv[2];
+const rules = ['tools', 'facets', 'workflows', 'steps'].map((dir) => `Read(./.takt/${dir}/**)`);
+const settings = fs.existsSync(path) ? JSON.parse(fs.readFileSync(path, 'utf8')) : {};
+settings.permissions ??= {};
+settings.permissions.deny ??= [];
+const added = rules.filter((rule) => !settings.permissions.deny.includes(rule));
+settings.permissions.deny.push(...added);
+if (added.length > 0) fs.writeFileSync(path, `${JSON.stringify(settings, null, 2)}\n`);
+console.log(added.length);
+NODE
+)"; then
+    [ "$merged" = 0 ] || notes="$notes
+  added $merged Read deny rule(s) for .takt/ to .claude/settings.json - commit it"
+  else
+    notes="$notes
+  WARNING: could not update .claude/settings.json ($merged); add the Read deny rules for
+           .takt/{tools,facets,workflows,steps} by hand"
+  fi
+fi
+
 # A global gitignore can hide files the gate needs from the worktree clones TAKT runs in.
 if git -C "$project" rev-parse --git-dir >/dev/null 2>&1; then
   ignored="$(cd "$project" && git ls-files --others --ignored --exclude-standard -- .takt/tools/ddd-lint | grep -v '/target/' | head -n 3)"
@@ -168,5 +196,5 @@ printf 'lang: %s\nsource: %s\nversion: %s\n' "$lang" "$source" "$version" > "$ta
 
 echo "takt-workflows ($lang, $version) installed into $target"
 echo "  workflows/steps/facets copied$notes"
-echo "  next: git add .takt && git commit   (TAKT runs tasks in worktree clones; untracked files are invisible)"
+echo "  next: git add .takt .claude && git commit   (TAKT runs tasks in worktree clones; untracked files are invisible)"
 echo "        takt workflow doctor flash-default"

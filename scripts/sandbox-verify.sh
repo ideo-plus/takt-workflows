@@ -95,6 +95,7 @@ if [ "$mode" = mock ]; then
 fi
 
 git -C "$project" add -A .takt
+[ ! -d "$project/.claude" ] || git -C "$project" add -A .claude
 git -C "$project" -c user.email=sandbox@example.invalid -c user.name=sandbox commit -q -m "chore: add takt flash-default workflow bundle"
 
 # 4. Static validation in the sandbox.
