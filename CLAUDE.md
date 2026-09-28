@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repository is
 
-A growing collection of TAKT (0.66) workflows, facets, and operational know-how, distributed as a bundle, not an application. Users install it into *their own* project's `.takt/`; TAKT never reads this repository directly. The first workflow is `flash-default`: the builtin `default` workflow with its implementation steps split into model tiers (T0 Flash-class → T1 → T2, optional T3 for plan/judge steps). More workflows will be added (see `TODO.md`); keep repository-wide mechanisms (installer, project-closed config, sandbox verification) generic, and keep workflow-specific notes under that workflow. Several architecture notes below are specific to `flash-default`.
+A growing collection of TAKT (0.66) workflows, facets, and operational know-how, distributed as a bundle, not an application. Users install it into *their own* project's `.takt/`; TAKT never reads this repository directly. The first workflow is `flash-default`: the builtin `default` workflow with its implementation steps split into model tiers (T0 Flash-class → T1 → T2, optional T3 for plan/judge steps). `ddd-rust-default` / `ddd-typescript-default` make coders write Rust / TypeScript that follows domain-driven design conventions taken from the AI-DLC DDD plugin. More workflows will be added (see `TODO.md`); keep repository-wide mechanisms (installer, project-closed config, sandbox verification) generic, and keep workflow-specific notes under that workflow.
 
 ## Commands
 
@@ -16,10 +16,11 @@ takt workflow doctor flash-default flash-implement-dynamic flash-remediation-dyn
 takt workflow inspect flash-default                          # resolved provider/model per step
 scripts/sandbox-verify.sh --mode mock --lang ja              # end-to-end check in a throwaway project, seconds, no network
 scripts/sandbox-verify.sh --mode real --lang ja --keep       # same with real providers, about an hour
+scripts/sandbox-verify.sh --mode mock --workflow ddd-rust-default   # any workflow; real Rust runs use cargo test
 node scripts/check-facet-budget.mjs 25000 <files...>          # T0 injected-facet size check
 ```
 
-CI (`.github/workflows/ci.yml`) runs the mock sandbox for `en` and `ja`, the T0 budget check, and `node --test`.
+CI (`.github/workflows/ci.yml`) runs the mock sandbox for every workflow in `en` and `ja`, the T0 budget check for `flash-default`, and `node --test`.
 
 ## Architecture
 
@@ -30,6 +31,7 @@ CI (`.github/workflows/ci.yml`) runs the mock sandbox for `en` and `ja`, the T0 
 - **T0 context budget:** policy + knowledge + instruction injected into `write_tests` / `implement` / `reimplement` stays under 25 KB (`coding-lite`, `testing-lite`, `implementation-semantics`).
 - **English facets keep Japanese contract strings verbatim** (plan table columns 「実装箇所」「完了証拠」, required report headings). They are produced/consumed by the Japanese builtins; translating them breaks downstream steps.
 - **Distribution:** `scripts/install.sh` downloads a tarball (`--ref` pins a tag/branch/commit) and runs `use-lang.sh`; nothing is cloned into the user's project.
+- **DDD workflows:** policies own the verdicts (`ddd-model`, `ddd-domain`, `ddd-application`, `ddd-adapter`, `ddd-structure`, `ddd-rust` / `ddd-typescript`), knowledge holds shapes and examples (`ddd-modeling`, `ddd-rust`, `ddd-typescript`). Builtin backend and CQRS+ES facets are deliberately unused (Axon/Kotlin assumptions conflict); where a reused builtin conflicts (business errors as exceptions, input DTOs, infrastructure exports, directory examples) the DDD policy states the override. `ddd-implement` / `ddd-remediation` / `ddd-review` are generated from the builtin workflows (dynamic facet pool removed; backend and CQRS+ES reviewers replaced by `steps/ddd-reviewer.yaml`); keep them generated rather than hand-edited. Project model files live in `docs/ddd/*.yaml` plus `.ddd.toml`, in the plugin's schema version 2.
 - **Sandbox verification:** `scripts/sandbox-verify.sh` creates a git project in a temp dir with an empty `TAKT_CONFIG_DIR`, installs, runs `takt --pipeline --skip-git -w flash-default`, then `scripts/sandbox-check.mjs verify` compares `step_start` / `companion_call` events in `.takt/runs/*/logs/*.jsonl` with `runtime.yaml`. Mock mode rewrites every profile to `{provider: mock, model: <profile name>}` and scripts the judge (`[STEP-NAME:N]` tags), the dynamic parallel selector, the coder, and the companions to take the happy path.
 
 ## Conventions

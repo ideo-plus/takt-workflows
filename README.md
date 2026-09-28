@@ -7,6 +7,7 @@ A collection of [TAKT](https://github.com/nrslib/takt) workflows, facets, and ha
 | Workflow | What it does |
 |---|---|
 | [`flash-default`](#flash-default) | The builtin `default` development workflow with model tiers: tests and implementation start on a cheap Flash-class model and escalate to stronger models only when a step fails. |
+| [`ddd-rust-default`, `ddd-typescript-default`](#ddd-rust-default--ddd-typescript-default) | The builtin `default` development workflow for Rust or TypeScript code that follows domain-driven design conventions, with a domain model declared in the repository and a DDD reviewer. |
 
 More workflows will be added to this collection over time.
 
@@ -124,19 +125,47 @@ provider:
 
 To switch T0 to a DGX Spark later, change only the two `t0-*` profiles.
 
+## ddd-rust-default / ddd-typescript-default
+The builtin `default` workflow for code that follows domain-driven design conventions, in Rust or TypeScript. The conventions come from the AI-DLC DDD plugin: an always-valid domain model, state changed only by declared commands, business failures returned as `Result` with an error type per operation, use cases that only orchestrate, repositories per aggregate, command and query sides kept apart, and packages named by the ubiquitous language.
+
+| Step | What changes |
+|---|---|
+| plan / replan | The planner derives events, commands, aggregates, and invariants, and writes the exact changes to `.ddd.toml` and `docs/ddd/*.yaml` into the plan |
+| implement / reimplement | The coder applies those model changes first, then implements names exactly as the aggregate mapping states |
+| review | A DDD reviewer always runs beside the builtin reviewers; the backend and CQRS+ES reviewers are not used |
+
+The project keeps its DDD model across tasks:
+
+| File | Contents |
+|---|---|
+| `.ddd.toml` | Languages, module layout (Rust `file` / `mod-rs`, TypeScript `named-file` / `index-file`), TypeScript representation (`class` / `companion`) |
+| `docs/ddd/domain-model.yaml` | Aggregates, invariants, commands, factory rules, errors, events, states |
+| `docs/ddd/aggregate-mapping.yaml` | Where each element lives in code, and the business term of each domain package |
+| `docs/ddd/layer-structure.yaml` | Packages, dependencies, ports, repositories, restoration paths per bounded context |
+
+The first run creates them when they are missing; commit them with the code.
+
+```sh
+takt -w ddd-rust-default -t "Add ... "        # or ddd-typescript-default
+```
+
+Builtin facets are reused where they agree with the DDD conventions (coding, testing, review, ai-antipattern, contract-change, implementation-semantics, architecture). The builtin backend and CQRS+ES facets are not used: they assume Axon on Kotlin, and state that business errors are thrown, aggregates return events and stay immutable, and use cases decide from read models. Where a reused builtin states a generic rule the DDD conventions override (business errors as exceptions, input DTOs for command-side use cases, not exporting infrastructure, directory examples), the DDD policies say so explicitly.
+
 ## Verify in a sandbox
-[`scripts/sandbox-verify.sh`](scripts/sandbox-verify.sh) installs the bundle into a throwaway git project with an empty `TAKT_CONFIG_DIR`, so only the project configuration is used. It runs `flash-default` and checks the run log.
+[`scripts/sandbox-verify.sh`](scripts/sandbox-verify.sh) installs the bundle into a throwaway git project with an empty `TAKT_CONFIG_DIR`, so only the project configuration is used. It runs one workflow (`--workflow`, default `flash-default`) and checks the run log.
 
 ```sh
 scripts/sandbox-verify.sh --mode mock    # TAKT's mock provider: no network, a few seconds
 scripts/sandbox-verify.sh --mode real    # the providers in runtime.project.yaml: about an hour
+scripts/sandbox-verify.sh --mode real --workflow ddd-rust-default   # checks the result with cargo test
 ```
 
 - The run exits 0 and completes.
 - Every step runs on the provider and model that `runtime.yaml` assigns to it. A `ladder` step may run on any of its rungs.
 - The happy path is visited: `plan`, `write_tests`, `implement`, `review-adjudication`, `final-gate`.
 - The companions run on their assigned profile.
-- Real mode only: test files are created and `node --test` passes in the sandbox.
+- Real mode only: test files are created and the check command passes in the sandbox (`--check-cmd`; `node --test` by default, `cargo test` for `ddd-rust-default`).
+- DDD workflows: the DDD reviewer runs, and in real mode `.ddd.toml` and the model files under `docs/ddd/` are written.
 
 The report is written to `report.md` in the sandbox, which is kept on failure or with `--keep`. `--lang`, `--task`, and `--timeout` change the language, the task, and the time limit. Mock mode keeps the routing (each profile becomes the mock provider with the profile name as model) and scripts the judge to take the happy path, so it checks the wiring, not model quality.
 
@@ -158,6 +187,11 @@ The report is written to `report.md` in the sandbox, which is kept on failure or
 - **`write_tests` promotion via step fragment.** `steps/development-core-write-tests.yaml` shadows the builtin fragment and adds `promotion`, so `development-core` itself is not copied. This shadowing applies to every workflow in a project that uses `development-core`.
 - **T0 context budget.** Policy + knowledge + instruction injected into `write_tests`, `implement`, and `reimplement` stay under 25 KB (`coding-lite`, `testing-lite`, `implementation-semantics`). Do not add full builtin policies to T0 steps.
 - More design notes and the `runtime.yaml` template: header comment of [`en/workflows/flash-default.yaml`](en/workflows/flash-default.yaml).
+
+### ddd workflows design notes
+- **Facets.** Policies own the verdicts: `ddd-model` (model declaration and mapping), `ddd-domain`, `ddd-application`, `ddd-adapter`, `ddd-structure`, and one language policy (`ddd-rust` or `ddd-typescript`). Knowledge holds the choices and examples: `ddd-modeling` (project file shapes, modeling options) and `ddd-rust` / `ddd-typescript`. One root per language keeps the language facets out of the other language's prompts.
+- **Copied builtins.** `ddd-implement` and `ddd-remediation` drop the dynamic facet pool, which could inject the conflicting builtin backend knowledge. `ddd-review` removes the backend and CQRS+ES reviewers and adds `steps/ddd-reviewer.yaml` as a fixed reviewer. The copies are generated from the builtin workflows; their section maps declare every facet a builtin parent passes in.
+- **Model files are plugin-compatible.** `docs/ddd/*.yaml` and `.ddd.toml` follow the AI-DLC DDD plugin's schema version 2, so its checkers can be wired in later.
 
 ## License
 Apache License 2.0. See [LICENSE](LICENSE).
