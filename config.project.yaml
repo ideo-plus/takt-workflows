@@ -1,0 +1,10 @@
+# TAKT project configuration for the flash-default bundle.
+# scripts/use-lang.sh copies this file to <project>/.takt/config.yaml when none exists,
+# prepending `language:` for the bundle language it installs. Commit it.
+
+# A step that hits a rate limit or session cap is re-run on the next entry that differs from the
+# current provider/model and has not been tried yet, instead of failing the run.
+rate_limit_fallback:
+  switch_chain:
+    - { provider: claude, model: claude-opus-5 }
+    - { provider: codex,  model: gpt-5.6-sol }
