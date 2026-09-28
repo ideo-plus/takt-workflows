@@ -1,0 +1,16 @@
+{extends:scenario-based-plan}
+
+## DDD model changes
+
+The project keeps its DDD settings in `.ddd.toml` and its model in `docs/ddd/domain-model.yaml`, `docs/ddd/aggregate-mapping.yaml`, and `docs/ddd/layer-structure.yaml`. The plan states the exact changes to these files; the implementation applies them before any code.
+
+- Read the four files. When `.ddd.toml` is absent, plan to create it with the languages the change touches, `module_layout = "file"` for Rust, and `module_layout = "named-file"` with `code_representation = "class"` for TypeScript, unless the request states other choices. Do not infer the layout from existing files. When a model file is absent, plan to create it.
+- Derive the business behavior of the request in this order: past-tense domain events, the commands and actors that produce them, the aggregates whose state they change, and the invariants that hold those aggregates together.
+- Reuse existing element IDs. Never rename an ID; a rename changes `name` only. Record every split, merge, and deprecation in `lineage`.
+- Add a `## DDD Model Changes` section with the YAML to add or change, per file:
+  - domain model: every new or changed aggregate with its invariants, and every command and factory rule with its domain errors, state effect, transitions, events, and idempotency strategy
+  - aggregate mapping: for every aggregate its `programming_model` and `persistence_method`, its package, module path, type, ports, and repository; for every operation its method, error type, and error cases; `replay_methods` for event-sourced aggregates; `domain_packages` entries with business term, model references, and rationale for every package and module level the change places code in
+  - layer structure: packages, dependencies, ports, repositories, and restoration paths the change adds or changes
+- Add a `## DDD Use Cases` section declaring, for each use case the change adds or changes: `use_case_id`, `name`, `target_aggregates`, `commands`, `re_execution_basis`, `recovery_policy`, `multi_aggregate_strategy` when it targets several aggregates, and `read_model_exposure`.
+- In the completion contract table, the first rows apply the DDD model changes. Every implementation row cites the model IDs it implements, and its implementation location follows the aggregate mapping and the selected module layout.
+- When the request leaves a business rule undecided (an invariant, an error condition, an idempotency requirement), list it as an open question with the assumption the plan uses; do not present an invented rule as a requirement.
