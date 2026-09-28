@@ -1,19 +1,26 @@
 # takt-workflows
-[TAKT](https://github.com/nrslib/takt) 向けの階層型開発ワークフローです。テスト生成と実装を安価な Flash 級モデルで始め、失敗したステップだけを上位モデルへ昇格させます。
+[TAKT](https://github.com/nrslib/takt) のワークフロー、facet、そして実際に動かして得た運用ノウハウをまとめたコレクションです。どのプロジェクトにも導入でき、動作を検証できる形にしてあります。
 
 [English](README.md) | [日本語](README.ja.md)
 
+## ワークフロー
+| ワークフロー | 概要 |
+|---|---|
+| [`flash-default`](#flash-default) | builtin の `default` 開発ワークフローにモデルの階層を入れたもの。テスト生成と実装を安価な Flash 級モデルで始め、失敗したステップだけを上位モデルへ昇格させます。 |
+
+今後もワークフローを追加していきます。
+
 ## 特長
-- **まず安く、必要なときだけ強く。** `write_tests` と初回の `implement` は Flash 級モデル（T0）で実行します。再実装、修正、レビューは、安い試行が通らなかったときだけ中位（T1）・上位（T2）のモデルで行います。
-- **ワークフローを触らずにモデルを差し替えられる。** 各 tier が使う provider / model は `runtime.yaml` に置くので、同じワークフローが DGX Spark でも Ollama Cloud でも他の provider でも動きます。
-- **品質ゲートは TAKT の `default` と同じ。** シナリオベースの計画、テストファーストの実装、並列ピアレビュー、裁定、収束型の修正ループ、final gate をそのまま残しています。
+- **作業するプロジェクトに導入する。** ワンライナーのインストーラがバンドルをプロジェクトの `.takt/` にコピーします。リポジトリの中に clone する必要はありません。
+- **設定はプロジェクトに閉じる。** モデルとステップの割り当ては、プロジェクトでコミットする `.takt/runtime.yaml` に置きます。`~/.takt` を介してプロジェクト同士が影響し合うことはありません。
+- **英語版と日本語版。** `en/` と `ja/` は TAKT 本体の builtin と同じく、同一構造で並んでいます。
+- **端から端まで検証済み。** サンドボックス用スクリプトが使い捨てのプロジェクトでワークフローを実走させ（TAKT の mock provider でも本物の provider でも可）、各ステップが実際にどのモデルで動いたかを確かめます。
 
 ## クイックスタート
 
 ### 必要なもの
 - TAKT 0.66 以降（`npm i -g takt`）
-- T1 用に構造化出力へ対応した provider を 1 つ: `claude`、`claude-sdk`、`claude-terminal`、`codex`、`opencode` のいずれか
-- T0 用の provider は何でも可。OpenCode → ローカル Ollama サーバー → Ollama Cloud、および OpenCode → OpenCode Go の構成は動作確認済みです。
+- ワークフローの `runtime.yaml` に書かれた provider（各ワークフローの節を参照）
 
 ### 作業するプロジェクトに導入する
 作業プロジェクトの中でワンライナーのインストーラを実行します。バンドルを tarball で取得し（git clone 不要）、`<lang>/{workflows,steps,facets}` をプロジェクトの `.takt/` にコピーし、無ければ `.takt/runtime.yaml` と `.takt/config.yaml` も作ります:
@@ -34,16 +41,37 @@ cd ~/work/my-app && ~/src/takt-workflows/scripts/use-lang.sh ja
 
 ### コミット・設定・実行
 ```sh
-git add .takt && git commit -m "chore: add takt flash-default workflow bundle"
+git add .takt && git commit -m "chore: add takt-workflows bundle"
 takt workflow doctor flash-default
 takt -w flash-default -t "〜をテスト付きで追加する"
 ```
 
 - インストーラが書いたもの（`workflows/`、`steps/`、`facets/`、`runtime.yaml`、`config.yaml`、`.takt-workflows`）をコミットしてください。TAKT はタスクをリポジトリの worktree クローンで実行するため、`.takt/` 配下の未追跡ファイルは実行時に見えません。`runtime.yaml` はインストーラが `.takt/.gitignore` の許可リストに追加します。
-- 初回実行の前に、`.takt/runtime.yaml` のモデルが自分の環境で使えるか確認してください（[使い方](#使い方) 参照）。
+- 初回実行の前に、`.takt/runtime.yaml` のモデルが自分の環境で使えるか確認してください。
 - バンドルの更新や言語の切り替えは、インストーラをもう一度実行するだけです。自分のファイルだけを置き換え、既存の `runtime.yaml` と `config.yaml` は残し、`.takt/` にある他の workflow には触れません。
 
-## 使い方
+## 設定はプロジェクトに閉じる
+バンドルの TAKT 設定はすべてプロジェクト内に置き、プロジェクトと一緒にコミットします。
+
+| ファイル | 内容 | テンプレート |
+|---|---|---|
+| `.takt/runtime.yaml` | profile（provider と model）と各ワークフローのステップ割り当て | [`runtime.project.yaml`](runtime.project.yaml) |
+| `.takt/config.yaml` | 言語とレート制限時のフォールバック連鎖 | [`config.project.yaml`](config.project.yaml) |
+
+`~/.takt/runtime.yaml` や `~/.takt/config.yaml` があると、TAKT はそれもマージします。他のプロジェクトの設定を完全に締め出すには、`TAKT_CONFIG_DIR` をプロジェクト内のディレクトリに向けます。たとえば direnv を使う場合は次のとおりです。`.takt/.gitignore` はこのディレクトリを最初から無視します。
+
+```sh
+# .envrc
+export TAKT_CONFIG_DIR="$PWD/.takt/home"
+```
+
+- `TAKT_CONFIG_DIR` を設定しないと、既存の `~/.takt/runtime.yaml` も効きます。同名の profile はプロジェクト側が優先し、`defaults` と `targets` はプロジェクト側が置き換えますが、グローバル側の `companion.enabled: false` はすべてのプロジェクトで companion を無効にします。
+- ループバック以外の `base_url`（LAN 上の DGX Spark など）は、`TAKT_CONFIG_DIR` 層の runtime.yaml でしか受け付けられません。`TAKT_CONFIG_DIR` をプロジェクト内に向けていれば、この設定もプロジェクトに閉じます。
+- `ladder` から参照する profile は `provider` と `model` の両方が必須です。
+- 最上位モデルはレート制限に早く当たります。`.takt/config.yaml` のフォールバック連鎖により、制限に当たったステップは失敗せず次の provider で再実行されます。
+
+## flash-default
+builtin の `default` ワークフロー（シナリオベースの計画、テストファーストの実装、並列ピアレビュー、裁定、収束型の修正ループ、final gate）の実装系ステップを、モデルの階層に分けたものです。
 
 ### 階層（Tier）
 | Tier | 用途 | 置くべきモデル | 動作確認済みの例（provider / model） |
@@ -53,16 +81,9 @@ takt -w flash-default -t "〜をテスト付きで追加する"
 | T2 | `reimplement_final`、`fix` の昇格先、その他すべてのステップの既定 | 最も強い汎用モデル | `claude` / `claude-opus-5-5` |
 | T3（任意） | `plan`、`replan`、裁定、`final-gate` | トークン消費が少なく判断の影響が大きいステップ向けの最上位モデル | `claude` / `claude-fable-5-1`（計画）、`codex` / `gpt-6-astra`（検収） |
 
-この例は、このワークフローの実走で実際に使った profile そのものです。
+この例は、実走で実際に使った profile そのものです。T1 には構造化出力に対応した provider（`claude`、`claude-sdk`、`claude-terminal`、`codex`、`opencode` のいずれか）が必要です。
 
-### 設定はプロジェクトに閉じる
-このバンドルの TAKT 設定はすべてプロジェクト内に置き、プロジェクトと一緒にコミットします。`~/.takt` を介してプロジェクト同士が影響し合うことはありません。
-
-| ファイル | 内容 | テンプレート |
-|---|---|---|
-| `.takt/runtime.yaml` | profile（tier ごとの provider と model）と step の割り当て | [`runtime.project.yaml`](runtime.project.yaml) |
-| `.takt/config.yaml` | 言語とレート制限時のフォールバック連鎖 | [`config.project.yaml`](config.project.yaml) |
-
+### `.takt/runtime.yaml`
 ```yaml
 version: 1
 companion:
@@ -101,19 +122,7 @@ provider:
       review-companion-moderator:      { profile: t1 }
 ```
 
-`~/.takt/runtime.yaml` や `~/.takt/config.yaml` があると、TAKT はそれもマージします。他のプロジェクトの設定を完全に締め出すには、`TAKT_CONFIG_DIR` をプロジェクト内のディレクトリに向けます。たとえば direnv を使う場合は次のとおりです。`.takt/.gitignore` はこのディレクトリを最初から無視します。
-
-```sh
-# .envrc
-export TAKT_CONFIG_DIR="$PWD/.takt/home"
-```
-
-### 知っておくこと
-- `ladder` から参照する profile は `provider` と `model` の両方が必須です。
-- `TAKT_CONFIG_DIR` を設定しないと、既存の `~/.takt/runtime.yaml` も効きます。同名の profile はプロジェクト側が優先し、`defaults` と `targets` はプロジェクト側が置き換えますが、グローバル側の `companion.enabled: false` はすべてのプロジェクトで companion を無効にします。
-- ループバック以外の `base_url`（LAN 上の DGX Spark など）は、`TAKT_CONFIG_DIR` 層の runtime.yaml でしか受け付けられません。`TAKT_CONFIG_DIR` をプロジェクト内に向けていれば、この設定もプロジェクトに閉じます。
-- あとで T0 を DGX Spark に切り替えるときは、`t0-*` の 2 つの profile だけを書き換えます。
-- 最上位モデルはレート制限に早く当たります。`.takt/config.yaml` のフォールバック連鎖により、制限に当たったステップは失敗せず次の provider で再実行されます。
+あとで T0 を DGX Spark に切り替えるときは、`t0-*` の 2 つの profile だけを書き換えます。
 
 ## サンドボックスで検証する
 [`scripts/sandbox-verify.sh`](scripts/sandbox-verify.sh) は、使い捨ての git プロジェクトにバンドルを導入し、空の `TAKT_CONFIG_DIR` で実行します。そのためプロジェクトの設定だけが使われます。`flash-default` を実走させ、実行ログを検査します。
@@ -136,13 +145,19 @@ scripts/sandbox-verify.sh --mode real    # runtime.project.yaml の provider を
 - TAKT 本体: [nrslib/takt](https://github.com/nrslib/takt)
 
 ## ワークフロー開発者向け
-- **builtin はコピーせず参照する。** tier のステップを足すためにコピーしたのは `development-implement-dynamic` と `development-remediation-dynamic` の 2 本だけ（`flash-implement-dynamic` / `flash-remediation-dynamic`）。builtin の facet は `builtin-` 接頭辞の 1 行 `{extends:...}` ファイルで参照しています。
+
+### リポジトリの約束事
+- **2 言語、1 構造。** `en/` と `ja/` は常に同期させます。ファイル名は同一で、YAML は `description`、rule の `condition` 文、コメント以外は同じにします。builtin をコピーしたワークフローは、builtin の `en` / `ja` に同じ改変を加えたものなので、構造を変えるときは両方を変えてください。
+- **builtin はコピーせず参照する。** builtin のワークフローをコピーするのは、ステップを変える必要があるときだけにします。builtin の facet は `builtin-` 接頭辞の 1 行 `{extends:...}` ファイルで参照します。
+- **テンプレート。** `runtime.project.yaml` と `config.project.yaml` はインストーラがプロジェクトへコピーするものです。このリポジトリ内の `.takt/{workflows,steps,facets}` は `scripts/use-lang.sh`（リポジトリ直下で実行）が生成するもので、追跡しません。
+- **検証。** 変更を出す前に、両言語で `scripts/sandbox-verify.sh --mode mock --lang <en|ja>` を通してください。CI でも実行します。facet や tier を変えたときは `--mode real` も実行してください。
+
+### flash-default の設計メモ
+- **コピーした builtin は 2 本だけ。** tier のステップを足すために `development-implement-dynamic` と `development-remediation-dynamic` を `flash-implement-dynamic` / `flash-remediation-dynamic` としてコピーしました。`flash-default` は builtin の `development-core` を引数を変えて呼びます。
 - **昇格は `promotion` ではなくステップで表現する。** `promotion: [{at: N}]` は `ladder` を進めるだけで、子ワークフローの iteration カウンタは `workflow_call` のたびにリセットされます。そのため `implement → reimplement → reimplement_final` は別ステップです。`write_tests` と `fix` は 1 つのワークフロー内でループするので本物の ladder を使っています。
-- **`write_tests` の promotion は step fragment で与える。** `.takt/steps/development-core-write-tests.yaml` が builtin の fragment を shadowing して `promotion` を足しているので、`development-core` 自体はコピーしていません。この shadowing はこのプロジェクト内で `development-core` を使うすべてのワークフローに効く点に注意してください。
+- **`write_tests` の promotion は step fragment で与える。** `steps/development-core-write-tests.yaml` が builtin の fragment を shadowing して `promotion` を足しているので、`development-core` 自体はコピーしていません。この shadowing は、導入したプロジェクト内で `development-core` を使うすべてのワークフローに効きます。
 - **T0 の文脈予算。** `write_tests`、`implement`、`reimplement` に注入する policy + knowledge + instruction は 25 KB 以下に保ちます（`coding-lite`、`testing-lite`、`implementation-semantics`）。T0 のステップにフルサイズの builtin policy を足さないでください。
-- **2 言語、1 構造。** `en/` と `ja/` は常に同期させます。ファイル名は同一で、YAML は `description`、rule の `condition` 文、コメント以外は同じにします。workflow YAML は builtin の `en` / `ja` workflow に同じ改変を加えたものなので、構造を変えるときは両方を変えてください。このリポジトリ内の `.takt/{workflows,steps,facets}` は `scripts/use-lang.sh`（リポジトリ直下で実行）が生成するもので、追跡しません。`runtime.project.yaml` と `config.project.yaml` はインストーラがプロジェクトへコピーするテンプレートです。
-- 設計メモと `runtime.yaml` の雛形: [`ja/workflows/flash-default.yaml`](ja/workflows/flash-default.yaml) の冒頭コメント。
-- 変更を出す前に、両言語で `scripts/sandbox-verify.sh --mode mock --lang <en|ja>` を通してください。CI でも実行します。facet や tier を変えたときは `--mode real` も実行してください。
+- 詳しい設計メモと `runtime.yaml` の雛形: [`ja/workflows/flash-default.yaml`](ja/workflows/flash-default.yaml) の冒頭コメント。
 
 ## ライセンス
 Apache License 2.0 です。[LICENSE](LICENSE) を参照してください。
