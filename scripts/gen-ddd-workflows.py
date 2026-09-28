@@ -11,6 +11,8 @@ with the edits below, for both en/ and ja/:
   is added as a fixed reviewer.
 - all three: a section map declares every facet a builtin parent passes in (TAKT's trust
   boundary), with one-line `{extends:<builtin>}` reference files for builtin facets.
+- ddd-implement (implement, reimplement), ddd-remediation (fix, fix-retry): a ddd-lint command
+  quality gate that runs on the success transition only; every other transition skips it.
 
 Re-run after upgrading TAKT:  python3 scripts/gen-ddd-workflows.py [--builtins DIR]
 """
@@ -37,7 +39,7 @@ def find_builtins():
 
 os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 BUILTIN = find_builtins()
-DDD_POL=["ddd-model","ddd-domain","ddd-application","ddd-adapter","ddd-structure","ddd-rust","ddd-typescript"]
+DDD_POL=["ddd-domain-model","ddd-domain-layer","ddd-use-case-layer","ddd-interface-adapter-layer","ddd-layer-dependency","ddd-domain-packaging","ddd-module-layout","ddd-rust","ddd-typescript"]
 DDD_KNOW=["ddd-modeling","ddd-rust","ddd-typescript"]
 REVIEW_INSTR=[p+n for n in ["architecture-review","security-review","testing-review","coding-review","frontend-review","cqrs-es-review"] for p in ("","follow-up-")]+["initial-ai-antipattern-review","follow-up-ai-antipattern-review"]
 T={
@@ -61,6 +63,28 @@ T={
   "rev_desc":'"DDD ワークフロー用の builtin development-review のコピー。DDD 規約と衝突する backend と CQRS+ES のレビュアーを外し、常に実行する DDD レビュアーを加えている。"',
   "pool_comment":"# 動的 facet プールは使わない。親が implementation_pool を渡すため宣言だけ残している。\n",
  }}
+LINT="bun .takt/tools/ddd-lint/ddd-lint.ts --project ."
+def gate_block(lang):
+    text={"en":f"Running `{LINT}` reports no findings; when the ddd-lint gate fails, read the output log it names and fix every finding",
+          "ja":f"`{LINT}` の実行で指摘がない。ddd-lint のゲートが失敗したら、示された出力ログを読み、すべての指摘を直す"}[lang]
+    return (f"    quality_gates:\n      - \"{text}\"\n      - type: command\n        name: ddd-lint\n"
+            f"        command: \"{LINT}\"\n        cwd: \".\"\n        timeout_ms: 300000\n")
+def add_gates(s, lang, steps, success):
+    """Adds the ddd-lint gate to `steps`; rules whose target is not `success` skip it."""
+    for name in steps:
+        start=s.index(f"\n  - name: {name}\n")+1
+        nxt=s.find("\n  - name: ",start)
+        end=len(s) if nxt<0 else nxt+1
+        block=s[start:end]
+        block=block.replace("\n    rules:\n","\n"+gate_block(lang)+"    rules:\n",1)
+        out=[]
+        for line in block.split("\n"):
+            out.append(line)
+            stripped=line.strip()
+            if (stripped.startswith("next: ") or stripped.startswith("return: ")) and line.startswith("        ") and stripped!=f"next: {success}":
+                out.append("        command_gates: skip")
+        s=s[:start]+"\n".join(out)+s[end:]
+    return s
 def ref(kind, name): return f"../facets/{kind}/builtin-{name}.md"
 def own(kind, name): return f"../facets/{kind}/{name}.md"
 def section_map(pol_b, know_b, instr_b, instr_own, rep_b):
@@ -89,6 +113,7 @@ for lang in ("en","ja"):
     s=sub1(s,"\nfacet_pools:\n","\n"+t["map_comment"]+m+t["pool_comment"]+"facet_pools:\n")
     df="    dynamic_facets:\n      pool:\n        $param: implementation_pool\n"
     assert s.count(df)==2; s=s.replace(df,"")
+    s=add_gates(s,lang,["implement","reimplement"],"COMPLETE")
     open(f"{lang}/workflows/ddd-implement.yaml","w").write(s)
     # ddd-remediation
     s=open(f"{wf}/development-remediation-dynamic.yaml").read()
@@ -99,6 +124,7 @@ for lang in ("en","ja"):
     s=sub1(s,"\nfacet_pools:\n","\n"+t["map_comment"]+m+"facet_pools:\n")
     df="    dynamic_facets:\n      pool:\n        $param: fix_pool\n"
     assert s.count(df)==2; s=s.replace(df,"")
+    s=add_gates(s,lang,["fix","fix-retry"],"fix-verifier")
     open(f"{lang}/workflows/ddd-remediation.yaml","w").write(s)
     # ddd-review
     s=open(f"{wf}/development-review.yaml").read()

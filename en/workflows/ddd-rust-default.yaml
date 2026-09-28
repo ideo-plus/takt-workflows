@@ -7,7 +7,7 @@ initial_step: develop
 #   planner   : ddd-plan / ddd-replan declare the changes to .ddd.toml and docs/ddd/*.yaml
 #   coder     : ddd-implement / ddd-reimplement apply them before the code
 #   reviewers : ddd-review replaces the backend and CQRS+ES reviewers with a DDD reviewer
-# The builtin architecture knowledge stays; the ddd-structure policy states where DDD takes precedence.
+# The builtin architecture knowledge stays; the ddd-domain-packaging policy states where DDD takes precedence.
 
 steps:
   - name: develop
@@ -23,8 +23,10 @@ steps:
       replan_instruction: ddd-replan
       plan_policy:
         - design-planning
-        - ddd-model
-        - ddd-structure
+        - ddd-domain-model
+        - ddd-layer-dependency
+        - ddd-domain-packaging
+        - ddd-module-layout
       plan_knowledge:
         - architecture
         - task-decomposition
@@ -35,7 +37,7 @@ steps:
       testing_policy:
         - coding
         - testing
-        - ddd-domain
+        - ddd-domain-layer
         - ddd-rust
       testing_knowledge:
         - architecture
@@ -47,11 +49,13 @@ steps:
         - coding
         - testing
         - ai-antipattern
-        - ddd-model
-        - ddd-domain
-        - ddd-application
-        - ddd-adapter
-        - ddd-structure
+        - ddd-domain-model
+        - ddd-domain-layer
+        - ddd-use-case-layer
+        - ddd-interface-adapter-layer
+        - ddd-layer-dependency
+        - ddd-domain-packaging
+        - ddd-module-layout
         - ddd-rust
       development_knowledge:
         - architecture
@@ -71,22 +75,26 @@ steps:
         pool: []
         moderator: review-companion-moderator
       review_policy_additions:
-        - ddd-model
-        - ddd-domain
-        - ddd-application
-        - ddd-adapter
-        - ddd-structure
+        - ddd-domain-model
+        - ddd-domain-layer
+        - ddd-use-case-layer
+        - ddd-interface-adapter-layer
+        - ddd-layer-dependency
+        - ddd-domain-packaging
+        - ddd-module-layout
         - ddd-rust
       review_policy:
         - coding
         - testing
         - review
         - architecture
-        - ddd-model
-        - ddd-domain
-        - ddd-application
-        - ddd-adapter
-        - ddd-structure
+        - ddd-domain-model
+        - ddd-domain-layer
+        - ddd-use-case-layer
+        - ddd-interface-adapter-layer
+        - ddd-layer-dependency
+        - ddd-domain-packaging
+        - ddd-module-layout
         - ddd-rust
       review_knowledge:
         - architecture

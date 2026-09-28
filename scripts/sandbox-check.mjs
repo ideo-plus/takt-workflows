@@ -84,9 +84,27 @@ const HAPPY_PATH_RULES = {
   'ddd-review': 1, // approved
 };
 
-function mockify() {
+/**
+ * The files the mock coder writes. For the DDD workflows they are a whole sample project from the
+ * ddd-lint test samples, so the ddd-lint quality gate runs for real and passes.
+ */
+async function mockWrites(workflow) {
+  const samples = join(dirname(new URL(import.meta.url).pathname), '..', 'tools', 'ddd-lint', 'test', 'samples');
+  if (workflow === 'ddd-typescript-default') {
+    const { typeScriptSample } = await import(join(samples, 'typescript.ts'));
+    return Object.entries(typeScriptSample('class', 'named-file').files).map(([path, content]) => ({ path, content }));
+  }
+  if (workflow === 'ddd-rust-default') {
+    const { rustSample } = await import(join(samples, 'rust.ts'));
+    return Object.entries(rustSample('file').files).map(([path, content]) => ({ path, content }));
+  }
+  return [{ path: 'src/mock-change.mjs', content: 'export const mockChange = true;\n' }];
+}
+
+async function mockify() {
   const project = opts.project ?? fail('--project is required');
   const scenario = opts.scenario ?? fail('--scenario is required');
+  const fileWrites = await mockWrites(opts.workflow ?? 'flash-default');
   const doc = YAML.parseDocument(readFileSync(runtimePath(project), 'utf8'));
   const profiles = doc.getIn(['provider', 'profiles']);
   if (!profiles || !profiles.items?.length) fail('runtime.yaml has no provider.profiles to mock');
@@ -108,7 +126,7 @@ function mockify() {
       persona: 'coder',
       status: 'done',
       content: '[MOCK] coder output',
-      file_writes: [{ path: 'src/mock-change.mjs', content: 'export const mockChange = true;\n' }],
+      file_writes: fileWrites,
     }),
     // Dynamic parallel selector: fixed reviewers only (empty pool selection is valid).
     ...times(20, {
@@ -244,11 +262,17 @@ function verify() {
     const out = `${check.stdout}\n${check.stderr}`;
     const summary = (out.match(/^ℹ (tests|pass|fail) \d+/gm) ?? out.match(/^test result: .*$/gm) ?? []).join(', ');
     add('output', `${checkCmd} passes`, check.status === 0, summary || `exit ${check.status}`);
-    if (workflow.startsWith('ddd-')) {
-      for (const file of ['.ddd.toml', 'docs/ddd/domain-model.yaml', 'docs/ddd/aggregate-mapping.yaml']) {
-        add('ddd', `${file} written`, existsSync(join(project, file)), existsSync(join(project, file)) ? 'present' : 'missing');
-      }
+  }
+
+  // DDD workflows, in both modes: the model files exist and the project passes ddd-lint.
+  if (workflow.startsWith('ddd-')) {
+    for (const file of ['.ddd.toml', 'docs/ddd/domain-model.yaml', 'docs/ddd/aggregate-mapping.yaml', 'docs/ddd/layer-structure.yaml']) {
+      add('ddd', `${file} written`, existsSync(join(project, file)), existsSync(join(project, file)) ? 'present' : 'missing');
     }
+    // The ddd-lint quality gate ran on each implementation step; the finished project must still pass it.
+    const lint = spawnSync('bun', ['.takt/tools/ddd-lint/ddd-lint.ts', '--project', '.'], { cwd: project, encoding: 'utf8' });
+    const lintOut = `${lint.stdout ?? ''}${lint.stderr ?? ''}`.trim().split('\n');
+    add('ddd', 'ddd-lint passes', lint.status === 0, lint.error ? String(lint.error) : lintOut.filter((line) => !line.startsWith('(')).slice(-3).join(' / '));
   }
 
   // Report.
@@ -275,6 +299,6 @@ function verify() {
   process.exit(failed === 0 ? 0 : 1);
 }
 
-if (command === 'mockify') mockify();
+if (command === 'mockify') await mockify();
 else if (command === 'verify') verify();
 else fail('usage: sandbox-check.mjs <mockify|verify> [options]');

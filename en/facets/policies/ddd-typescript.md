@@ -1,65 +1,49 @@
 # DDD TypeScript Policy
 
-Apply the DDD layer rules to TypeScript with one code representation per project, runtime-private and immutable state, method-specific Result errors, and explicit package boundaries.
+Defines how the rules of the other DDD policies are judged in TypeScript code, and the rules only TypeScript has (code representation, immutability, where `Result` lives, package boundaries, checkable syntax). When the reading breaks a rule, that rule's verdict applies. Module layout belongs to the module layout policy.
 
-## Principles
+## Reading the Rules
 
-| Principle | Criterion |
-|-----------|-----------|
-| One representation | The project settings choose `class` or `companion`; every aggregate, Entity, Domain Primitive, and value object uses it |
-| Runtime-private state | State is hidden by `#` fields or a factory closure; `private`, `protected`, and `readonly` do not hide state |
-| Immutable instances | No domain instance, aggregates and Entities included, changes after construction; a command returns a new instance |
-| Result from infrastructure | `Result` is declared once in the infrastructure language-extensions package |
-| Closed error unions | Each mapped operation returns its own union of string literals |
-| Explicit boundaries | Packages are reached only by package name and published `exports` |
-| Checkable code | Domain sources avoid constructs that cannot be decided from syntax and stated types |
+| Rule (policy) | How TypeScript code is judged |
+|---------------|-------------------------------|
+| Do not expose state (domain layer) | State is held in `#` fields or a factory closure. Any other property (including `private`, `protected`, `readonly`, and parameter properties) is public |
+| Do not build outside the type (domain layer) | With the `class` representation, `new` appears only inside the type's own class body. With the `companion` representation, instances are written only inside the full-constructor factory, never with a spread, `as`, or `satisfies` |
+| Go through the full constructor (domain layer) | With `class`, the `private` constructor takes the whole state. With `companion`, the factory that takes the whole state (`restore`) is the full constructor, and the other factories and the commands go through it |
+| Whether a command changes the aggregate in place (domain layer) | It does not; follow "Immutability" below |
+| Return business failures as a Result (domain layer) | An expected failure is returned as `{ ok: false, error: "<case>" }`. An operation's error type is the exported union of exactly its case strings |
+| Agreement with the declarations (domain layer) | Mapped factories and commands state `Result<success_type, error_type>` as their return type; a factory's success type is the aggregate. A factory bound to no operation (`restore`, a value object's `of`) may return the value itself |
+| Duplicate success (domain layer idempotency) | The success type has a `kind: "applied"` case (the new instance and the event) and a `kind: "duplicate"` case (the unchanged instance only) |
 
-## Class Representation
+## Code Representation
 
 | Criterion | Judgment |
 |-----------|----------|
-| State is held in a property that is not a `#` field (including `private`, `protected`, `readonly`, or parameter properties) | REJECT |
-| The constructor is not `private`, or does not take the whole state | REJECT |
-| `new` of a domain type appears outside its own class body | REJECT |
-| A `#` field is not declared `readonly` | REJECT |
+| An aggregate, Entity, Domain Primitive, or value object is written in a representation other than the one `.ddd.toml` chooses (`class` or `companion`) | REJECT |
 | A domain class uses accessors (`get`/`set`), `extends`, `implements`, decorators, `declare`, `abstract` members, or computed member names | REJECT |
+| A companion domain type is not a `type T = { … }` literal paired with a `const T = { … }` of the same name in one file, or is an `interface` paired with a `const` | REJECT |
+| A companion type literal holds anything other than the brand and method signatures, or a computed member other than the brand key `[brand]` | REJECT |
+| A companion type has no non-exported top-level `const brand: unique symbol = Symbol("T")`, uses `Symbol.for`, or exports the brand | REJECT |
 
-## Companion Representation
+## Immutability
 
-| Criterion | Judgment |
-|-----------|----------|
-| The domain type is not a `type T = { … }` literal paired with a `const T = { … }` of the same name in one file | REJECT |
-| The type literal holds anything other than the brand and method signatures | REJECT |
-| The type has no non-exported top-level `const brand: unique symbol = Symbol("T")`, or uses `Symbol.for`, or exports the brand | REJECT |
-| An instance is built outside the full-constructor factory, or with a spread, `as`, or `satisfies` | REJECT |
-| The domain type is an `interface` paired with a `const` | REJECT |
-| A computed member other than the brand key `[brand]` | REJECT |
-
-## Commands and State
+References are shared freely, so no domain instance, aggregates and Entities included, changes after construction. A command builds the changed state into a new instance through the full constructor and returns it.
 
 | Criterion | Judgment |
 |-----------|----------|
-| A method that returns a changed instance is not named by a command slug of the model (`command.invoice.add-line` is `addLine`) and is not a declared replay method | REJECT |
-| A method writes a `#` field or closure state outside the constructor or the full-constructor factory, including inside a command or a replay method | REJECT. Build the changed state into a new instance through the full constructor |
-| A method calls a changing method (`push`, `splice`, `sort`, `set`, `add`, `delete`) on state | REJECT |
-| A command's success value is not the aggregate type (`Result<void, E>`) | REJECT. Return the new instance: `Result<Invoice, E>` |
-| A command recognizes a duplicate request and returns the same instance unchanged | OK |
+| A `#` field or closure state is written outside the constructor or the full-constructor factory (including inside a command or a replay method) | REJECT |
+| A changing method (`push`, `splice`, `sort`, `set`, `add`, `delete`) is called on state | REJECT |
+| A `#` field is not declared `readonly` | REJECT |
+| A command's success type does not hold both the new instance and the event (`Result<void, E>`, `Result<Invoice, E>`) | REJECT. Export a type holding both (`IssueInvoiceOutcome`) beside the error type |
 | A use case stores, or keeps using, the instance it loaded instead of the one the command returned | REJECT |
-| A domain method calls a getter of another domain object | REJECT |
-| A receiver of a domain method has no annotation naming one type | REJECT |
 
-## Result and Errors
+## Where `Result` Lives
 
 | Criterion | Judgment |
 |-----------|----------|
 | A domain package declares its own `Result`, or uses a Result library (neverthrow, Effect, fp-ts) | REJECT |
-| `Result` is imported into a domain package other than by package name with `import type` from the language-extensions package listed in `dependencies` | REJECT |
-| A mapped factory or command does not state `Result<success, E>` as its return type | REJECT |
-| `E` is not the exported union of exactly the mapped `case` strings of that operation | REJECT |
-| An expected business failure is returned as anything other than `{ ok: false, error: "<case>" }` | REJECT |
-| A factory bound to no operation (`restore`, a value object's `of`) returns the value itself | OK |
+| A domain package does not import `Result` with `import type` by package name from the language-extensions package listed in `dependencies` | REJECT |
 
-## Package Boundaries and Modules
+## Package Boundaries
 
 | Criterion | Judgment |
 |-----------|----------|
@@ -67,15 +51,11 @@ Apply the DDD layer rules to TypeScript with one code representation per project
 | A `tsconfig.json` sets `baseUrl` or `paths` into another package | REJECT |
 | A package entry uses `export *` | REJECT. Publish each name |
 | A relative specifier inside a package omits the `.ts` extension | REJECT |
-| `named-file` layout: a module with children is `src/<m>/index.ts` | REJECT. Use `src/<m>.ts` beside `src/<m>/` |
-| `index-file` layout: a module with children is `src/<m>.ts` | REJECT. Use `src/<m>/index.ts`; leaves stay `<leaf>.ts` |
-| A module file name is not `<module>.ts` (`invoice.model.ts`) | REJECT |
 
-## Checkable Domain Sources
+## Checkable Syntax
 
 | Criterion | Judgment |
 |-----------|----------|
 | Domain sources use destructuring, object spreads, decorators, `import =`, `export =`, dynamic `import()`, namespaces, or dynamic callees | REJECT |
 | An object literal is annotated with a composite type that names a domain type (`{ lines: readonly InvoiceLine[] }`, `Record<string, Invoice>`) | REJECT. Annotate the collection's own variable instead |
-| A use-case `execute` parameter, or a receiver of `execute` or of a getter, has no stated type | REJECT |
-| Query-side code imports a domain package as a namespace or re-exports it with `export *` | REJECT |
+| A receiver of a domain method, a use-case `execute` parameter, or a receiver of `execute` or of a getter has no annotation naming one type | REJECT |

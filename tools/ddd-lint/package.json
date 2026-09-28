@@ -1,0 +1,14 @@
+{
+  "name": "ddd-lint",
+  "private": true,
+  "type": "module",
+  "description": "Checks a project's domain model files and its Rust / TypeScript code against the DDD conventions of the takt-workflows DDD workflows.",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "devDependencies": {
+    "@types/bun": "1.3.13",
+    "typescript": "6.0.3"
+  }
+}

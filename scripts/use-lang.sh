@@ -3,6 +3,7 @@
 # with all TAKT configuration closed to that project.
 #
 # TAKT loads project resources only from <project>/.takt/{workflows,steps,facets}.
+# The DDD linter the DDD workflows run as a quality gate is copied to <project>/.takt/tools/ddd-lint.
 # It has no language-aware project layer and refuses symlinked resource directories,
 # so the bundle is materialized by copying. Only files that belong to this bundle
 # (the file names under en/ and ja/) are replaced; other files in .takt/ are left alone.
@@ -10,7 +11,7 @@
 # Configuration is written to the project, never to ~/.takt:
 #   .takt/runtime.yaml  profiles + step assignments (from runtime.project.yaml, if absent)
 #   .takt/config.yaml   language + rate-limit fallback (from config.project.yaml, if absent)
-#   .takt/.gitignore    allowlists runtime.yaml, config.yaml and .takt-workflows for commit
+#   .takt/.gitignore    allowlists runtime.yaml, config.yaml, .takt-workflows and tools/ for commit
 #
 # Usage: scripts/use-lang.sh <en|ja> [project-dir] [--no-config]
 #   project-dir   target project (default: current directory)
@@ -28,7 +29,7 @@ with_config=1
 for arg in "$@"; do
   case "$arg" in
     --no-config|--no-runtime) with_config=0 ;;
-    -h|--help) sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     -*) echo "unknown option: $arg" >&2; exit 2 ;;
     *) if [ -z "$lang" ]; then lang="$arg"; elif [ -z "$project" ]; then project="$arg"; else echo "too many arguments" >&2; exit 2; fi ;;
   esac
@@ -50,6 +51,12 @@ for l in en ja; do
   done
 done
 
+# Files earlier versions of the bundle installed under another name.
+for rel in facets/policies/ddd-application.md facets/policies/ddd-adapter.md \
+  facets/policies/ddd-domain.md facets/policies/ddd-model.md facets/policies/ddd-structure.md; do
+  rm -f "$target/$rel"
+done
+
 # Copy the selected language.
 for dir in workflows steps facets; do
   (cd "$bundle/$lang" && find "$dir" -type d) | while IFS= read -r d; do mkdir -p "$target/$d"; done
@@ -57,6 +64,12 @@ for dir in workflows steps facets; do
     cp "$bundle/$lang/$rel" "$target/$rel"
   done
 done
+
+# The DDD linter: the runtime files only (no tests, dev dependencies, or build output).
+rm -rf "$target/tools/ddd-lint"
+mkdir -p "$target/tools/ddd-lint"
+(cd "$bundle/tools/ddd-lint" && tar -cf - --exclude node_modules --exclude target --exclude test \
+  ddd-lint.ts build-extractor.ts LICENSE lib bin rust-extractor) | (cd "$target/tools/ddd-lint" && tar -xf -)
 
 # Project-closed configuration.
 notes=""
@@ -83,6 +96,9 @@ if [ "$with_config" -eq 1 ]; then
       notes="$notes
   kept existing .takt/config.yaml"
     fi
+    grep -q '^workflow_command_gates:' "$target/config.yaml" || notes="$notes
+  WARNING: .takt/config.yaml does not enable workflow_command_gates.custom_scripts;
+           the DDD workflows will not load until it does (see config.project.yaml)"
   fi
 else
   notes="$notes
@@ -107,7 +123,10 @@ elif [ ! -e "$gitignore" ]; then
 !runtime.yaml
 !.takt-workflows
 
-# Facets and workflows (version-controlled)
+# Facets, workflows and tools (version-controlled)
+!tools/
+!tools/**
+tools/**/target/
 !workflows/
 !workflows/**
 !steps/
@@ -127,12 +146,20 @@ EOF
   notes="$notes
   created .takt/.gitignore (TAKT default allowlist + runtime.yaml)"
 else
-  for entry in '!config.yaml' '!runtime.yaml' '!.takt-workflows'; do
+  for entry in '!config.yaml' '!runtime.yaml' '!.takt-workflows' '!tools/' '!tools/**' 'tools/**/target/'; do
     grep -qxF -- "$entry" "$gitignore" || { printf '%s\n' "$entry" >> "$gitignore"; notes="$notes
   added $entry to .takt/.gitignore"; }
   done
   grep -qxF -- '!workflows/**' "$gitignore" || notes="$notes
   note: .takt/.gitignore does not allowlist workflows/**; the bundle files will not be committed"
+fi
+
+# A global gitignore can hide files the gate needs from the worktree clones TAKT runs in.
+if git -C "$project" rev-parse --git-dir >/dev/null 2>&1; then
+  ignored="$(cd "$project" && git ls-files --others --ignored --exclude-standard -- .takt/tools/ddd-lint | grep -v '/target/' | head -n 3)"
+  [ -z "$ignored" ] || notes="$notes
+  WARNING: git ignores files of .takt/tools/ddd-lint (for example $(echo "$ignored" | head -n 1));
+           force-add them (git add -f .takt/tools/ddd-lint) or the DDD quality gate cannot run"
 fi
 
 version="${TAKT_WORKFLOWS_VERSION:-$(git -C "$bundle" rev-parse --short HEAD 2>/dev/null || echo unknown)}"

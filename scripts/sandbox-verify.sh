@@ -89,7 +89,7 @@ git -C "$project" -c user.email=sandbox@example.invalid -c user.name=sandbox com
 # 3. Mock mode: same step routing, every profile on the mock provider (model = profile name),
 #    and a scripted judge that selects the happy-path rule of every step.
 if [ "$mode" = mock ]; then
-  node "$bundle/scripts/sandbox-check.mjs" mockify --project "$project" --scenario "$dir/mock-scenario.json"
+  node "$bundle/scripts/sandbox-check.mjs" mockify --project "$project" --scenario "$dir/mock-scenario.json" --workflow "$workflow"
   export TAKT_MOCK_SCENARIO="$dir/mock-scenario.json"
   export TAKT_MOCK_CALL_LOG="$dir/mock-calls.jsonl"
 fi

@@ -1,48 +1,17 @@
 # DDD Rust Policy
 
-Apply the DDD layer rules to Rust with its own visibility, construction, mutation, and error mechanisms.
+Defines how the rules of the other DDD policies are judged in Rust code. The rules and their verdicts stay in their own policies; this policy only reads them in Rust syntax. When the reading breaks a rule, that rule's verdict applies. Module layout belongs to the module layout policy.
 
-## Principles
-
-| Principle | Criterion |
-|-----------|-----------|
-| Private by default | Domain struct fields are private; only needed operations are public |
-| Constructed in one place | Struct literals and update syntax for a domain type appear only inside its own `impl` |
-| `&mut self` means a command | A method taking `&mut self` is a declared command or a declared replay method |
-| One error enum per operation | Each mapped operation returns `Result<_, E>` where `E` is its own enum |
-| Static dispatch first | Ports are traits; dynamic dispatch is chosen only where needed |
-
-## Visibility and Construction
-
-| Criterion | Judgment |
-|-----------|----------|
-| A domain struct field is `pub`, `pub(crate)`, or `pub(super)` | REJECT |
-| A struct literal or `..` update syntax of a domain type appears outside its inherent `impl` | REJECT |
-| An aggregate or Entity derives or implements `Default`, or is built through `Default::default()` | REJECT |
-| A constructor that takes the whole state is public and skips validation | REJECT. Keep it private and call it from validating factories |
-| Restoration goes through a `restore` associated function that validates the whole state | OK |
-
-## Mutation
-
-| Criterion | Judgment |
-|-----------|----------|
-| A `&mut self` method is not mapped to a declared command or a declared replay method | REJECT |
-| `Cell`, `RefCell`, `Mutex`, `RwLock`, or atomics hold business state of a domain type | REJECT. Use them only for technical caches, and say so |
-| A value object or Domain Primitive has a `&mut self` method | REJECT |
-
-## Errors
-
-| Criterion | Judgment |
-|-----------|----------|
-| A mapped operation returns `Result<_, E>` where `E` is the enum named by its `error_type`, with exactly the mapped cases as variants | OK |
-| An error enum has a catch-all variant (`Other(String)`, `Unknown`) for business failures | REJECT |
-| A business failure is reported with `panic!`, `unwrap`, or `expect` | REJECT |
-| Restoration of a corrupt state or history returns a distinct restoration error or panics | OK. It is not a business failure |
-
-## Modules
-
-| Criterion | Judgment |
-|-----------|----------|
-| `file` layout: a module with children uses `mod.rs` | REJECT. Use `<m>.rs` beside `<m>/` |
-| `mod-rs` layout: a module with children is `<m>.rs` | REJECT. Use `<m>/mod.rs`; leaves stay `<leaf>.rs` |
-| A `#[path]` attribute is used to escape the selected layout | REJECT |
+| Rule (policy) | How Rust code is judged |
+|---------------|-------------------------|
+| Do not expose state (domain layer) | A `pub`, `pub(crate)`, `pub(super)`, or `pub(in …)` field is public |
+| Do not build outside the type (domain layer) | Struct literals and the `..` update syntax appear only inside the type's inherent `impl`. Deriving or implementing `Default`, or building through `Default::default()`, is building outside the type |
+| Go through the full constructor (domain layer) | The associated function that takes the whole state is private and is called from the validating factories and the `restore` associated function |
+| Only declared methods change state (domain layer) | A method taking `&mut self` is a method that changes state. Value objects and Domain Primitives have no `&mut self` method |
+| Whether a command changes the aggregate in place (domain layer) | A command takes `&mut self`, changes the aggregate, and returns `Result<success_type, error_type>`; the borrow checker keeps the change exclusive. A method that takes `&self` or `self` and only returns an event is a command that does not change state |
+| Do not hide changes behind interior mutability (domain layer) | `Cell`, `RefCell`, `Mutex`, `RwLock`, or an atomic type holding the business state of a domain type is interior mutability. When one serves a technical cache, say so |
+| Return business failures as a Result (domain layer) | Reporting a business failure through `panic!`, `unwrap`, or `expect` is throwing. An operation's error type is the enum named by `error_type`, with the mapped cases as variants |
+| Do not widen error types (domain layer) | A catch-all variant such as `Other(String)` or `Unknown` widens the type |
+| Corrupt state (domain layer) | Restoration may return a dedicated restoration error or panic |
+| Duplicate success (domain layer idempotency) | The success type is an enum with `Applied(event)` and `Duplicate`; a duplicate returns `Duplicate` |
+| Go through a port (layer dependency) | A port is a trait. Static dispatch is the default; use dynamic dispatch only where the implementation is chosen at run time |

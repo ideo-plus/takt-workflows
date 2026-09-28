@@ -9,8 +9,11 @@ A growing collection of TAKT (0.66) workflows, facets, and operational know-how,
 ## Commands
 
 ```sh
-node --test                                                  # script unit tests (node:test, no package.json)
+node --test 'scripts/**/*.test.mjs'                          # script unit tests (node:test, no package.json)
 node --test scripts/check-facet-budget.test.mjs              # a single test file
+(cd tools/ddd-lint && bun install && bun run typecheck && bun test)   # ddd-lint (Bun); needs the Rust extractor for this platform
+bun tools/ddd-lint/build-extractor.ts                        # build the Rust extractor for this platform (cargo)
+python3 scripts/gen-ddd-workflows.py                         # regenerate ddd-implement / ddd-remediation / ddd-review
 scripts/use-lang.sh ja                                       # materialize ja/ into this repo's .takt/ (needed before takt commands here)
 takt workflow doctor flash-default flash-implement-dynamic flash-remediation-dynamic
 takt workflow inspect flash-default                          # resolved provider/model per step
@@ -20,7 +23,7 @@ scripts/sandbox-verify.sh --mode mock --workflow ddd-rust-default   # any workfl
 node scripts/check-facet-budget.mjs 25000 <files...>          # T0 injected-facet size check
 ```
 
-CI (`.github/workflows/ci.yml`) runs the mock sandbox for every workflow in `en` and `ja`, the T0 budget check for `flash-default`, and `node --test`.
+CI (`.github/workflows/ci.yml`) runs the mock sandbox for every workflow in `en` and `ja`, the T0 budget check for `flash-default`, the script tests, and the ddd-lint typecheck and tests.
 
 ## Architecture
 
@@ -31,7 +34,8 @@ CI (`.github/workflows/ci.yml`) runs the mock sandbox for every workflow in `en`
 - **T0 context budget:** policy + knowledge + instruction injected into `write_tests` / `implement` / `reimplement` stays under 25 KB (`coding-lite`, `testing-lite`, `implementation-semantics`).
 - **English facets keep Japanese contract strings verbatim** (plan table columns 「実装箇所」「完了証拠」, required report headings). They are produced/consumed by the Japanese builtins; translating them breaks downstream steps.
 - **Distribution:** `scripts/install.sh` downloads a tarball (`--ref` pins a tag/branch/commit) and runs `use-lang.sh`; nothing is cloned into the user's project.
-- **DDD workflows:** policies own the verdicts (`ddd-model`, `ddd-domain`, `ddd-application`, `ddd-adapter`, `ddd-structure`, `ddd-rust` / `ddd-typescript`), knowledge holds shapes and examples (`ddd-modeling`, `ddd-rust`, `ddd-typescript`). Builtin backend and CQRS+ES facets are deliberately unused (Axon/Kotlin assumptions conflict); where a reused builtin conflicts (business errors as exceptions, input DTOs, infrastructure exports, directory examples) the DDD policy states the override. `ddd-implement` / `ddd-remediation` / `ddd-review` are generated from the builtin workflows (dynamic facet pool removed; backend and CQRS+ES reviewers replaced by `steps/ddd-reviewer.yaml`); keep them generated rather than hand-edited. Project model files live in `docs/ddd/*.yaml` plus `.ddd.toml`.
+- **DDD workflows:** policies own the verdicts (`ddd-domain-model`, `ddd-domain-layer`, `ddd-use-case-layer`, `ddd-interface-adapter-layer`, `ddd-layer-dependency`, `ddd-domain-packaging`, `ddd-module-layout`, `ddd-rust` / `ddd-typescript`), each rule lives in exactly one policy and each policy opens with the scope it owns (no restating principles tables; language policies only read the rules in their syntax and add language-only rules); knowledge holds shapes and examples (`ddd-modeling`, `ddd-rust`, `ddd-typescript`). Builtin backend and CQRS+ES facets are deliberately unused (Axon/Kotlin assumptions conflict); where a reused builtin conflicts (business errors as exceptions, input DTOs, infrastructure exports, directory examples) the DDD policy states the override. `ddd-implement` / `ddd-remediation` / `ddd-review` are generated from the builtin workflows (dynamic facet pool removed; backend and CQRS+ES reviewers replaced by `steps/ddd-reviewer.yaml`); keep them generated rather than hand-edited. The generator also adds the ddd-lint command quality gate to implement / reimplement / fix / fix-retry (success transition only), which needs `workflow_command_gates.custom_scripts: true` in the project config. Project model files live in `docs/ddd/*.yaml` plus `.ddd.toml`.
+- **ddd-lint (`tools/ddd-lint/`):** a Bun CLI the installer copies to `<project>/.takt/tools/ddd-lint/`. It checks the model files and the Rust / TypeScript code (vendored TypeScript compiler; Rust facts from a native `syn` extractor built from `rust-extractor/`, shipped for darwin-arm64 only). `test/samples/` are complete sample projects; the `ddd-typescript` / `ddd-rust` knowledge code examples must equal them and the `ddd-modeling` examples must lint clean against them (`bun test` enforces both), and the mock sandbox writes them as the coder's output. When a convention changes, change the policy, the linter rule, the samples, and the knowledge together.
 - **Sandbox verification:** `scripts/sandbox-verify.sh` creates a git project in a temp dir with an empty `TAKT_CONFIG_DIR`, installs, runs `takt --pipeline --skip-git -w flash-default`, then `scripts/sandbox-check.mjs verify` compares `step_start` / `companion_call` events in `.takt/runs/*/logs/*.jsonl` with `runtime.yaml`. Mock mode rewrites every profile to `{provider: mock, model: <profile name>}` and scripts the judge (`[STEP-NAME:N]` tags), the dynamic parallel selector, the coder, and the companions to take the happy path.
 
 ## Conventions

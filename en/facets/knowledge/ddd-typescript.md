@@ -16,7 +16,7 @@ The examples below keep the customer and the amounts as bare `string` and `numbe
 
 ### Class representation
 
-`open` validates and builds through the private constructor and returns `Result`. `restore` rebuilds a persisted invoice after validating the whole state and throws on a corrupt one, which is not a business failure. `addLine` is the command `command.invoice.add-line`; like `issue`, it returns a new invoice built through the private constructor and leaves the current one unchanged. Every `#` field is `readonly`. `lines()` returns a copy, and `total()` asks each line to add itself.
+`open` validates and builds through the private constructor and returns `Result`. `restore` rebuilds a persisted invoice after validating the whole state and throws on a corrupt one, which is not a business failure. The commands `addLine` (`command.invoice.add-line`) and `issue` never change the invoice they are called on: each builds the changed state into a new invoice through the private constructor and returns it together with the one event it produced, as the named outcome type the mapping gives in `success_type` (`AddInvoiceLineOutcome`, `IssueInvoiceOutcome`). `addLine` remembers the request IDs it applied and recognizes a resent one before any other check: it returns `kind: "duplicate"` with the unchanged invoice and no event, so the event is never published twice. Events (`InvoiceLineAdded`, `InvoiceIssued`) are read-only data types declared in the aggregate's module. Every `#` field is `readonly`. `lines()` returns a copy, and `total()` asks each line to add itself.
 
 ```ts
 import type { Result } from "@acme/language-extensions";
@@ -26,43 +26,73 @@ export type OpenInvoiceError = "missing-customer" | "negative-total";
 export type AddInvoiceLineError = "already-issued" | "negative-total";
 export type IssueInvoiceError = "already-issued" | "empty-lines";
 
+export type InvoiceLineAdded = { readonly invoiceId: string; readonly requestId: string; readonly line: InvoiceLine };
+export type InvoiceIssued = { readonly invoiceId: string };
+
+export type AddInvoiceLineOutcome =
+  | { readonly kind: "applied"; readonly invoice: Invoice; readonly event: InvoiceLineAdded }
+  | { readonly kind: "duplicate"; readonly invoice: Invoice };
+export type IssueInvoiceOutcome = { readonly invoice: Invoice; readonly event: InvoiceIssued };
+
 function sumOf(lines: readonly InvoiceLine[]): number {
   return lines.reduce((sum: number, line: InvoiceLine) => line.addTo(sum), 0);
 }
 
 export class Invoice {
+  readonly #id: string;
   readonly #customer: string;
   readonly #lines: readonly InvoiceLine[];
   readonly #issued: boolean;
+  readonly #addLineRequests: ReadonlySet<string>;
 
-  private constructor(customer: string, lines: readonly InvoiceLine[], issued: boolean) {
+  private constructor(
+    id: string,
+    customer: string,
+    lines: readonly InvoiceLine[],
+    issued: boolean,
+    addLineRequests: readonly string[],
+  ) {
+    this.#id = id;
     this.#customer = customer;
     this.#lines = [...lines];
     this.#issued = issued;
+    this.#addLineRequests = new Set(addLineRequests);
   }
 
-  static open(customer: string, lines: readonly InvoiceLine[]): Result<Invoice, OpenInvoiceError> {
+  static open(id: string, customer: string, lines: readonly InvoiceLine[]): Result<Invoice, OpenInvoiceError> {
     if (customer.length === 0) return { ok: false, error: "missing-customer" };
     if (sumOf(lines) < 0) return { ok: false, error: "negative-total" };
-    return { ok: true, value: new Invoice(customer, lines, false) };
+    return { ok: true, value: new Invoice(id, customer, lines, false, []) };
   }
 
-  static restore(customer: string, lines: readonly InvoiceLine[], issued: boolean): Invoice {
+  static restore(
+    id: string,
+    customer: string,
+    lines: readonly InvoiceLine[],
+    issued: boolean,
+    addLineRequests: readonly string[],
+  ): Invoice {
     if (customer.length === 0 || (issued && lines.length === 0) || sumOf(lines) < 0)
       throw new Error("corrupt invoice state");
-    return new Invoice(customer, lines, issued);
+    return new Invoice(id, customer, lines, issued, addLineRequests);
   }
 
-  addLine(line: InvoiceLine): Result<Invoice, AddInvoiceLineError> {
+  addLine(requestId: string, line: InvoiceLine): Result<AddInvoiceLineOutcome, AddInvoiceLineError> {
+    if (this.#addLineRequests.has(requestId)) return { ok: true, value: { kind: "duplicate", invoice: this } };
     if (this.#issued) return { ok: false, error: "already-issued" };
     if (line.addTo(sumOf(this.#lines)) < 0) return { ok: false, error: "negative-total" };
-    return { ok: true, value: new Invoice(this.#customer, [...this.#lines, line], false) };
+    const requests: readonly string[] = [...this.#addLineRequests, requestId];
+    const invoice: Invoice = new Invoice(this.#id, this.#customer, [...this.#lines, line], false, requests);
+    const event: InvoiceLineAdded = { invoiceId: this.#id, requestId, line };
+    return { ok: true, value: { kind: "applied", invoice, event } };
   }
 
-  issue(): Result<Invoice, IssueInvoiceError> {
+  issue(): Result<IssueInvoiceOutcome, IssueInvoiceError> {
     if (this.#issued) return { ok: false, error: "already-issued" };
     if (this.#lines.length === 0) return { ok: false, error: "empty-lines" };
-    return { ok: true, value: new Invoice(this.#customer, this.#lines, true) };
+    const invoice: Invoice = new Invoice(this.#id, this.#customer, this.#lines, true, [...this.#addLineRequests]);
+    const event: InvoiceIssued = { invoiceId: this.#id };
+    return { ok: true, value: { invoice, event } };
   }
 
   isBilledTo(customer: string): boolean {
@@ -91,6 +121,14 @@ export type OpenInvoiceError = "missing-customer" | "negative-total";
 export type AddInvoiceLineError = "already-issued" | "negative-total";
 export type IssueInvoiceError = "already-issued" | "empty-lines";
 
+export type InvoiceLineAdded = { readonly invoiceId: string; readonly requestId: string; readonly line: InvoiceLine };
+export type InvoiceIssued = { readonly invoiceId: string };
+
+export type AddInvoiceLineOutcome =
+  | { readonly kind: "applied"; readonly invoice: Invoice; readonly event: InvoiceLineAdded }
+  | { readonly kind: "duplicate"; readonly invoice: Invoice };
+export type IssueInvoiceOutcome = { readonly invoice: Invoice; readonly event: InvoiceIssued };
+
 function sumOf(lines: readonly InvoiceLine[]): number {
   return lines.reduce((sum: number, line: InvoiceLine) => line.addTo(sum), 0);
 }
@@ -99,35 +137,48 @@ const brand: unique symbol = Symbol("Invoice");
 
 export type Invoice = {
   readonly [brand]: true;
-  addLine(line: InvoiceLine): Result<Invoice, AddInvoiceLineError>;
-  issue(): Result<Invoice, IssueInvoiceError>;
+  addLine(requestId: string, line: InvoiceLine): Result<AddInvoiceLineOutcome, AddInvoiceLineError>;
+  issue(): Result<IssueInvoiceOutcome, IssueInvoiceError>;
   isBilledTo(customer: string): boolean;
   total(): number;
   lines(): readonly InvoiceLine[];
 };
 
 export const Invoice = {
-  open(customer: string, lines: readonly InvoiceLine[]): Result<Invoice, OpenInvoiceError> {
+  open(id: string, customer: string, lines: readonly InvoiceLine[]): Result<Invoice, OpenInvoiceError> {
     if (customer.length === 0) return { ok: false, error: "missing-customer" };
     if (sumOf(lines) < 0) return { ok: false, error: "negative-total" };
-    return { ok: true, value: Invoice.restore(customer, lines, false) };
+    return { ok: true, value: Invoice.restore(id, customer, lines, false, []) };
   },
-  restore(customer: string, lines: readonly InvoiceLine[], issued: boolean): Invoice {
+  restore(
+    id: string,
+    customer: string,
+    lines: readonly InvoiceLine[],
+    issued: boolean,
+    addLineRequests: readonly string[],
+  ): Invoice {
     if (customer.length === 0 || (issued && lines.length === 0) || sumOf(lines) < 0)
       throw new Error("corrupt invoice state");
     const kept: readonly InvoiceLine[] = [...lines];
-    const state = { customer, lines: kept, issued };
+    const requests: ReadonlySet<string> = new Set(addLineRequests);
+    const state = { id, customer, lines: kept, issued, requests };
     const instance: Invoice = {
       [brand]: true,
-      addLine(line: InvoiceLine): Result<Invoice, AddInvoiceLineError> {
+      addLine(requestId: string, line: InvoiceLine): Result<AddInvoiceLineOutcome, AddInvoiceLineError> {
+        if (state.requests.has(requestId)) return { ok: true, value: { kind: "duplicate", invoice: instance } };
         if (state.issued) return { ok: false, error: "already-issued" };
         if (line.addTo(sumOf(state.lines)) < 0) return { ok: false, error: "negative-total" };
-        return { ok: true, value: Invoice.restore(state.customer, [...state.lines, line], false) };
+        const next: readonly string[] = [...state.requests, requestId];
+        const invoice: Invoice = Invoice.restore(state.id, state.customer, [...state.lines, line], false, next);
+        const event: InvoiceLineAdded = { invoiceId: state.id, requestId, line };
+        return { ok: true, value: { kind: "applied", invoice, event } };
       },
-      issue(): Result<Invoice, IssueInvoiceError> {
+      issue(): Result<IssueInvoiceOutcome, IssueInvoiceError> {
         if (state.issued) return { ok: false, error: "already-issued" };
         if (state.lines.length === 0) return { ok: false, error: "empty-lines" };
-        return { ok: true, value: Invoice.restore(state.customer, state.lines, true) };
+        const invoice: Invoice = Invoice.restore(state.id, state.customer, state.lines, true, [...state.requests]);
+        const event: InvoiceIssued = { invoiceId: state.id };
+        return { ok: true, value: { invoice, event } };
       },
       isBilledTo(customer: string): boolean {
         return state.customer === customer;
@@ -154,7 +205,7 @@ export type Result<T, E> =
   | { readonly ok: false; readonly error: E };
 ```
 
-Each mapped factory and command states its own error type: the union of the string literals of its mapped cases, named by `error_type` and exported from the aggregate's module. `IssueInvoiceError` holds `"already-issued"` and `"empty-lines"` and nothing of `open` or `addLine`. A factory bound to no operation, such as `restore` or a value object's `of`, returns the value itself.
+Each mapped factory and command states its own error type: the union of the string literals of its mapped cases, named by `error_type` and exported from the aggregate's module. `IssueInvoiceError` holds `"already-issued"` and `"empty-lines"` and nothing of `open` or `addLine`. A command's success type is its outcome type, named by `success_type` and exported beside its error type; a mapped factory's success type is the aggregate. A factory bound to no operation, such as `restore` or a value object's `of`, returns the value itself.
 
 ## Ownership
 
@@ -172,7 +223,15 @@ Inside a package, a module is named by a relative specifier with its `.ts` exten
 The package entry `src/index.ts` publishes each name explicitly. Under `named-file`:
 
 ```ts
-export type { AddInvoiceLineError, IssueInvoiceError, OpenInvoiceError } from "./invoice.ts";
+export type {
+  AddInvoiceLineError,
+  AddInvoiceLineOutcome,
+  InvoiceIssued,
+  InvoiceLineAdded,
+  IssueInvoiceError,
+  IssueInvoiceOutcome,
+  OpenInvoiceError,
+} from "./invoice.ts";
 export { Invoice } from "./invoice.ts";
 export { InvoiceLine } from "./invoice/line.ts";
 ```
@@ -180,7 +239,15 @@ export { InvoiceLine } from "./invoice/line.ts";
 Under `index-file`:
 
 ```ts
-export type { AddInvoiceLineError, IssueInvoiceError, OpenInvoiceError } from "./invoice/index.ts";
+export type {
+  AddInvoiceLineError,
+  AddInvoiceLineOutcome,
+  InvoiceIssued,
+  InvoiceLineAdded,
+  IssueInvoiceError,
+  IssueInvoiceOutcome,
+  OpenInvoiceError,
+} from "./invoice/index.ts";
 export { Invoice } from "./invoice/index.ts";
 export { InvoiceLine } from "./invoice/line.ts";
 ```
@@ -203,10 +270,10 @@ export interface InvoiceRepository {
 }
 ```
 
-`execute` takes an ID and never an aggregate. The use case holds the port in a `#` field, states one named type on every receiver, asks the aggregate to run the command, and stores the instance the command returns.
+`execute` takes an ID and never an aggregate. The use case holds the port in a `#` field, states one named type on every receiver, asks the aggregate to run the command, stores the instance the command returned, and returns the event for the caller to publish after persistence.
 
 ```ts
-import type { Invoice, IssueInvoiceError } from "@acme/billing-domain";
+import type { Invoice, InvoiceIssued, IssueInvoiceError, IssueInvoiceOutcome } from "@acme/billing-domain";
 import type { Result } from "@acme/language-extensions";
 import type { InvoiceNotFound, InvoiceRepository } from "./invoice-repository.ts";
 
@@ -219,14 +286,15 @@ export class IssueInvoice {
     this.#invoices = invoices;
   }
 
-  execute(invoiceId: string): Result<void, IssueInvoiceFailure> {
+  execute(invoiceId: string): Result<InvoiceIssued, IssueInvoiceFailure> {
     const found: Result<Invoice, InvoiceNotFound> = this.#invoices.findById(invoiceId);
     if (!found.ok) return found;
     const invoice: Invoice = found.value;
-    const issued: Result<Invoice, IssueInvoiceError> = invoice.issue();
+    const issued: Result<IssueInvoiceOutcome, IssueInvoiceError> = invoice.issue();
     if (!issued.ok) return issued;
-    this.#invoices.store(invoiceId, issued.value);
-    return { ok: true, value: undefined };
+    const outcome: IssueInvoiceOutcome = issued.value;
+    this.#invoices.store(invoiceId, outcome.invoice);
+    return { ok: true, value: outcome.event };
   }
 }
 ```
@@ -242,6 +310,7 @@ export type InvoiceRecord = {
   readonly customer: string;
   readonly amounts: readonly number[];
   readonly issued: boolean;
+  readonly addLineRequests: readonly string[];
 };
 
 export class InMemoryInvoiceRepository implements InvoiceRepository {
@@ -259,7 +328,7 @@ export class InMemoryInvoiceRepository implements InvoiceRepository {
     const record: InvoiceRecord | undefined = this.#records.get(invoiceId);
     if (record === undefined) return { ok: false, error: "invoice-not-found" };
     const lines: readonly InvoiceLine[] = record.amounts.map((amount: number) => InvoiceLine.of(amount));
-    return { ok: true, value: Invoice.restore(record.customer, lines, record.issued) };
+    return { ok: true, value: Invoice.restore(invoiceId, record.customer, lines, record.issued, record.addLineRequests) };
   }
 
   store(invoiceId: string, invoice: Invoice): void {

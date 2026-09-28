@@ -15,3 +15,6 @@ npm-debug.log*
 .tmp/
 
 # TAKT project state is governed by .takt/.gitignore (allowlist); nothing else to add here.
+
+# ddd-lint: Rust extractor build output
+tools/ddd-lint/rust-extractor/target/
