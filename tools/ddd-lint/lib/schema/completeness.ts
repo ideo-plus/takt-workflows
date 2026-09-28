@@ -21,6 +21,30 @@ export function checkCompleteness(model: DomainModel, file = "docs/ddd/domain-mo
           message: `aggregate ${aggregate.element_id} has no invariant`,
         });
       }
+      // (p) a domain-primitive declares its value rule, or that it has none
+      for (const element of aggregate.elements.filter((entry) => entry.kind === "domain-primitive")) {
+        const invariant =
+          element.invariants.length > 0 || aggregate.invariants.some((entry) => entry.element === element.element_id);
+        const factory = aggregate.factory_rules.some((entry) => entry.target_element === element.element_id);
+        const where = `domain-primitive ${element.element_id}`;
+        if (element.unconstrained !== undefined && (invariant || factory)) {
+          findings.push({
+            rule_id: "completeness.primitive-rule",
+            file,
+            message: `${where} declares unconstrained but also a value rule; keep one`,
+          });
+        } else if (element.unconstrained === undefined && !(invariant && factory)) {
+          findings.push({
+            rule_id: "completeness.primitive-rule",
+            file,
+            message: invariant
+              ? `${where} has an invariant but no factory rule that builds it and returns its errors`
+              : factory
+                ? `${where} has a factory rule but no invariant stating its value rule`
+                : `${where} declares no value rule (an invariant on it and a factory rule that builds it) and no "unconstrained" rationale`,
+          });
+        }
+      }
       for (const command of aggregate.commands) {
         // (ii) state_effect agrees with transitions
         if (command.state_effect === "transitions" && command.transitions.length === 0) {

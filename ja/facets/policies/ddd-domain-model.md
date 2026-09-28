@@ -12,6 +12,7 @@
 | コマンドがイベントを宣言していない、2 つ以上宣言している（`events: [...]`）、またはその `event` を別のコマンドが生む | REJECT。コマンドが生むイベントはちょうど 1 つ（`event: <イベント ID>`） |
 | コマンドやファクトリ規則にドメインエラーがない、または別の操作が所有するエラーを指している | REJECT |
 | `effect: accumulation` のコマンドに `command-id-memory` の冪等性戦略がない | REJECT |
+| Domain Primitive が値の規則（`element` でその Primitive を指す不変条件と、それを `target_element` に取るファクトリ規則）も、規則がないことの宣言（`unconstrained` と理由）も持たない、または両方を持つ | REJECT。どちらか一方を宣言する |
 | 要素の属性が、他の集約の要素を ID ではなく型として持っている | REJECT。他の集約は ID で参照する |
 | 要素 ID を改名した、廃止後に再利用した、または `<kind>.<segments>` の形式に従っていない | REJECT。改名は `name` だけを変える |
 | 分割・統合・廃止が `lineage` に記録されていない | REJECT |

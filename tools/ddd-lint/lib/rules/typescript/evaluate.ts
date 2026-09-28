@@ -20,7 +20,7 @@ import type { FindingInput } from "../../shared/findings.ts";
 import { dedupe } from "../evaluate.ts";
 import { assembleTypeScriptInspection } from "./context.ts";
 import { buildEdges, ruleG, ruleK } from "./edges.ts";
-import { ruleImmutable, ruleOperation, ruleC, ruleD, ruleDomainPackaging } from "./evaluators.ts";
+import { ruleCollection, ruleImmutable, ruleOperation, ruleC, ruleD, ruleDomainPackaging } from "./evaluators.ts";
 import { factsOf } from "./file-facts.ts";
 import { ruleL, ruleM, ruleN } from "./interface-adapter.ts";
 import { ruleA } from "./state-hiding.ts";
@@ -87,6 +87,7 @@ export function evaluateTypeScriptDomain(run: ProjectContext, api: CheckApi): Ch
       ...ruleA(target.file, factsOf(inspection, target.file), inspection.undecided),
       ...ruleImmutable(inspection, target),
       ...ruleOperation(inspection, target),
+      ...ruleCollection(inspection, target),
       ...ruleC(inspection, target),
       ...ruleD(inspection, target),
     ],

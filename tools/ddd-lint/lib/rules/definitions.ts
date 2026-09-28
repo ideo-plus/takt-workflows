@@ -37,7 +37,7 @@ export const RULES: readonly RuleDefinition[] = [
   {
     rule_id: "b",
     name: "undeclared-mutation",
-    statement: "mutating method is not declared as a Command",
+    statement: "a mutating method of an aggregate root is not declared as a Command",
     target_layers: ["domain"],
     requires_model: true,
     facts: ["impls", "domain-symbols", "command-index"],
@@ -50,6 +50,24 @@ export const RULES: readonly RuleDefinition[] = [
     target_layers: ["domain"],
     requires_model: false,
     facts: ["impls", "aggregate-mapping"],
+    per_file: true,
+  },
+  {
+    rule_id: "in-place",
+    name: "in-place-change",
+    statement: "a domain method returns a changed copy instead of changing the value in place through &mut",
+    target_layers: ["domain"],
+    requires_model: false,
+    facts: ["impls"],
+    per_file: true,
+  },
+  {
+    rule_id: "collection",
+    name: "first-class-collection",
+    statement: "a domain type holds a bare collection beside other state instead of a first-class collection type",
+    target_layers: ["domain"],
+    requires_model: false,
+    facts: ["structs"],
     per_file: true,
   },
   {

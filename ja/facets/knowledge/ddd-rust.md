@@ -5,13 +5,17 @@
 集約は、非公開のフィールド、状態全体を受け取る非公開のコンストラクタ、操作固有のエラー enum を返す検証付きのファクトリ、永続化された状態のための `restore` 関数、`&mut self` を取って状態を変え、生んだ 1 つのイベントを返すコマンドを持つ。失敗したコマンドは何も変えず、イベントも生まない。
 
 ```rust
+pub mod add_line_requests;
 pub mod line;
+pub mod lines;
 
+use self::add_line_requests::AddLineRequests;
 use self::line::InvoiceLine;
+use self::lines::InvoiceLines;
+use crate::customer_id::CustomerId;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OpenInvoiceError {
-    MissingCustomer,
     NegativeTotal,
 }
 
@@ -78,59 +82,54 @@ pub enum AddInvoiceLineOutcome {
     Duplicate,
 }
 
-fn sum_of(lines: &[InvoiceLine]) -> i64 {
-    lines.iter().fold(0, |sum, line| line.add_to(sum))
-}
-
 #[derive(Debug, Clone)]
 pub struct Invoice {
     id: String,
-    customer: String,
-    lines: Vec<InvoiceLine>,
+    customer: CustomerId,
+    lines: InvoiceLines,
     issued: bool,
-    add_line_requests: Vec<String>,
+    add_line_requests: AddLineRequests,
 }
 
 impl Invoice {
-    fn new(id: String, customer: String, lines: Vec<InvoiceLine>, issued: bool, add_line_requests: Vec<String>) -> Self {
+    fn new(id: String, customer: CustomerId, lines: InvoiceLines, issued: bool, add_line_requests: AddLineRequests) -> Self {
         Invoice { id, customer, lines, issued, add_line_requests }
     }
 
-    pub fn open(id: &str, customer: &str, lines: Vec<InvoiceLine>) -> Result<Self, OpenInvoiceError> {
-        if customer.is_empty() {
-            return Err(OpenInvoiceError::MissingCustomer);
-        }
-        if sum_of(&lines) < 0 {
+    pub fn open(id: &str, customer: CustomerId, lines: InvoiceLines) -> Result<Self, OpenInvoiceError> {
+        if lines.total() < 0 {
             return Err(OpenInvoiceError::NegativeTotal);
         }
-        Ok(Self::new(id.to_string(), customer.to_string(), lines, false, Vec::new()))
+        Ok(Self::new(id.to_string(), customer, lines, false, AddLineRequests::of(Vec::new())))
     }
 
     pub fn restore(
         id: &str,
-        customer: &str,
-        lines: Vec<InvoiceLine>,
+        customer: CustomerId,
+        lines: InvoiceLines,
         issued: bool,
-        add_line_requests: Vec<String>,
+        add_line_requests: AddLineRequests,
     ) -> Result<Self, CorruptInvoiceState> {
-        if customer.is_empty() || (issued && lines.is_empty()) || sum_of(&lines) < 0 {
+        if (issued && lines.is_empty()) || lines.total() < 0 {
             return Err(CorruptInvoiceState);
         }
-        Ok(Self::new(id.to_string(), customer.to_string(), lines, issued, add_line_requests))
+        Ok(Self::new(id.to_string(), customer, lines, issued, add_line_requests))
     }
 
     pub fn add_line(&mut self, request_id: &str, line: InvoiceLine) -> Result<AddInvoiceLineOutcome, AddInvoiceLineError> {
-        if self.add_line_requests.iter().any(|seen| seen == request_id) {
+        if self.add_line_requests.contains(request_id) {
             return Ok(AddInvoiceLineOutcome::Duplicate);
         }
         if self.issued {
             return Err(AddInvoiceLineError::AlreadyIssued);
         }
-        if line.add_to(sum_of(&self.lines)) < 0 {
+        let mut total = self.lines.total();
+        line.add_to(&mut total);
+        if total < 0 {
             return Err(AddInvoiceLineError::NegativeTotal);
         }
-        self.lines.push(line.clone());
-        self.add_line_requests.push(request_id.to_string());
+        self.lines.add(line.clone());
+        self.add_line_requests.add(request_id);
         Ok(AddInvoiceLineOutcome::Applied(InvoiceLineAdded::new(&self.id, request_id, line)))
     }
 
@@ -145,43 +144,116 @@ impl Invoice {
         Ok(InvoiceIssued::new(&self.id))
     }
 
-    pub fn is_billed_to(&self, customer: &str) -> bool {
-        self.customer == customer
+    pub fn is_billed_to(&self, customer: &CustomerId) -> bool {
+        &self.customer == customer
     }
 
     pub fn total(&self) -> i64 {
-        sum_of(&self.lines)
+        self.lines.total()
     }
 
-    pub fn lines(&self) -> Vec<InvoiceLine> {
+    pub fn lines(&self) -> InvoiceLines {
         self.lines.clone()
     }
 }
 ```
 
-`restore` は、壊れた状態を専用の型で知らせる。業務上の失敗ではないからである。`add_line` は反映した要求 ID を記憶し、再送された要求をほかのどの判定より先に認識する。そのときは `AddInvoiceLineOutcome::Duplicate` を返し、何も変えず、イベントも生まないので、イベントが二重に公開されない。イベントもドメイン型であり、フィールドは非公開、集約のモジュールの中で自分の `new` によって組み立て、公開する側には読み取り専用のアクセサを提供する。`total` は明細の金額を読み出さず、各明細に加算を頼む。例は短くするために ID と顧客を `&str` / `String` のままにしている。実際のコードでは Domain Primitive で包む。
+`restore` は、壊れた状態を専用の型で知らせる。業務上の失敗ではないからである。`add_line` は反映した要求 ID を記憶し、再送された要求をほかのどの判定より先に認識する。そのときは `AddInvoiceLineOutcome::Duplicate` を返し、何も変えず、イベントも生まないので、イベントが二重に公開されない。何かを変える前に、変えた後の合計を確かめる。イベントもドメイン型であり、フィールドは非公開、集約のモジュールの中で自分の `new` によって組み立て、公開する側には読み取り専用のアクセサを提供する。顧客は Domain Primitive `CustomerId`、明細と反映済みの要求 ID はファーストクラスコレクション `InvoiceLines`、`AddLineRequests` である。請求書 ID と金額は例を短く保つために `&str` / `i64` のままにしている。実際のコードでは同じ作り方で包む。
 
-## 値オブジェクトと Domain Primitive
+## その場での変更
 
-値オブジェクトは不変で、組み立て時に検証する。等価はその値で決まる。
+ドメインの型の種類によらず、変わるものを `&mut` で受け取り、その場で変える。変わる値オブジェクト、Domain Primitive、コレクションは `&mut self` を取り、`()` を返す。変更が失敗し得るなら `Result<(), E>` を返す。`&self` や `self` を取って新しいインスタンスを返すことはせず、`Add` のような新しい値を返す演算子も実装しない。所有権があるので安全である。`&` で共有された値は変えられず、変える前の値が要る呼び出し側は先に `clone` する。集約の中の値の `&mut self` のメソッドはコマンドではなく、集約のコマンドがそれを呼ぶ。
 
 ```rust
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct CustomerId(String);
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InvoiceLine {
+    amount: i64,
+}
 
-impl CustomerId {
-    pub fn parse(value: &str) -> Result<Self, InvalidCustomerId> {
-        if value.is_empty() { return Err(InvalidCustomerId); }
-        Ok(Self(value.to_owned()))
+impl InvoiceLine {
+    pub fn of(amount: i64) -> Self {
+        InvoiceLine { amount }
+    }
+
+    pub fn add_to(&self, total: &mut i64) {
+        *total += self.amount;
     }
 }
 ```
 
+`add_to` で変わるのは明細ではなく合計なので、合計を `&mut` の引数にし、明細は `&self` にする。明細から値を読み出さず、明細が自分を加える。
+
+## Domain Primitive
+
+Domain Primitive は値を 1 つ包み、値の規則を持つ。モデルは規則を、その Primitive を指す不変条件と、それを組み立てるファクトリ規則として宣言する。ファクトリは規則を確かめ、そのファクトリ固有のエラー enum を返すので、存在する `CustomerId` は常に正しい。等価は値で決まる。
+
+```rust
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ParseCustomerIdError {
+    InvalidFormat,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CustomerId(String);
+
+impl CustomerId {
+    pub fn parse(value: &str) -> Result<Self, ParseCustomerIdError> {
+        let digits = value.strip_prefix('C').ok_or(ParseCustomerIdError::InvalidFormat)?;
+        if digits.len() != 6 || !digits.bytes().all(|byte| byte.is_ascii_digit()) {
+            return Err(ParseCustomerIdError::InvalidFormat);
+        }
+        Ok(CustomerId(value.to_string()))
+    }
+}
+```
+
+規則のない Primitive は、モデルで `unconstrained` と理由を宣言し、何も確かめない `of` のような関連関数で組み立てる。
+
+## ファーストクラスコレクション
+
+ほかの状態と並べてコレクションを持つドメインの型は、それをファーストクラスコレクションで包む。状態がそのコレクションだけの型で、コレクションへの操作と判断を持つ。`InvoiceLines` はその場で明細を加え、合計を出す。集約は `Vec` に触れない。
+
+```rust
+use super::line::InvoiceLine;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InvoiceLines(Vec<InvoiceLine>);
+
+impl InvoiceLines {
+    pub fn of(lines: Vec<InvoiceLine>) -> Self {
+        InvoiceLines(lines)
+    }
+
+    pub fn add(&mut self, line: InvoiceLine) {
+        self.0.push(line);
+    }
+
+    pub fn total(&self) -> i64 {
+        let mut total = 0;
+        for line in &self.0 {
+            line.add_to(&mut total);
+        }
+        total
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    pub fn to_vec(&self) -> Vec<InvoiceLine> {
+        self.0.clone()
+    }
+}
+```
+
+`AddLineRequests` も同じ作り方で反映済みの要求 ID を包む。`contains` は要求を反映したかを答え、`add` はその場で要求を記憶し、モデルの `retention_count` を超えた古いものを忘れる。
+
 | 条件 | 意味・選択肢 |
 |------|-------------|
-| 値に業務上の規則（形式、範囲）がある | 検証するコンストラクタを持つ Domain Primitive |
+| 値に業務上の規則（形式、範囲）がある | ファクトリが規則を確かめて Result を返す Domain Primitive |
+| 値に業務上の規則がない | `unconstrained` と理由を宣言した Domain Primitive |
 | 複数の値が規則とともに常に一緒に動く | 値オブジェクト |
-| コレクションに規則（重複なし、合計の上限）がある | 専用のコレクション型 |
+| 型がほかの状態と並べてコレクションを持つ | ファーストクラスコレクションの型 |
 
 ## イベントソーシング
 
@@ -249,13 +321,16 @@ impl<'a> IssueInvoice<'a> {
 }
 ```
 
-アダプタはポートを実装し、名前に保存媒体の接頭辞を付けてよい。集約は `restore`、各明細は `of` で組み立て直す。
+アダプタはポートを実装し、名前に保存媒体の接頭辞を付けてよい。集約は `restore`、顧客は `parse`、明細と要求 ID のコレクションは `of` で組み立て直す。
 
 ```rust
 use std::cell::RefCell;
 use std::collections::HashMap;
 
+use billing_domain::customer_id::CustomerId;
+use billing_domain::invoice::add_line_requests::AddLineRequests;
 use billing_domain::invoice::line::InvoiceLine;
+use billing_domain::invoice::lines::InvoiceLines;
 use billing_domain::invoice::Invoice;
 use billing_use_case::invoice_repository::{InvoiceNotFound, InvoiceRepository};
 
@@ -284,9 +359,11 @@ impl InvoiceRepository for InMemoryInvoiceRepository {
             return Ok(stored.clone());
         }
         let record = self.records.get(invoice_id).ok_or(InvoiceNotFound)?;
-        let lines: Vec<InvoiceLine> = record.amounts.iter().map(|amount| InvoiceLine::of(*amount)).collect();
-        Invoice::restore(invoice_id, &record.customer, lines, record.issued, record.add_line_requests.clone())
-            .map_err(|_| InvoiceNotFound)
+        let customer = CustomerId::parse(&record.customer).expect("corrupt invoice record: customer ID");
+        let lines = InvoiceLines::of(record.amounts.iter().map(|amount| InvoiceLine::of(*amount)).collect());
+        let requests = AddLineRequests::of(record.add_line_requests.clone());
+        let invoice = Invoice::restore(invoice_id, customer, lines, record.issued, requests).expect("corrupt invoice record");
+        Ok(invoice)
     }
 
     fn store(&self, invoice_id: &str, invoice: Invoice) {

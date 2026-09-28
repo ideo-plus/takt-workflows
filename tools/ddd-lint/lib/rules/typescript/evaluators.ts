@@ -29,6 +29,7 @@ import {
   type TypeScriptFileFacts,
 } from "../../typescript/domain-facts/index.ts";
 import { POST_INIT } from "../lists.ts";
+import { operationOwner } from "../operation-owner.ts";
 import { aggregateMappings, locatedAt } from "./aggregate-binding.ts";
 import { factsOf, receiverType } from "./file-facts.ts";
 import { modulePathOf, PACKAGE_MANIFEST, packageSources, posixRelative, type TsPackage } from "./packages.ts";
@@ -106,13 +107,22 @@ export function ruleOperation(inspection: TsInspection, target: TsTarget): Findi
   const findings: FindingInput[] = [];
   const facts = factsOf(inspection, target.file);
   for (const type of inspection.symbols.types.filter((entry) => entry.file === target.file)) {
-    const mapping = aggregateMappings(inspection).find((entry) => entry.type === type.name && locatedAt(type)(entry));
-    if (mapping === undefined) continue;
+    // The operations whose method this type owns: the aggregate's own, where the mapping places the
+    // aggregate at this type, and the factories of the other elements this type is.
+    const owned = aggregateMappings(inspection)
+      .filter((entry) => entry.package === type.pkg.name)
+      .flatMap((entry) =>
+        entry.operations.filter((operation) =>
+          operationOwner(inspection.model, operation.operation_ref, entry.type) === type.name &&
+          (entry.type !== type.name || locatedAt(type)(entry)),
+        ),
+      );
+    if (owned.length === 0) continue;
     const companionObject =
       type.kind === "companion"
         ? facts.declarations.find((entry) => entry.kind === "variable" && entry.name === type.name)
         : undefined;
-    for (const operation of mapping.operations) {
+    for (const operation of owned) {
       const factory = operation.operation_ref.startsWith("factory.");
       const members =
         type.kind === "class" ? type.members.filter((member) => member.static === factory) : factory ? (companionObject?.members ?? []) : type.members;
@@ -139,6 +149,45 @@ export function ruleOperation(inspection: TsInspection, target: TsTarget): Findi
         });
       }
     }
+  }
+  return findings;
+}
+
+// --- (collection) a domain type holds no bare collection beside other state ------------------------
+
+const BARE_COLLECTION_TS = /^(?:readonly\s+)?[^\s]+\[\]$|^(?:Readonly)?(?:Array|Set|Map)\s*<|^ReadonlyArray\s*</;
+
+/**
+ * A domain type whose state holds a collection (an array, a `Set`, a `Map`) beside other state
+ * wraps it in a first-class collection type. A type whose whole state is one collection is the
+ * first-class collection itself. A class is judged by its `#` fields; a companion by the parameters
+ * of its full-constructor factory (the one that returns the type itself).
+ */
+export function ruleCollection(inspection: TsInspection, target: TsTarget): FindingInput[] {
+  const findings: FindingInput[] = [];
+  const facts = factsOf(inspection, target.file);
+  for (const type of inspection.symbols.types.filter((entry) => entry.file === target.file)) {
+    const state =
+      type.kind === "class"
+        ? type.members
+            .filter((member) => member.kind === "property" && !member.static && member.name.startsWith("#"))
+            .map((member) => ({ name: member.name, type: member.type_text, line: member.span.start_line }))
+        : (facts.declarations
+            .find((entry) => entry.kind === "variable" && entry.name === type.name)
+            ?.members.filter((member) => member.kind === "method" && member.return_type_text?.trim() === type.name)
+            .sort((a, b) => (b.params?.length ?? 0) - (a.params?.length ?? 0))[0]
+            ?.params?.map((param) => ({ name: param.name, type: param.type_text, line: type.home.start_line })) ?? []);
+    if (state.length < 2) continue;
+    const bare = state.filter((entry) => entry.type !== undefined && BARE_COLLECTION_TS.test(entry.type.trim()));
+    // A companion's parameters share one line, so its bare collections are reported together.
+    const groups = type.kind === "class" ? bare.map((entry) => [entry]) : bare.length > 0 ? [bare] : [];
+    for (const group of groups)
+      findings.push({
+        rule_id: "collection",
+        file: target.file,
+        message: `${type.name} holds ${group.map((entry) => `${entry.name} (${entry.type?.trim()})`).join(", ")} as a bare collection; wrap it in a first-class collection type`,
+        line: group[0].line,
+      });
   }
   return findings;
 }
