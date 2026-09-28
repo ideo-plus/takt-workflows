@@ -25,12 +25,11 @@ Judges the code of the domain layer (aggregates, Entities, value objects, Domain
 
 | Criterion | Judgment |
 |-----------|----------|
-| A method that changes state is neither the method of a declared command nor a declared replay method | REJECT |
+| A method that changes the state of an aggregate root is neither the method of a declared command nor a declared replay method | REJECT. A method that changes a value, Entity, or collection inside the aggregate is a part the commands call, not a command |
 | A setter or a generic update method exists | REJECT |
 | A method is treated as replay only because of its name (`apply`, `on_event`, and so on) | REJECT. Replay is only a method declared in `replay_methods` |
 | Replay makes a new business decision or rejects a stored event as a business failure | REJECT. Replay only applies facts; a corrupt history aborts restoration |
-| Whether a command changes an aggregate or Entity in place or builds a new instance | Decided by the language policy |
-| A value object or Domain Primitive changes after construction | REJECT |
+| Whether a domain type (aggregate, Entity, value object, Domain Primitive, collection) changes in place or becomes a new instance | Decided by the language policy |
 | Interior mutability or a shared reference hides a business state change | REJECT |
 | A command that changes state does not return the one event it produced, or returns a list of events | REJECT. Return the one declared `event` |
 | State changes before a business failure is detected, or a failed command returns an event | REJECT. Check first, then change; a failed command changes nothing |
@@ -69,7 +68,8 @@ Business failures are part of the operation's contract. Generic guidance to thro
 |-----------|----------|
 | A primitive with business meaning (an amount, an identifier, a quantity) is passed as a bare primitive across domain boundaries | REJECT. Wrap it in a Domain Primitive |
 | A value object has identity-based equality, or an Entity has value-based equality | REJECT |
-| A collection with invariants is a bare list inside several owners | REJECT. Give it a dedicated type |
+| A factory that builds a Domain Primitive from an outside value accepts it without checking the declared value rule | REJECT. Return a value that breaks the rule as that factory's error in a Result |
+| A domain type holds a collection (an array, `Set`, `Map`, `Vec`, `HashSet`, `HashMap`, and so on) bare beside other state | REJECT. Wrap it in a first-class collection type and put the operations and decisions on the collection in that type. A type whose whole state is the collection is a first-class collection |
 | A domain service holds state, persists data, or decides something an aggregate can own | REJECT |
 
 ## Ownership

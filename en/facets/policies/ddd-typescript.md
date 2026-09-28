@@ -9,7 +9,7 @@ Defines how the rules of the other DDD policies are judged in TypeScript code, a
 | Do not expose state (domain layer) | State is held in `#` fields or a factory closure. Any other property (including `private`, `protected`, `readonly`, and parameter properties) is public |
 | Do not build outside the type (domain layer) | With the `class` representation, `new` appears only inside the type's own class body. With the `companion` representation, instances are written only inside the full-constructor factory, never with a spread, `as`, or `satisfies` |
 | Go through the full constructor (domain layer) | With `class`, the `private` constructor takes the whole state. With `companion`, the factory that takes the whole state (`restore`) is the full constructor, and the other factories and the commands go through it |
-| Whether a command changes the aggregate in place (domain layer) | It does not; follow "Immutability" below |
+| Whether a domain type changes in place or becomes a new instance (domain layer) | A new instance; follow "Immutability" below |
 | Return business failures as a Result (domain layer) | An expected failure is returned as `{ ok: false, error: "<case>" }`. An operation's error type is the exported union of exactly its case strings |
 | Agreement with the declarations (domain layer) | Mapped factories and commands state `Result<success_type, error_type>` as their return type; a factory's success type is the aggregate. A factory bound to no operation (`restore`, a value object's `of`) may return the value itself |
 | Duplicate success (domain layer idempotency) | The success type has a `kind: "applied"` case (the new instance and the event) and a `kind: "duplicate"` case (the unchanged instance only) |

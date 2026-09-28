@@ -62,7 +62,7 @@ const ALLOWED: Record<string, readonly string[]> = {
     "factory_rules",
     "process_managers",
   ],
-  element: ["element_id", "kind", "name", "aggregate", "attributes", "invariants"],
+  element: ["element_id", "kind", "name", "aggregate", "attributes", "invariants", "unconstrained"],
   attribute: ["name", "type", "required", "collection"],
   invariant: ["element_id", "name", "aggregate", "element", "statement"],
   command: [
@@ -408,6 +408,10 @@ function readElement(report: Report, node: Record<string, unknown>, where: strin
   if (kind === "domain-primitive" && attributes.length !== 1) {
     report.add("schema.primitive-shape", `${where}: domain-primitive must wrap exactly one attribute`);
   }
+  const unconstrained = report.optionalString(node, "unconstrained", where);
+  if (unconstrained !== undefined && kind !== "domain-primitive") {
+    report.add("schema.structure", `${where}: only a domain-primitive declares "unconstrained"`);
+  }
   return {
     element_id,
     kind: kind as DomainElementKind,
@@ -415,6 +419,7 @@ function readElement(report: Report, node: Record<string, unknown>, where: strin
     aggregate,
     attributes: attributes as ElementAttribute[],
     invariants: readStringArray(report, node, "invariants", where, false),
+    ...(unconstrained === undefined ? {} : { unconstrained }),
   };
 }
 
@@ -894,13 +899,15 @@ function validateAggregate(report: Report, index: ElementIndex, bc: BoundedConte
   }
 
   for (const factory of aggregate.factory_rules) {
-    requireRef(
-      report,
-      index,
-      `${where}.factory_rules.${factory.element_id}.target_element`,
-      factory.target_element,
-      "entity",
-    );
+    // A factory builds an element of its own aggregate: the root, another Entity, a value object, or
+    // a Domain Primitive whose value rule it checks.
+    const targetWhere = `${where}.factory_rules.${factory.element_id}.target_element`;
+    if (requireRef(report, index, targetWhere, factory.target_element)) {
+      const target = aggregate.elements.find((element) => element.element_id === factory.target_element);
+      if (target === undefined) {
+        report.add("schema.ref-kind", `${targetWhere}: "${factory.target_element}" is not an element of ${aggregate.element_id}`);
+      }
+    }
     const parsed = parseElementId(factory.element_id);
     if (parsed.ok && aggregateSegment !== undefined && parsed.id.segments[0] !== aggregateSegment) {
       report.add(

@@ -41,7 +41,9 @@ bounded_contexts:
         elements:
           - { element_id: entity.invoice, kind: entity, name: Invoice, aggregate: aggregate.invoice }
           - { element_id: vo.invoice-line, kind: value-object, name: InvoiceLine, aggregate: aggregate.invoice }
+          - { element_id: primitive.customer-id, kind: domain-primitive, name: CustomerId, aggregate: aggregate.invoice, attributes: [{ name: value, type: string, required: true }] }
         invariants:
+          - { element_id: invariant.invoice.customer-id-format, name: CustomerIdFormat, aggregate: aggregate.invoice, element: primitive.customer-id, statement: a customer ID is C followed by six digits }
           - { element_id: invariant.invoice.total-not-negative, name: TotalNotNegative, aggregate: aggregate.invoice, statement: the total of the lines is never negative }
           - { element_id: invariant.invoice.issued-has-lines, name: IssuedHasLines, aggregate: aggregate.invoice, statement: an issued invoice has at least one line }
         commands:
@@ -77,12 +79,19 @@ bounded_contexts:
             target_element: entity.invoice
             preconditions: [invariant.invoice.total-not-negative]
             domain_errors:
-              - { element_id: error.invoice.open.missing-customer, name: MissingCustomer, operation: factory.invoice.open, condition: no customer is given }
               - { element_id: error.invoice.open.negative-total, name: NegativeTotal, operation: factory.invoice.open, condition: the lines add up to a negative total }
+          - element_id: factory.invoice.parse-customer-id
+            name: ParseCustomerId
+            target_element: primitive.customer-id
+            preconditions: [invariant.invoice.customer-id-format]
+            domain_errors:
+              - { element_id: error.invoice.parse-customer-id.invalid-format, name: InvalidFormat, operation: factory.invoice.parse-customer-id, condition: the value is not C followed by six digits }
 lineage: []
 ```
 
 Element IDs are `<kind>.<segments>` in lower kebab case. `bc`, `aggregate`, `entity`, `vo`, `primitive`, and `pm` take one segment; `invariant`, `command`, `event`, `transition`, and `factory` take the aggregate and a name; `error` takes the aggregate, the operation, and a name. A `lineage` entry (`lineage-0001`, relation `renamed`, `split`, `merged`, or `deprecated`) records how an ID changed.
+
+A Domain Primitive (`kind: domain-primitive`) wraps exactly one attribute and declares its value rule. When it has one, write both an invariant whose `element` is the primitive and a factory rule whose `target_element` is the primitive and which returns a broken rule as an error (`primitive.customer-id`, `invariant.invoice.customer-id-format`, and `factory.invoice.parse-customer-id` above). When it has none, write `unconstrained` with the rationale on the element (`unconstrained: a discount line makes any integer an amount`). Never write neither, and never both. An attribute with `collection: true` is held in code as a first-class collection type.
 
 ### Aggregate mapping
 
@@ -98,8 +107,11 @@ aggregate_mappings:
       - operation_ref: factory.invoice.open
         code: { method: open, error_type: OpenInvoiceError }
         errors:
-          - { error_ref: error.invoice.open.missing-customer, code: { case: missing-customer } }
           - { error_ref: error.invoice.open.negative-total, code: { case: negative-total } }
+      - operation_ref: factory.invoice.parse-customer-id
+        code: { method: parse, error_type: ParseCustomerIdError }
+        errors:
+          - { error_ref: error.invoice.parse-customer-id.invalid-format, code: { case: invalid-format } }
       - operation_ref: command.invoice.add-line
         code: { method: addLine, success_type: AddInvoiceLineOutcome, error_type: AddInvoiceLineError }
         errors:
@@ -114,6 +126,9 @@ domain_packages:
   - { term: Billing, model_refs: [bc.billing], rationale: owns the billing business, code: { language: typescript, package: "@acme/billing-domain", module: [] } }
   - { term: Invoice, model_refs: [aggregate.invoice], rationale: opens and issues invoices, code: { language: typescript, package: "@acme/billing-domain", module: [invoice] } }
   - { term: Invoice line, model_refs: [vo.invoice-line], rationale: the amounts an invoice adds up, code: { language: typescript, package: "@acme/billing-domain", module: [invoice, line] } }
+  - { term: Invoice lines, model_refs: [vo.invoice-line], rationale: the lines of one invoice and their total, code: { language: typescript, package: "@acme/billing-domain", module: [invoice, lines] } }
+  - { term: Add-line requests, model_refs: [command.invoice.add-line], rationale: the add-line requests an invoice has applied, code: { language: typescript, package: "@acme/billing-domain", module: [invoice, add-line-requests] } }
+  - { term: Customer ID, model_refs: [primitive.customer-id], rationale: identifies the customer an invoice bills, code: { language: typescript, package: "@acme/billing-domain", module: [customer-id] } }
 ```
 
 `model_ref` is relative to `docs/ddd`. `success_type` names what a command returns on success: in TypeScript the outcome type holding the new instance and the event, in Rust the event, or an outcome enum when the command recognizes resent requests. A factory rule's success is the aggregate type. `module` lists the segments below the package root, so the root is `[]`. Every level from the root down is declared. In TypeScript the case strings are the literal union members (`already-issued`); in Rust they are enum variants (`AlreadyIssued`).

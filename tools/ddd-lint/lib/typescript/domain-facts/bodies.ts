@@ -78,8 +78,8 @@ function isAssignment(api: CompilerApi, kind: ts.SyntaxKind): boolean {
 }
 
 /**
- * The methods an array, a `Map` or a `Set` changes itself through. Called on closure state, they
- * change that state as an assignment to it would.
+ * The methods an array, a `Map` or a `Set` changes itself through. Called on closure state for their
+ * effect, they change that state as an assignment to it would.
  */
 export const COLLECTION_MUTATORS: ReadonlySet<string> = new Set([
   "push",
@@ -96,6 +96,23 @@ export const COLLECTION_MUTATORS: ReadonlySet<string> = new Set([
   "delete",
   "clear",
 ]);
+
+/**
+ * Whether the value of `call` is thrown away: a statement of its own, a `void` operand, or the whole
+ * body of an arrow function. A built-in collection is changed this way (`state.seen.add(id);`); a
+ * call whose value is kept (`const next = state.lines.add(line)`) is a first-class collection
+ * handing back a new instance.
+ */
+function isCalledForEffect(api: CompilerApi, call: ts.CallExpression): boolean {
+  let node: ts.Node = call;
+  while (api.isParenthesizedExpression(node.parent)) node = node.parent;
+  const parent = node.parent;
+  return (
+    api.isExpressionStatement(parent) ||
+    api.isVoidExpression(parent) ||
+    (api.isArrowFunction(parent) && parent.body === node)
+  );
+}
 
 /** The identifier an access chain `a.b[c].d` starts from, or undefined when it starts elsewhere. */
 function rootIdentifier(api: CompilerApi, expression: ts.Expression): ts.Identifier | undefined {
@@ -144,7 +161,8 @@ export function bodyEffects(api: CompilerApi, fn: ts.FunctionLikeDeclaration): B
     else if (
       api.isCallExpression(node) &&
       api.isPropertyAccessExpression(node.expression) &&
-      COLLECTION_MUTATORS.has(node.expression.name.text)
+      COLLECTION_MUTATORS.has(node.expression.name.text) &&
+      isCalledForEffect(api, node)
     ) {
       const root = rootIdentifier(api, node.expression.expression);
       if (root && isClosureState(api, fn, root))

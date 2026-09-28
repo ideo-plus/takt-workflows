@@ -41,7 +41,9 @@ bounded_contexts:
         elements:
           - { element_id: entity.invoice, kind: entity, name: Invoice, aggregate: aggregate.invoice }
           - { element_id: vo.invoice-line, kind: value-object, name: InvoiceLine, aggregate: aggregate.invoice }
+          - { element_id: primitive.customer-id, kind: domain-primitive, name: CustomerId, aggregate: aggregate.invoice, attributes: [{ name: value, type: string, required: true }] }
         invariants:
+          - { element_id: invariant.invoice.customer-id-format, name: CustomerIdFormat, aggregate: aggregate.invoice, element: primitive.customer-id, statement: 顧客 ID は C に続く 6 桁の数字である }
           - { element_id: invariant.invoice.total-not-negative, name: TotalNotNegative, aggregate: aggregate.invoice, statement: 明細の合計は負にならない }
           - { element_id: invariant.invoice.issued-has-lines, name: IssuedHasLines, aggregate: aggregate.invoice, statement: 発行済みの請求書は明細を 1 件以上持つ }
         commands:
@@ -77,12 +79,19 @@ bounded_contexts:
             target_element: entity.invoice
             preconditions: [invariant.invoice.total-not-negative]
             domain_errors:
-              - { element_id: error.invoice.open.missing-customer, name: MissingCustomer, operation: factory.invoice.open, condition: 顧客が指定されていない }
               - { element_id: error.invoice.open.negative-total, name: NegativeTotal, operation: factory.invoice.open, condition: 明細の合計が負になる }
+          - element_id: factory.invoice.parse-customer-id
+            name: ParseCustomerId
+            target_element: primitive.customer-id
+            preconditions: [invariant.invoice.customer-id-format]
+            domain_errors:
+              - { element_id: error.invoice.parse-customer-id.invalid-format, name: InvalidFormat, operation: factory.invoice.parse-customer-id, condition: 値が C に続く 6 桁の数字ではない }
 lineage: []
 ```
 
 要素 ID は小文字のケバブケースで `<kind>.<segments>` と書く。`bc`、`aggregate`、`entity`、`vo`、`primitive`、`pm` は区切り 1 つ、`invariant`、`command`、`event`、`transition`、`factory` は集約と名前の 2 つ、`error` は集約、操作、名前の 3 つをとる。`lineage` の項目（`lineage-0001`、関係は `renamed`、`split`、`merged`、`deprecated`）が ID の変化を記録する。
+
+Domain Primitive（`kind: domain-primitive`）は属性を 1 つだけ包み、値の規則を宣言する。規則があれば、`element` でその Primitive を指す不変条件と、それを `target_element` に取って規則違反をエラーとして返すファクトリ規則の両方を書く（上の `primitive.customer-id`、`invariant.invoice.customer-id-format`、`factory.invoice.parse-customer-id`）。規則がなければ、要素に `unconstrained` と理由を書く（`unconstrained: 値引きの明細があるので、どの整数も金額になる`）。どちらも書かないこと、両方を書くことはしない。`collection: true` の属性は、コードではファーストクラスコレクションの型で持つ。
 
 ### 集約写像
 
@@ -98,8 +107,11 @@ aggregate_mappings:
       - operation_ref: factory.invoice.open
         code: { method: open, error_type: OpenInvoiceError }
         errors:
-          - { error_ref: error.invoice.open.missing-customer, code: { case: missing-customer } }
           - { error_ref: error.invoice.open.negative-total, code: { case: negative-total } }
+      - operation_ref: factory.invoice.parse-customer-id
+        code: { method: parse, error_type: ParseCustomerIdError }
+        errors:
+          - { error_ref: error.invoice.parse-customer-id.invalid-format, code: { case: invalid-format } }
       - operation_ref: command.invoice.add-line
         code: { method: addLine, success_type: AddInvoiceLineOutcome, error_type: AddInvoiceLineError }
         errors:
@@ -114,6 +126,9 @@ domain_packages:
   - { term: 請求, model_refs: [bc.billing], rationale: 請求の業務全体を持つ, code: { language: typescript, package: "@acme/billing-domain", module: [] } }
   - { term: 請求書, model_refs: [aggregate.invoice], rationale: 請求書を作成し発行する, code: { language: typescript, package: "@acme/billing-domain", module: [invoice] } }
   - { term: 請求書明細, model_refs: [vo.invoice-line], rationale: 請求書が合計する金額, code: { language: typescript, package: "@acme/billing-domain", module: [invoice, line] } }
+  - { term: 請求書明細の並び, model_refs: [vo.invoice-line], rationale: 1 通の請求書の明細とその合計, code: { language: typescript, package: "@acme/billing-domain", module: [invoice, lines] } }
+  - { term: 明細追加の要求, model_refs: [command.invoice.add-line], rationale: 請求書が反映した明細追加の要求, code: { language: typescript, package: "@acme/billing-domain", module: [invoice, add-line-requests] } }
+  - { term: 顧客 ID, model_refs: [primitive.customer-id], rationale: 請求書の請求先の顧客を識別する, code: { language: typescript, package: "@acme/billing-domain", module: [customer-id] } }
 ```
 
 `model_ref` は `docs/ddd` からの相対パスで書く。`success_type` はコマンドが成功時に返すものの型名である。TypeScript では新しいインスタンスとイベントを持つ成功値の型、Rust ではイベント、再送された要求を認識するコマンドでは成功値の enum になる。ファクトリ規則の成功値は集約の型である。`module` はパッケージのルートより下の区切りを並べたもので、ルートは `[]` になる。ルートから下のすべての階層を宣言する。TypeScript では case の文字列がリテラルの union のメンバー（`already-issued`）になり、Rust では enum のバリアント（`AlreadyIssued`）になる。

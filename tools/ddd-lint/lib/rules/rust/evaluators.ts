@@ -6,6 +6,7 @@
 
 import type { CallFact, ParamFact, RustFileFacts, Span } from "../../rust/domain-facts/index.ts";
 import { finding } from "../../project/context.ts";
+import { operationOwner } from "../operation-owner.ts";
 import type { FindingInput } from "../../shared/findings.ts";
 import { containsMediaWord, toPascal } from "../lists.ts";
 import type { DomainTypeSymbol, InspectionContext, InspectionTarget } from "../types.ts";
@@ -59,10 +60,16 @@ function ruleA(target: InspectionTarget, context: InspectionContext): FindingInp
 }
 
 // --- (b) undeclared mutation ------------------------------------------------
+/**
+ * A `&mut self` method of an aggregate root is a declared command. The values, Entities and
+ * collections inside the aggregate change through their own `&mut self` methods, which the root's
+ * commands call; they are not commands of their own.
+ */
 function ruleB(target: InspectionTarget, context: InspectionContext): FindingInput[] {
   if (!target.file) return [];
   const out: FindingInput[] = [];
   for (const symbol of context.symbols.types) {
+    if (symbol.aggregate_ref === undefined) continue;
     for (const mutator of symbol.mutators) {
       if (mutator.file !== target.file) continue;
       if (mutator.classification === "undeclared") {
@@ -97,15 +104,20 @@ function ruleOperation(target: InspectionTarget, context: InspectionContext): Fi
   const file = target.file;
   const out: FindingInput[] = [];
   for (const type of context.program.types.filter((entry) => entry.file === file && entry.kind !== "trait")) {
-    const mapping = context.rustMapping.view.aggregates.find(
-      (entry) =>
-        entry.type === type.name &&
-        entry.crate.replace(/-/g, "_") === type.crate.replace(/-/g, "_") &&
-        entry.module.join("::") === type.module.join("::"),
-    );
-    if (mapping === undefined) continue;
+    // The operations whose method this type owns: the aggregate's own, where the mapping places the
+    // aggregate at this type, and the factories of the other elements this type is.
+    const owned = context.rustMapping.view.aggregates
+      .filter((entry) => entry.crate.replace(/-/g, "_") === type.crate.replace(/-/g, "_"))
+      .flatMap((entry) =>
+        entry.operations.filter(
+          (operation) =>
+            operationOwner(context.model, operation.operation_ref, entry.type) === type.name &&
+            (entry.type !== type.name || entry.module.join("::") === type.module.join("::")),
+        ),
+      );
+    if (owned.length === 0) continue;
     const line = declarationsOf(context, file).types.find((entry) => entry.name === type.name)?.line;
-    for (const operation of mapping.operations) {
+    for (const operation of owned) {
       const factory = operation.operation_ref.startsWith("factory.");
       const methods = type.methods.filter((entry) => !entry.trait && entry.method.name === operation.method);
       if (methods.length === 0) {
@@ -125,6 +137,108 @@ function ruleOperation(target: InspectionTarget, context: InspectionContext): Fi
             finding("operation", file, `${type.name}::${method.name} (${operation.operation_ref}) ${problems.join(" and ")}`, method.line),
           );
       }
+    }
+  }
+  return out;
+}
+
+// --- (in-place) a domain value changes in place instead of being copied ----------------------------
+
+/** The operator traits whose method hands back a new value; each has an `*Assign` form. */
+const COPYING_OPERATORS = new Set(["Add", "Sub", "Mul", "Div", "Rem"]);
+
+/** The top-level generic arguments of `text` when it is `name<...>`. */
+function genericArguments(text: string, name: string): string[] | undefined {
+  if (!text.startsWith(`${name}<`) || !text.endsWith(">")) return undefined;
+  const inner = text.slice(name.length + 1, -1);
+  const found: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let index = 0; index < inner.length; index++) {
+    const char = inner[index];
+    if (char === "<" || char === "(" || char === "[") depth++;
+    else if (char === ">" || char === ")" || char === "]") depth--;
+    else if (char === "," && depth === 0) {
+      found.push(inner.slice(start, index));
+      start = index + 1;
+    }
+  }
+  found.push(inner.slice(start));
+  return found;
+}
+
+/** What a method hands back on success: `Result<T, E>` and `Option<T>` read as `T`. */
+function producedType(returnTypeText: string): string {
+  let text = withoutSpaces(returnTypeText);
+  for (;;) {
+    const found = genericArguments(text, "Result") ?? genericArguments(text, "Option");
+    if (found === undefined) return text;
+    text = found[0];
+  }
+}
+
+/**
+ * A domain type changes a value through `&mut`: its own state through `&mut self`, a value it adds
+ * itself to through a `&mut` parameter. A method taking `&self` or `self` that hands back a new
+ * instance of its own type, or a changed copy of a value it took by value, is the copy-on-change style
+ * Rust code does not use; so are the operator traits whose method returns a new value.
+ */
+function ruleInPlace(target: InspectionTarget, context: InspectionContext): FindingInput[] {
+  if (!target.file) return [];
+  const file = target.file;
+  const out: FindingInput[] = [];
+  for (const type of context.program.types.filter((entry) => entry.kind !== "trait")) {
+    for (const { method, trait, file: methodFile } of type.methods) {
+      if (methodFile !== file) continue;
+      if (trait !== undefined) {
+        const operator = trait.replace(/<.*$/s, "").split("::").pop()?.trim() ?? "";
+        if (COPYING_OPERATORS.has(operator))
+          out.push(
+            finding("in-place", file, `${type.name} implements ${operator}, which returns a new value; implement ${operator}Assign and change the value in place`, method.line),
+          );
+        continue;
+      }
+      if (method.receiver !== "ref-self" && method.receiver !== "self") continue;
+      if (method.return_type_text === undefined) continue;
+      const produced = producedType(method.return_type_text);
+      const copied = method.params.find((param) => withoutSpaces(param.type_text) === produced);
+      if (produced === "Self" || produced === type.name)
+        out.push(
+          finding("in-place", file, `${type.name}::${method.name} returns a new ${type.name} instead of changing it; take &mut self and change it in place`, method.line),
+        );
+      else if (copied !== undefined)
+        out.push(
+          finding("in-place", file, `${type.name}::${method.name} returns a changed copy of ${copied.name}; take it as &mut ${copied.type_text.trim()} and change it in place`, method.line),
+        );
+    }
+  }
+  return out;
+}
+
+// --- (collection) a domain type holds no bare collection beside other state ------------------------
+
+const BARE_COLLECTION_RS = /^(?:std::collections::)?(?:Vec|VecDeque|HashSet|HashMap|BTreeSet|BTreeMap|BinaryHeap)\s*<|^\[|^Box\s*<\s*\[/;
+
+/**
+ * A domain struct whose state holds a collection beside other fields wraps it in a first-class
+ * collection type. A struct whose one field is a collection is the first-class collection itself.
+ */
+function ruleCollection(target: InspectionTarget, context: InspectionContext): FindingInput[] {
+  if (!target.file) return [];
+  const file = target.file;
+  const out: FindingInput[] = [];
+  for (const type of context.program.types.filter((entry) => entry.file === file && entry.kind === "struct")) {
+    if (type.fields.length < 2) continue;
+    for (const field of type.fields) {
+      if (!BARE_COLLECTION_RS.test(field.type_text.trim())) continue;
+      out.push(
+        finding(
+          "collection",
+          file,
+          `${type.name} holds ${field.name} as a bare collection (${field.type_text.trim()}); wrap it in a first-class collection type`,
+          field.line,
+        ),
+      );
     }
   }
   return out;
@@ -461,6 +575,8 @@ export const PER_FILE_EVALUATORS: Record<
   a: ruleA,
   b: ruleB,
   operation: ruleOperation,
+  "in-place": ruleInPlace,
+  collection: ruleCollection,
   c: ruleC,
   d: ruleD,
   h: ruleH,
