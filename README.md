@@ -50,7 +50,7 @@ takt -w flash-default -t "Add ... with tests"
 |---|---|---|---|
 | T0 | `write_tests`, first `implement` | Flash-class model (DGX Spark, Ollama Cloud, LM Studio) | `opencode` / `ollama/glm-5.3-flash:cloud` (tests), `opencode` / `opencode-go/gpt-5.6-luna` (implement) |
 | T1 | `reimplement`, `fix`, review companions, facet selector | Mid-size model with structured output | `claude` / `claude-sonnet-5` |
-| T2 | `reimplement_final`, `fix` escalation, default for every other step | Strongest general model | `claude` / `claude-opus-5` |
+| T2 | `reimplement_final`, `fix` escalation, default for every other step | Strongest general model | `claude` / `claude-opus-5-5` |
 | T3 (optional) | `plan`, `replan`, adjudication, `final-gate` | Top model for low-token, high-leverage judgment steps | `claude` / `claude-fable-5-1` (plan), `codex` / `gpt-6-astra` (judge) |
 
 The examples are the exact profiles used in the verified full runs of this workflow.
@@ -76,7 +76,7 @@ provider:
     # T1: mid-size model with structured output (companions and the facet selector need it)
     t1: { provider: claude, model: claude-sonnet-5 }
     # T2: strongest general model; default for every step not listed below
-    t2: { provider: claude, model: claude-opus-5 }
+    t2: { provider: claude, model: claude-opus-5-5 }
     # T3 (optional): planning and sign-off on different vendors
     t3-plan:  { provider: claude, model: claude-fable-5-1 }
     t3-judge: { provider: codex,  model: gpt-6-astra }

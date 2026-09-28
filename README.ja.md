@@ -50,7 +50,7 @@ takt -w flash-default -t "〜をテスト付きで追加する"
 |---|---|---|---|
 | T0 | `write_tests`、初回の `implement` | Flash 級モデル（DGX Spark、Ollama Cloud、LM Studio） | `opencode` / `ollama/glm-5.3-flash:cloud`（テスト）、`opencode` / `opencode-go/gpt-5.6-luna`（実装） |
 | T1 | `reimplement`、`fix`、review companion、facet selector | 構造化出力に対応した中規模モデル | `claude` / `claude-sonnet-5` |
-| T2 | `reimplement_final`、`fix` の昇格先、その他すべてのステップの既定 | 最も強い汎用モデル | `claude` / `claude-opus-5` |
+| T2 | `reimplement_final`、`fix` の昇格先、その他すべてのステップの既定 | 最も強い汎用モデル | `claude` / `claude-opus-5-5` |
 | T3（任意） | `plan`、`replan`、裁定、`final-gate` | トークン消費が少なく判断の影響が大きいステップ向けの最上位モデル | `claude` / `claude-fable-5-1`（計画）、`codex` / `gpt-6-astra`（検収） |
 
 この例は、このワークフローの実走で実際に使った profile そのものです。
@@ -76,7 +76,7 @@ provider:
     # T1: mid-size model with structured output (companions and the facet selector need it)
     t1: { provider: claude, model: claude-sonnet-5 }
     # T2: strongest general model; default for every step not listed below
-    t2: { provider: claude, model: claude-opus-5 }
+    t2: { provider: claude, model: claude-opus-5-5 }
     # T3 (optional): planning and sign-off on different vendors
     t3-plan:  { provider: claude, model: claude-fable-5-1 }
     t3-judge: { provider: codex,  model: gpt-6-astra }
