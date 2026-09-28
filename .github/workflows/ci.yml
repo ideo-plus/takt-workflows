@@ -7,12 +7,13 @@ on:
 
 jobs:
   sandbox:
-    name: sandbox (mock, ${{ matrix.lang }})
+    name: sandbox (mock, ${{ matrix.workflow }}, ${{ matrix.lang }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         lang: [en, ja]
+        workflow: [flash-default, ddd-rust-default, ddd-typescript-default]
     env:
       TAKT_VERSION: 0.66.0
       T0_BUDGET_BYTES: "25000"
@@ -24,11 +25,12 @@ jobs:
       - name: Install TAKT
         run: npm install -g "takt@${TAKT_VERSION}"
       # Installs the bundle into a fresh git project with project-closed configuration and an
-      # empty TAKT_CONFIG_DIR, runs takt workflow doctor, runs flash-default on the mock
+      # empty TAKT_CONFIG_DIR, runs takt workflow doctor, runs the workflow on the mock
       # provider, and checks step routing, the happy path, and the companions.
       - name: Sandbox verification (mock provider)
-        run: scripts/sandbox-verify.sh --mode mock --lang "${{ matrix.lang }}" --dir "$RUNNER_TEMP/sandbox" --keep
+        run: scripts/sandbox-verify.sh --mode mock --lang "${{ matrix.lang }}" --workflow "${{ matrix.workflow }}" --dir "$RUNNER_TEMP/sandbox" --keep
       - name: T0 context budget
+        if: matrix.workflow == 'flash-default'
         run: |
           project="$RUNNER_TEMP/sandbox/project"
           builtin="$(npm root -g)/takt/builtins/${{ matrix.lang }}/facets"
@@ -46,7 +48,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: sandbox-${{ matrix.lang }}
+          name: sandbox-${{ matrix.workflow }}-${{ matrix.lang }}
           path: |
             ${{ runner.temp }}/sandbox/report.md
             ${{ runner.temp }}/sandbox/run.log

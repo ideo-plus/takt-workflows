@@ -14,7 +14,7 @@
 #
 # Usage: scripts/use-lang.sh <en|ja> [project-dir] [--no-config]
 #   project-dir   target project (default: current directory)
-#   --no-config   do not create runtime.yaml / config.yaml (alias: --no-runtime)
+#   --no-config   do not create runtime.yaml / config.yaml or edit .takt/.gitignore (alias: --no-runtime)
 #
 # Examples:
 #   cd ~/work/my-app && /path/to/takt-workflows/scripts/use-lang.sh ja
@@ -92,7 +92,9 @@ fi
 # Make sure the configuration can be committed. TAKT's default .takt/.gitignore ignores
 # everything except an allowlist that does not include runtime.yaml.
 gitignore="$target/.gitignore"
-if [ ! -e "$gitignore" ]; then
+if [ "$with_config" -eq 0 ]; then
+  : # --no-config: leave .takt/.gitignore alone as well
+elif [ ! -e "$gitignore" ]; then
   cat > "$gitignore" <<'EOF'
 # Ignore everything by default
 *

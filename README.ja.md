@@ -7,6 +7,7 @@
 | ワークフロー | 概要 |
 |---|---|
 | [`flash-default`](#flash-default) | builtin の `default` 開発ワークフローにモデルの階層を入れたもの。テスト生成と実装を安価な Flash 級モデルで始め、失敗したステップだけを上位モデルへ昇格させます。 |
+| [`ddd-rust-default`、`ddd-typescript-default`](#ddd-rust-default--ddd-typescript-default) | ドメイン駆動設計の規約に従う Rust または TypeScript のコードを書くための、builtin `default` と同じ開発ワークフロー。リポジトリに置くドメインモデル宣言と DDD レビュアーを持ちます。 |
 
 今後もワークフローを追加していきます。
 
@@ -124,19 +125,47 @@ provider:
 
 あとで T0 を DGX Spark に切り替えるときは、`t0-*` の 2 つの profile だけを書き換えます。
 
+## ddd-rust-default / ddd-typescript-default
+ドメイン駆動設計の規約に従う Rust または TypeScript のコードを書くための、builtin `default` と同じ開発ワークフローです。規約は AI-DLC の DDD プラグインに由来します。常に有効なドメインモデル、宣言済みのコマンドだけによる状態変更、操作ごとのエラー型を持つ `Result` で返す業務上の失敗、調整だけを行うユースケース、集約ごとのリポジトリ、コマンド側とクエリ側の分離、ユビキタス言語によるパッケージ名がその中身です。
+
+| ステップ | 変わること |
+|---|---|
+| plan / replan | 計画担当がイベント、コマンド、集約、不変条件を導き、`.ddd.toml` と `docs/ddd/*.yaml` への正確な変更を計画に書く |
+| implement / reimplement | 実装担当がそのモデルの変更を先に反映し、集約写像どおりの名前で実装する |
+| review | builtin のレビュアーに加えて DDD レビュアーが必ず動く。backend と CQRS+ES のレビュアーは使わない |
+
+プロジェクトは DDD のモデルをタスクをまたいで持ちます。
+
+| ファイル | 中身 |
+|---|---|
+| `.ddd.toml` | 言語、モジュール配置（Rust は `file` / `mod-rs`、TypeScript は `named-file` / `index-file`）、TypeScript の表現（`class` / `companion`） |
+| `docs/ddd/domain-model.yaml` | 集約、不変条件、コマンド、ファクトリ規則、エラー、イベント、状態 |
+| `docs/ddd/aggregate-mapping.yaml` | 各要素がコードのどこにあるか、各ドメインパッケージの業務用語 |
+| `docs/ddd/layer-structure.yaml` | 境界づけられたコンテキストごとのパッケージ、依存、ポート、リポジトリ、復元経路 |
+
+無ければ最初の実行で作られます。コードと一緒にコミットしてください。
+
+```sh
+takt -w ddd-rust-default -t "〜を追加する"        # または ddd-typescript-default
+```
+
+builtin の facet は、DDD の規約と一致するものを再利用しています（coding、testing、review、ai-antipattern、contract-change、implementation-semantics、architecture）。builtin の backend と CQRS+ES の facet は使いません。これらは Kotlin 上の Axon を前提とし、業務エラーを例外で投げる、集約がイベントを返して不変のまま保たれる、ユースケースが読み取りモデルを見て判断する、と定めているためです。再利用する builtin の一般的な規則を DDD の規約が上書きする箇所（業務エラーを例外にする、コマンド側のユースケースに入力 DTO を渡す、infrastructure を公開しない、ディレクトリの例）は、DDD の policy に明記しています。
+
 ## サンドボックスで検証する
-[`scripts/sandbox-verify.sh`](scripts/sandbox-verify.sh) は、使い捨ての git プロジェクトにバンドルを導入し、空の `TAKT_CONFIG_DIR` で実行します。そのためプロジェクトの設定だけが使われます。`flash-default` を実走させ、実行ログを検査します。
+[`scripts/sandbox-verify.sh`](scripts/sandbox-verify.sh) は、使い捨ての git プロジェクトにバンドルを導入し、空の `TAKT_CONFIG_DIR` で実行します。そのためプロジェクトの設定だけが使われます。ワークフローを 1 本（`--workflow`、既定は `flash-default`）実走させ、実行ログを検査します。
 
 ```sh
 scripts/sandbox-verify.sh --mode mock    # TAKT の mock provider。ネットワーク不要、数秒
 scripts/sandbox-verify.sh --mode real    # runtime.project.yaml の provider を使う。約 1 時間
+scripts/sandbox-verify.sh --mode real --workflow ddd-rust-default   # 結果を cargo test で確かめる
 ```
 
 - 実行が exit 0 で完走すること。
 - 各ステップが `runtime.yaml` の割り当てどおりの provider と model で動くこと。`ladder` のステップはどの段でもよい。
 - 正常系の経路（`plan`、`write_tests`、`implement`、`review-adjudication`、`final-gate`）を通ること。
 - companion が割り当てどおりの profile で動くこと。
-- real モードのみ: テストファイルが作られ、サンドボックス内で `node --test` が通ること。
+- real モードのみ: テストファイルが作られ、サンドボックス内で検証コマンドが通ること（`--check-cmd`。既定は `node --test`、`ddd-rust-default` では `cargo test`）。
+- DDD ワークフロー: DDD レビュアーが動くこと。real モードでは `.ddd.toml` と `docs/ddd/` のモデル文書が書かれること。
 
 結果はサンドボックス内の `report.md` に書かれます。サンドボックスは失敗時か `--keep` 指定時に残ります。`--lang`、`--task`、`--timeout` で言語・タスク・制限時間を変えられます。mock モードは経路をそのまま保ち（各 profile を「provider は mock、model は profile 名」に置き換える）、judge の答えを台本化して正常系を通します。確かめるのは配線で、モデルの品質ではありません。
 
@@ -158,6 +187,11 @@ scripts/sandbox-verify.sh --mode real    # runtime.project.yaml の provider を
 - **`write_tests` の promotion は step fragment で与える。** `steps/development-core-write-tests.yaml` が builtin の fragment を shadowing して `promotion` を足しているので、`development-core` 自体はコピーしていません。この shadowing は、導入したプロジェクト内で `development-core` を使うすべてのワークフローに効きます。
 - **T0 の文脈予算。** `write_tests`、`implement`、`reimplement` に注入する policy + knowledge + instruction は 25 KB 以下に保ちます（`coding-lite`、`testing-lite`、`implementation-semantics`）。T0 のステップにフルサイズの builtin policy を足さないでください。
 - 詳しい設計メモと `runtime.yaml` の雛形: [`ja/workflows/flash-default.yaml`](ja/workflows/flash-default.yaml) の冒頭コメント。
+
+### ddd ワークフローの設計メモ
+- **facet の分担。** 判定は policy が持ちます。`ddd-model`（モデル宣言と写像）、`ddd-domain`、`ddd-application`、`ddd-adapter`、`ddd-structure`、そして言語の policy 1 つ（`ddd-rust` か `ddd-typescript`）です。選択肢と例は knowledge が持ちます。`ddd-modeling`（プロジェクトのファイルの形、モデリングの選択肢）と `ddd-rust` / `ddd-typescript` です。ルートを言語ごとに分けているので、別の言語の facet はプロンプトに入りません。
+- **複製した builtin。** `ddd-implement` と `ddd-remediation` は、衝突する builtin の backend knowledge を注入しうる動的 facet プールを外しています。`ddd-review` は backend と CQRS+ES のレビュアーを外し、`steps/ddd-reviewer.yaml` を固定のレビュアーとして加えています。複製は builtin のワークフローから生成しており、section map に builtin の親が渡す facet をすべて宣言しています。
+- **モデルのファイルはプラグインと互換。** `docs/ddd/*.yaml` と `.ddd.toml` は AI-DLC の DDD プラグインのスキーマ バージョン 2 に従っており、後からその検査ツールを組み込めます。
 
 ## ライセンス
 Apache License 2.0 です。[LICENSE](LICENSE) を参照してください。
