@@ -37,6 +37,7 @@ Keep the domain model always valid: state is hidden, built only through a full c
 | A value object or Domain Primitive changes after construction | REJECT |
 | Interior mutability or a shared reference hides a business state change | REJECT |
 | Replay makes a new business decision or rejects a stored event as a business failure | REJECT. Replay only applies facts; a corrupt history aborts restoration |
+| A command that changes state does not return the one event it produced, or returns a list of events | REJECT. A command changes the state and returns the one event the model declares in `event`; a failed command changes nothing and returns no event |
 
 ## Getters and Decisions
 

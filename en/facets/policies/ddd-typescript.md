@@ -42,8 +42,8 @@ Apply the DDD layer rules to TypeScript with one code representation per project
 | A method that returns a changed instance is not named by a command slug of the model (`command.invoice.add-line` is `addLine`) and is not a declared replay method | REJECT |
 | A method writes a `#` field or closure state outside the constructor or the full-constructor factory, including inside a command or a replay method | REJECT. Build the changed state into a new instance through the full constructor |
 | A method calls a changing method (`push`, `splice`, `sort`, `set`, `add`, `delete`) on state | REJECT |
-| A command's success value is not the aggregate type (`Result<void, E>`) | REJECT. Return the new instance: `Result<Invoice, E>` |
-| A command recognizes a duplicate request and returns the same instance unchanged | OK |
+| A command's success value is not its named outcome type holding the new instance and the event (`Result<void, E>`, `Result<Invoice, E>`, an inline object type) | REJECT. Return `Result<IssueInvoiceOutcome, E>`, where `IssueInvoiceOutcome` is exported beside the error type and named by `success_type` in the mapping |
+| A command recognizes a resent request and returns `kind: "duplicate"` with the unchanged instance and no event | OK |
 | A use case stores, or keeps using, the instance it loaded instead of the one the command returned | REJECT |
 | A domain method calls a getter of another domain object | REJECT |
 | A receiver of a domain method has no annotation naming one type | REJECT |

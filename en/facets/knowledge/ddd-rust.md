@@ -2,48 +2,139 @@
 
 ## Aggregate
 
-An aggregate keeps private fields, a private constructor that takes the whole state, validating factories that return the operation's own error enum, a `restore` function for persisted state, and commands that take `&mut self` and change nothing when they fail.
+An aggregate keeps private fields, a private constructor that takes the whole state, validating factories that return the operation's own error enum, a `restore` function for persisted state, and commands that take `&mut self`, change the state, and return the one event they produce. A command that fails changes nothing and produces no event.
 
 ```rust
-use crate::invoice::line::InvoiceLine;
+pub mod line;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum OpenInvoiceError { MissingCustomer, NegativeTotal }
+use self::line::InvoiceLine;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum IssueInvoiceError { AlreadyIssued, EmptyLines }
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OpenInvoiceError {
+    MissingCustomer,
+    NegativeTotal,
+}
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AddInvoiceLineError {
+    AlreadyIssued,
+    NegativeTotal,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IssueInvoiceError {
+    AlreadyIssued,
+    EmptyLines,
+}
+
+/// A persisted state the invariants forbid: corrupt storage, not a business failure.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CorruptInvoiceState;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InvoiceLineAdded {
+    invoice_id: String,
+    request_id: String,
+    line: InvoiceLine,
+}
+
+impl InvoiceLineAdded {
+    fn new(invoice_id: &str, request_id: &str, line: InvoiceLine) -> Self {
+        InvoiceLineAdded { invoice_id: invoice_id.to_string(), request_id: request_id.to_string(), line }
+    }
+
+    pub fn invoice_id(&self) -> &str {
+        &self.invoice_id
+    }
+
+    pub fn request_id(&self) -> &str {
+        &self.request_id
+    }
+
+    pub fn line(&self) -> &InvoiceLine {
+        &self.line
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InvoiceIssued {
+    invoice_id: String,
+}
+
+impl InvoiceIssued {
+    fn new(invoice_id: &str) -> Self {
+        InvoiceIssued { invoice_id: invoice_id.to_string() }
+    }
+
+    pub fn invoice_id(&self) -> &str {
+        &self.invoice_id
+    }
+}
+
+/// A request id already applied changes nothing and produces no event.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AddInvoiceLineOutcome {
+    Applied(InvoiceLineAdded),
+    Duplicate,
+}
+
+fn sum_of(lines: &[InvoiceLine]) -> i64 {
+    lines.iter().fold(0, |sum, line| line.add_to(sum))
+}
+
+#[derive(Debug, Clone)]
 pub struct Invoice {
-    customer: CustomerId,
+    id: String,
+    customer: String,
     lines: Vec<InvoiceLine>,
     issued: bool,
+    add_line_requests: Vec<String>,
 }
 
 impl Invoice {
-    fn new(customer: CustomerId, lines: Vec<InvoiceLine>, issued: bool) -> Self {
-        Self { customer, lines, issued }
+    fn new(id: String, customer: String, lines: Vec<InvoiceLine>, issued: bool, add_line_requests: Vec<String>) -> Self {
+        Invoice { id, customer, lines, issued, add_line_requests }
     }
 
-    pub fn open(customer: Option<CustomerId>, lines: Vec<InvoiceLine>) -> Result<Self, OpenInvoiceError> {
-        let customer = customer.ok_or(OpenInvoiceError::MissingCustomer)?;
-        if total_of(&lines) < 0 {
+    pub fn open(id: &str, customer: &str, lines: Vec<InvoiceLine>) -> Result<Self, OpenInvoiceError> {
+        if customer.is_empty() {
+            return Err(OpenInvoiceError::MissingCustomer);
+        }
+        if sum_of(&lines) < 0 {
             return Err(OpenInvoiceError::NegativeTotal);
         }
-        Ok(Self::new(customer, lines, false))
+        Ok(Self::new(id.to_string(), customer.to_string(), lines, false, Vec::new()))
     }
 
-    pub fn restore(customer: CustomerId, lines: Vec<InvoiceLine>, issued: bool) -> Result<Self, CorruptInvoiceState> {
-        if (issued && lines.is_empty()) || total_of(&lines) < 0 {
+    pub fn restore(
+        id: &str,
+        customer: &str,
+        lines: Vec<InvoiceLine>,
+        issued: bool,
+        add_line_requests: Vec<String>,
+    ) -> Result<Self, CorruptInvoiceState> {
+        if customer.is_empty() || (issued && lines.is_empty()) || sum_of(&lines) < 0 {
             return Err(CorruptInvoiceState);
         }
-        Ok(Self::new(customer, lines, issued))
+        Ok(Self::new(id.to_string(), customer.to_string(), lines, issued, add_line_requests))
     }
 
-    pub fn issue(&mut self) -> Result<(), IssueInvoiceError> {
+    pub fn add_line(&mut self, request_id: &str, line: InvoiceLine) -> Result<AddInvoiceLineOutcome, AddInvoiceLineError> {
+        if self.add_line_requests.iter().any(|seen| seen == request_id) {
+            return Ok(AddInvoiceLineOutcome::Duplicate);
+        }
+        if self.issued {
+            return Err(AddInvoiceLineError::AlreadyIssued);
+        }
+        if line.add_to(sum_of(&self.lines)) < 0 {
+            return Err(AddInvoiceLineError::NegativeTotal);
+        }
+        self.lines.push(line.clone());
+        self.add_line_requests.push(request_id.to_string());
+        Ok(AddInvoiceLineOutcome::Applied(InvoiceLineAdded::new(&self.id, request_id, line)))
+    }
+
+    pub fn issue(&mut self) -> Result<InvoiceIssued, IssueInvoiceError> {
         if self.issued {
             return Err(IssueInvoiceError::AlreadyIssued);
         }
@@ -51,24 +142,24 @@ impl Invoice {
             return Err(IssueInvoiceError::EmptyLines);
         }
         self.issued = true;
-        Ok(())
+        Ok(InvoiceIssued::new(&self.id))
     }
 
-    pub fn is_billed_to(&self, customer: &CustomerId) -> bool {
-        &self.customer == customer
+    pub fn is_billed_to(&self, customer: &str) -> bool {
+        self.customer == customer
     }
 
     pub fn total(&self) -> i64 {
-        total_of(&self.lines)
+        sum_of(&self.lines)
     }
-}
 
-fn total_of(lines: &[InvoiceLine]) -> i64 {
-    lines.iter().fold(0, |sum, line| line.add_to(sum))
+    pub fn lines(&self) -> Vec<InvoiceLine> {
+        self.lines.clone()
+    }
 }
 ```
 
-`restore` reports a corrupt state with its own type because it is not a business failure. `total` asks each line to add itself instead of reading its amount.
+`restore` reports a corrupt state with its own type because it is not a business failure. `add_line` remembers the request IDs it applied and recognizes a resent one before any other check: it returns `AddInvoiceLineOutcome::Duplicate`, changes nothing, and produces no event, so the event is never published twice. Events are domain types too: their fields are private, they are built by their own `new` inside the aggregate's module, and they offer read-only accessors to the code that publishes them. `total` asks each line to add itself instead of reading its amount. The example keeps the IDs and the customer as `&str` / `String` only to stay short; real code wraps them in Domain Primitives.
 
 ## Value Objects and Domain Primitives
 
@@ -94,13 +185,16 @@ impl CustomerId {
 
 ## Event Sourcing
 
-Deciding and applying are separate. A command checks the rules and returns the events; the declared replay method applies one event type and decides nothing.
+A command checks the rules, changes the state through the declared replay method, and returns the one event it produced. Restoring replays the stored events through the same method, so the change a command makes and the change a replay makes cannot drift apart. The replay method decides nothing.
 
 ```rust
 impl Invoice {
-    pub fn issue(&self) -> Result<Vec<InvoiceEvent>, IssueInvoiceError> {
+    pub fn issue(&mut self) -> Result<InvoiceIssued, IssueInvoiceError> {
         if self.issued { return Err(IssueInvoiceError::AlreadyIssued); }
-        Ok(vec![InvoiceEvent::Issued(InvoiceIssued { invoice_id: self.id.clone() })])
+        if self.lines.is_empty() { return Err(IssueInvoiceError::EmptyLines); }
+        let event = InvoiceIssued::new(&self.id);
+        self.apply_issued(&event);
+        Ok(event)
     }
 
     pub fn apply_issued(&mut self, _event: &InvoiceIssued) {
@@ -113,41 +207,91 @@ The mapping lists `apply_issued` in `replay_methods` with `event_ref: event.invo
 
 ## Ports, Use Cases, and Adapters
 
-The repository port is a trait named after the aggregate. A use case holds it through a generic parameter (static dispatch) or a trait object where runtime selection is needed.
+The repository port is a trait named after the aggregate, declared in the use-case crate. A use case holds it through a trait object (or a generic parameter for static dispatch), stores the invoice the command changed, and returns the event for the caller to publish after persistence.
 
 ```rust
+use billing_domain::invoice::Invoice;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct InvoiceNotFound;
+
 pub trait InvoiceRepository {
-    fn find_by_id(&self, id: &InvoiceId) -> Result<Invoice, RepositoryError<InvoiceId>>;
-    fn store(&mut self, id: &InvoiceId, invoice: &Invoice) -> Result<(), RepositoryError<InvoiceId>>;
-    fn delete_by_id(&mut self, id: &InvoiceId) -> Result<(), RepositoryError<InvoiceId>>;
+    fn find_by_id(&self, invoice_id: &str) -> Result<Invoice, InvoiceNotFound>;
+    fn store(&self, invoice_id: &str, invoice: Invoice);
 }
 
-pub struct IssueInvoice<R: InvoiceRepository> {
-    invoices: R,
+use billing_domain::invoice::{InvoiceIssued, IssueInvoiceError};
+
+use crate::invoice_repository::{InvoiceNotFound, InvoiceRepository};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IssueInvoiceFailure {
+    NotFound(InvoiceNotFound),
+    Rejected(IssueInvoiceError),
 }
 
-impl<R: InvoiceRepository> IssueInvoice<R> {
-    pub fn execute(&mut self, invoice_id: InvoiceId) -> Result<(), IssueInvoiceFailure> {
-        let mut invoice = self.invoices.find_by_id(&invoice_id)?;
-        invoice.issue()?;
-        self.invoices.store(&invoice_id, &invoice)?;
-        Ok(())
+pub struct IssueInvoice<'a> {
+    invoices: &'a dyn InvoiceRepository,
+}
+
+impl<'a> IssueInvoice<'a> {
+    pub fn new(invoices: &'a dyn InvoiceRepository) -> Self {
+        IssueInvoice { invoices }
+    }
+
+    /// Issues the invoice, stores it, and hands back the event for the caller to publish.
+    pub fn execute(&self, invoice_id: &str) -> Result<InvoiceIssued, IssueInvoiceFailure> {
+        let mut invoice = self.invoices.find_by_id(invoice_id).map_err(IssueInvoiceFailure::NotFound)?;
+        let issued = invoice.issue().map_err(IssueInvoiceFailure::Rejected)?;
+        self.invoices.store(invoice_id, invoice);
+        Ok(issued)
     }
 }
 ```
 
-The adapter translates stored data through `restore` and database errors into `RepositoryError`.
+The adapter implements the port, may prefix its name with the storage medium, and restores the aggregate through `restore` and each line through `of`.
 
 ```rust
-pub struct PostgresInvoiceRepository { pool: PgPool }
+use std::cell::RefCell;
+use std::collections::HashMap;
 
-impl InvoiceRepository for PostgresInvoiceRepository {
-    fn find_by_id(&self, id: &InvoiceId) -> Result<Invoice, RepositoryError<InvoiceId>> {
-        let row = self.fetch_row(id)?;
-        Invoice::restore(row.customer()?, row.lines()?, row.issued)
-            .map_err(|_| RepositoryError::Corrupt(id.clone()))
+use billing_domain::invoice::line::InvoiceLine;
+use billing_domain::invoice::Invoice;
+use billing_use_case::invoice_repository::{InvoiceNotFound, InvoiceRepository};
+
+pub struct InvoiceRecord {
+    pub customer: String,
+    pub amounts: Vec<i64>,
+    pub issued: bool,
+    pub add_line_requests: Vec<String>,
+}
+
+/// The invoices stored here take precedence over the records they were first read from.
+pub struct InMemoryInvoiceRepository {
+    records: HashMap<String, InvoiceRecord>,
+    stored: RefCell<HashMap<String, Invoice>>,
+}
+
+impl InMemoryInvoiceRepository {
+    pub fn new(records: HashMap<String, InvoiceRecord>) -> Self {
+        InMemoryInvoiceRepository { records, stored: RefCell::new(HashMap::new()) }
     }
-    // store and delete_by_id ...
+}
+
+impl InvoiceRepository for InMemoryInvoiceRepository {
+    fn find_by_id(&self, invoice_id: &str) -> Result<Invoice, InvoiceNotFound> {
+        if let Some(stored) = self.stored.borrow().get(invoice_id) {
+            return Ok(stored.clone());
+        }
+        let record = self.records.get(invoice_id).ok_or(InvoiceNotFound)?;
+        let lines: Vec<InvoiceLine> = record.amounts.iter().map(|amount| InvoiceLine::of(*amount)).collect();
+        Invoice::restore(invoice_id, &record.customer, lines, record.issued, record.add_line_requests.clone())
+            .map_err(|_| InvoiceNotFound)
+    }
+
+    fn store(&self, invoice_id: &str, invoice: Invoice) {
+        self.stored.borrow_mut().insert(invoice_id.to_string(), invoice);
+    }
 }
 ```
 
@@ -158,7 +302,7 @@ impl InvoiceRepository for PostgresInvoiceRepository {
 | `file` | `src/invoice.rs` + `src/invoice/line.rs` | `src/money.rs` |
 | `mod-rs` | `src/invoice/mod.rs` + `src/invoice/line.rs` | `src/money.rs` |
 
-`lib.rs`, `main.rs`, and the roots Cargo names keep their names in both layouts. The layout applies to every package, test, example, bench, and build script.
+`lib.rs`, `main.rs`, and the roots Cargo names keep their names in both layouts. The layout applies to every package, test, example, bench, and build script. A `#[cfg(test)]` module, in its own file or inline, is test code and is not checked as business code.
 
 ## Workspace Placement
 

@@ -39,42 +39,46 @@ bounded_contexts:
         root_element: entity.invoice
         states: [draft, issued]
         elements:
-          - element_id: entity.invoice
-            kind: entity
-            name: Invoice
-            aggregate: aggregate.invoice
-            attributes:
-              - { name: customer, type: primitive.customer-id, required: true }
-              - { name: lines, type: vo.invoice-line, required: true, collection: true }
-          - element_id: vo.invoice-line
-            kind: value-object
-            name: InvoiceLine
-            aggregate: aggregate.invoice
-            attributes: [{ name: amount, type: decimal, required: true }]
+          - { element_id: entity.invoice, kind: entity, name: Invoice, aggregate: aggregate.invoice }
+          - { element_id: vo.invoice-line, kind: value-object, name: InvoiceLine, aggregate: aggregate.invoice }
         invariants:
-          - element_id: invariant.invoice.total-not-negative
-            statement: 明細の合計は負にならない。
-        factory_rules:
-          - element_id: factory.invoice.open
-            target_element: entity.invoice
-            preconditions: [顧客が指定されている。]
-            domain_errors:
-              - { element_id: error.invoice.open.missing-customer, name: MissingCustomer, operation: factory.invoice.open, condition: 顧客が指定されていない。 }
+          - { element_id: invariant.invoice.total-not-negative, name: TotalNotNegative, aggregate: aggregate.invoice, statement: 明細の合計は負にならない }
+          - { element_id: invariant.invoice.issued-has-lines, name: IssuedHasLines, aggregate: aggregate.invoice, statement: 発行済みの請求書は明細を 1 件以上持つ }
         commands:
+          - element_id: command.invoice.add-line
+            name: AddLine
+            aggregate: aggregate.invoice
+            effect: accumulation
+            state_effect: none
+            domain_errors:
+              - { element_id: error.invoice.add-line.already-issued, name: AlreadyIssued, operation: command.invoice.add-line, condition: 請求書は発行済みである }
+              - { element_id: error.invoice.add-line.negative-total, name: NegativeTotal, operation: command.invoice.add-line, condition: 追加すると合計が負になる }
+            event: event.invoice.line-added
+            idempotency: { strategy: command-id-memory, retention: multiple, retention_count: 1000, rationale: 再試行された要求で明細を二重に加えない }
           - element_id: command.invoice.issue
             name: Issue
+            aggregate: aggregate.invoice
             effect: transition
             state_effect: transitions
             transitions: [transition.invoice.issue]
-            idempotency: { strategy: none }
             domain_errors:
-              - { element_id: error.invoice.issue.already-issued, name: AlreadyIssued, operation: command.invoice.issue, condition: 請求書は発行済みである。 }
-            events: [event.invoice.issued]
+              - { element_id: error.invoice.issue.already-issued, name: AlreadyIssued, operation: command.invoice.issue, condition: 請求書は発行済みである }
+              - { element_id: error.invoice.issue.empty-lines, name: EmptyLines, operation: command.invoice.issue, condition: 明細がない }
+            event: event.invoice.issued
+            idempotency: { strategy: none }
         events:
-          - { element_id: event.invoice.issued, name: InvoiceIssued, produced_by: command.invoice.issue }
+          - { element_id: event.invoice.line-added, name: LineAdded, aggregate: aggregate.invoice, produced_by: command.invoice.add-line }
+          - { element_id: event.invoice.issued, name: Issued, aggregate: aggregate.invoice, produced_by: command.invoice.issue }
         transitions:
-          - { element_id: transition.invoice.issue, from_state: draft, to_state: issued, command: command.invoice.issue }
-    process_managers: []
+          - { element_id: transition.invoice.issue, name: Issue, aggregate: aggregate.invoice, from_state: draft, to_state: issued, command: command.invoice.issue }
+        factory_rules:
+          - element_id: factory.invoice.open
+            name: Open
+            target_element: entity.invoice
+            preconditions: [invariant.invoice.total-not-negative]
+            domain_errors:
+              - { element_id: error.invoice.open.missing-customer, name: MissingCustomer, operation: factory.invoice.open, condition: 顧客が指定されていない }
+              - { element_id: error.invoice.open.negative-total, name: NegativeTotal, operation: factory.invoice.open, condition: 明細の合計が負になる }
 lineage: []
 ```
 
@@ -83,50 +87,59 @@ lineage: []
 ### 集約写像
 
 ```yaml
-model_ref: docs/ddd/domain-model.yaml
+model_ref: domain-model.yaml
 aggregate_mappings:
   - aggregate_ref: aggregate.invoice
     programming_model: class
     persistence_method: state-sourcing
-    reference_ids: [entity.invoice, vo.invoice-line, invariant.invoice.total-not-negative]
-    replay_methods: []
-    code: { language: rust, package: billing-domain, module: [invoice], type: Invoice, ports: [], repository: InvoiceRepository }
+    reference_ids: [entity.invoice]
+    code: { language: typescript, package: "@acme/billing-domain", module: [invoice], type: Invoice }
     operations:
       - operation_ref: factory.invoice.open
         code: { method: open, error_type: OpenInvoiceError }
-        errors: [{ error_ref: error.invoice.open.missing-customer, code: { case: MissingCustomer } }]
+        errors:
+          - { error_ref: error.invoice.open.missing-customer, code: { case: missing-customer } }
+          - { error_ref: error.invoice.open.negative-total, code: { case: negative-total } }
+      - operation_ref: command.invoice.add-line
+        code: { method: addLine, success_type: AddInvoiceLineOutcome, error_type: AddInvoiceLineError }
+        errors:
+          - { error_ref: error.invoice.add-line.already-issued, code: { case: already-issued } }
+          - { error_ref: error.invoice.add-line.negative-total, code: { case: negative-total } }
       - operation_ref: command.invoice.issue
-        code: { method: issue, error_type: IssueInvoiceError }
-        errors: [{ error_ref: error.invoice.issue.already-issued, code: { case: AlreadyIssued } }]
+        code: { method: issue, success_type: IssueInvoiceOutcome, error_type: IssueInvoiceError }
+        errors:
+          - { error_ref: error.invoice.issue.already-issued, code: { case: already-issued } }
+          - { error_ref: error.invoice.issue.empty-lines, code: { case: empty-lines } }
 domain_packages:
-  - { term: 請求, model_refs: [bc.billing], rationale: 顧客への請求に関わるもの全体, code: { language: rust, package: billing-domain, module: [] } }
-  - { term: 請求書, model_refs: [aggregate.invoice], rationale: 請求書と明細は一緒に変わる, code: { language: rust, package: billing-domain, module: [invoice] } }
+  - { term: 請求, model_refs: [bc.billing], rationale: 請求の業務全体を持つ, code: { language: typescript, package: "@acme/billing-domain", module: [] } }
+  - { term: 請求書, model_refs: [aggregate.invoice], rationale: 請求書を作成し発行する, code: { language: typescript, package: "@acme/billing-domain", module: [invoice] } }
+  - { term: 請求書明細, model_refs: [vo.invoice-line], rationale: 請求書が合計する金額, code: { language: typescript, package: "@acme/billing-domain", module: [invoice, line] } }
 ```
 
-`module` はパッケージのルートより下の区切りを並べたもので、ルートは `[]` になる。ルートから下のすべての階層を宣言する。TypeScript では case の文字列がリテラルの union のメンバー（`already-issued`）になり、Rust では enum のバリアント（`AlreadyIssued`）になる。
+`model_ref` は `docs/ddd` からの相対パスで書く。`success_type` はコマンドが成功時に返すものの型名である。TypeScript では新しいインスタンスとイベントを持つ成功値の型、Rust ではイベント、再送された要求を認識するコマンドでは成功値の enum になる。ファクトリ規則の成功値は集約の型である。`module` はパッケージのルートより下の区切りを並べたもので、ルートは `[]` になる。ルートから下のすべての階層を宣言する。TypeScript では case の文字列がリテラルの union のメンバー（`already-issued`）になり、Rust では enum のバリアント（`AlreadyIssued`）になる。
 
 ### 層構造
 
 ```yaml
-model_ref: docs/ddd/domain-model.yaml
+model_ref: domain-model.yaml
 layer_structures:
   - context_ref: bc.billing
-    cqrs: true
+    cqrs: false
     packages:
-      - { role: command, code: { language: rust, package: billing-domain } }
-      - { role: query, code: { language: rust, package: billing-query } }
-      - { role: rmu, code: { language: rust, package: billing-rmu } }
+      - { role: command, code: { language: typescript, package: "@acme/billing-domain" } }
+      - { role: command, code: { language: typescript, package: "@acme/billing-use-case" } }
+      - { role: command, code: { language: typescript, package: "@acme/billing-interface-adapter" } }
     dependencies:
-      - { code: { language: rust, package: billing-domain }, depends_on: [] }
-      - { code: { language: rust, package: billing-query }, depends_on: [] }
-      - { code: { language: rust, package: billing-rmu }, depends_on: [{ language: rust, package: billing-domain }, { language: rust, package: billing-query }] }
+      - { code: { language: typescript, package: "@acme/billing-domain" }, depends_on: [] }
+      - { code: { language: typescript, package: "@acme/billing-use-case" }, depends_on: [{ language: typescript, package: "@acme/billing-domain" }] }
+      - { code: { language: typescript, package: "@acme/billing-interface-adapter" }, depends_on: [{ language: typescript, package: "@acme/billing-domain" }, { language: typescript, package: "@acme/billing-use-case" }] }
     ports:
-      - { name: InvoiceRepository, kind: repository, verbs: [find_by_id, store, delete_by_id] }
+      - { name: InvoiceRepository, kind: repository, verbs: [findById, store] }
     repositories:
-      - { name: InvoiceRepository, aggregate_ref: aggregate.invoice, io_unit: single, verbs: [find_by_id, store, delete_by_id], store_semantics: upsert }
+      - { name: InvoiceRepository, aggregate_ref: aggregate.invoice, io_unit: single, verbs: [findById, store], store_semantics: upsert }
     restoration_paths:
       - { aggregate_ref: aggregate.invoice, via: full-constructor }
-    persistence_backend: PostgreSQL
+    persistence_backend: in-memory
 ```
 
 ## モデルの導き方
@@ -152,7 +165,7 @@ layer_structures:
 | `persistence_method` | `state-sourcing` | 現在の状態を保存する。`store` は期待バージョン付きで再永続化する |
 | | `event-sourcing` | イベントを追記する。状態は宣言した replay メソッドで再生して組み立てる |
 
-ステートソーシングでもドメインイベントは出せる。イベントソーシングは、判断（コマンドが規則を確かめてイベントを返す）と適用（replay メソッドが事実から状態を変え、何も判断しない）を分ける。
+状態を変えるコマンドは、永続化の方式にかかわらず、生んだ 1 つのイベントを返す。イベントソーシングでは、コマンドは宣言した replay メソッドを通して状態を変え、復元は保存済みのイベントを同じメソッドで再生する。replay メソッドは何も判断しない。
 
 ## 冪等性と回復
 

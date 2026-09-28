@@ -39,42 +39,46 @@ bounded_contexts:
         root_element: entity.invoice
         states: [draft, issued]
         elements:
-          - element_id: entity.invoice
-            kind: entity
-            name: Invoice
-            aggregate: aggregate.invoice
-            attributes:
-              - { name: customer, type: primitive.customer-id, required: true }
-              - { name: lines, type: vo.invoice-line, required: true, collection: true }
-          - element_id: vo.invoice-line
-            kind: value-object
-            name: InvoiceLine
-            aggregate: aggregate.invoice
-            attributes: [{ name: amount, type: decimal, required: true }]
+          - { element_id: entity.invoice, kind: entity, name: Invoice, aggregate: aggregate.invoice }
+          - { element_id: vo.invoice-line, kind: value-object, name: InvoiceLine, aggregate: aggregate.invoice }
         invariants:
-          - element_id: invariant.invoice.total-not-negative
-            statement: The total of the lines is never negative.
-        factory_rules:
-          - element_id: factory.invoice.open
-            target_element: entity.invoice
-            preconditions: [A customer is given.]
-            domain_errors:
-              - { element_id: error.invoice.open.missing-customer, name: MissingCustomer, operation: factory.invoice.open, condition: No customer is given. }
+          - { element_id: invariant.invoice.total-not-negative, name: TotalNotNegative, aggregate: aggregate.invoice, statement: the total of the lines is never negative }
+          - { element_id: invariant.invoice.issued-has-lines, name: IssuedHasLines, aggregate: aggregate.invoice, statement: an issued invoice has at least one line }
         commands:
+          - element_id: command.invoice.add-line
+            name: AddLine
+            aggregate: aggregate.invoice
+            effect: accumulation
+            state_effect: none
+            domain_errors:
+              - { element_id: error.invoice.add-line.already-issued, name: AlreadyIssued, operation: command.invoice.add-line, condition: the invoice is issued }
+              - { element_id: error.invoice.add-line.negative-total, name: NegativeTotal, operation: command.invoice.add-line, condition: the line would make the total negative }
+            event: event.invoice.line-added
+            idempotency: { strategy: command-id-memory, retention: multiple, retention_count: 1000, rationale: a retried request must not add its line twice }
           - element_id: command.invoice.issue
             name: Issue
+            aggregate: aggregate.invoice
             effect: transition
             state_effect: transitions
             transitions: [transition.invoice.issue]
-            idempotency: { strategy: none }
             domain_errors:
-              - { element_id: error.invoice.issue.already-issued, name: AlreadyIssued, operation: command.invoice.issue, condition: The invoice is already issued. }
-            events: [event.invoice.issued]
+              - { element_id: error.invoice.issue.already-issued, name: AlreadyIssued, operation: command.invoice.issue, condition: the invoice is issued }
+              - { element_id: error.invoice.issue.empty-lines, name: EmptyLines, operation: command.invoice.issue, condition: the invoice has no line }
+            event: event.invoice.issued
+            idempotency: { strategy: none }
         events:
-          - { element_id: event.invoice.issued, name: InvoiceIssued, produced_by: command.invoice.issue }
+          - { element_id: event.invoice.line-added, name: LineAdded, aggregate: aggregate.invoice, produced_by: command.invoice.add-line }
+          - { element_id: event.invoice.issued, name: Issued, aggregate: aggregate.invoice, produced_by: command.invoice.issue }
         transitions:
-          - { element_id: transition.invoice.issue, from_state: draft, to_state: issued, command: command.invoice.issue }
-    process_managers: []
+          - { element_id: transition.invoice.issue, name: Issue, aggregate: aggregate.invoice, from_state: draft, to_state: issued, command: command.invoice.issue }
+        factory_rules:
+          - element_id: factory.invoice.open
+            name: Open
+            target_element: entity.invoice
+            preconditions: [invariant.invoice.total-not-negative]
+            domain_errors:
+              - { element_id: error.invoice.open.missing-customer, name: MissingCustomer, operation: factory.invoice.open, condition: no customer is given }
+              - { element_id: error.invoice.open.negative-total, name: NegativeTotal, operation: factory.invoice.open, condition: the lines add up to a negative total }
 lineage: []
 ```
 
@@ -83,50 +87,59 @@ Element IDs are `<kind>.<segments>` in lower kebab case. `bc`, `aggregate`, `ent
 ### Aggregate mapping
 
 ```yaml
-model_ref: docs/ddd/domain-model.yaml
+model_ref: domain-model.yaml
 aggregate_mappings:
   - aggregate_ref: aggregate.invoice
     programming_model: class
     persistence_method: state-sourcing
-    reference_ids: [entity.invoice, vo.invoice-line, invariant.invoice.total-not-negative]
-    replay_methods: []
-    code: { language: rust, package: billing-domain, module: [invoice], type: Invoice, ports: [], repository: InvoiceRepository }
+    reference_ids: [entity.invoice]
+    code: { language: typescript, package: "@acme/billing-domain", module: [invoice], type: Invoice }
     operations:
       - operation_ref: factory.invoice.open
         code: { method: open, error_type: OpenInvoiceError }
-        errors: [{ error_ref: error.invoice.open.missing-customer, code: { case: MissingCustomer } }]
+        errors:
+          - { error_ref: error.invoice.open.missing-customer, code: { case: missing-customer } }
+          - { error_ref: error.invoice.open.negative-total, code: { case: negative-total } }
+      - operation_ref: command.invoice.add-line
+        code: { method: addLine, success_type: AddInvoiceLineOutcome, error_type: AddInvoiceLineError }
+        errors:
+          - { error_ref: error.invoice.add-line.already-issued, code: { case: already-issued } }
+          - { error_ref: error.invoice.add-line.negative-total, code: { case: negative-total } }
       - operation_ref: command.invoice.issue
-        code: { method: issue, error_type: IssueInvoiceError }
-        errors: [{ error_ref: error.invoice.issue.already-issued, code: { case: AlreadyIssued } }]
+        code: { method: issue, success_type: IssueInvoiceOutcome, error_type: IssueInvoiceError }
+        errors:
+          - { error_ref: error.invoice.issue.already-issued, code: { case: already-issued } }
+          - { error_ref: error.invoice.issue.empty-lines, code: { case: empty-lines } }
 domain_packages:
-  - { term: billing, model_refs: [bc.billing], rationale: Everything a customer is billed for, code: { language: rust, package: billing-domain, module: [] } }
-  - { term: invoice, model_refs: [aggregate.invoice], rationale: The invoice and its lines change together, code: { language: rust, package: billing-domain, module: [invoice] } }
+  - { term: Billing, model_refs: [bc.billing], rationale: owns the billing business, code: { language: typescript, package: "@acme/billing-domain", module: [] } }
+  - { term: Invoice, model_refs: [aggregate.invoice], rationale: opens and issues invoices, code: { language: typescript, package: "@acme/billing-domain", module: [invoice] } }
+  - { term: Invoice line, model_refs: [vo.invoice-line], rationale: the amounts an invoice adds up, code: { language: typescript, package: "@acme/billing-domain", module: [invoice, line] } }
 ```
 
-`module` lists the segments below the package root, so the root is `[]`. Every level from the root down is declared. In TypeScript the case strings are the literal union members (`already-issued`); in Rust they are enum variants (`AlreadyIssued`).
+`model_ref` is relative to `docs/ddd`. `success_type` names what a command returns on success: in TypeScript the outcome type holding the new instance and the event, in Rust the event, or an outcome enum when the command recognizes resent requests. A factory rule's success is the aggregate type. `module` lists the segments below the package root, so the root is `[]`. Every level from the root down is declared. In TypeScript the case strings are the literal union members (`already-issued`); in Rust they are enum variants (`AlreadyIssued`).
 
 ### Layer structure
 
 ```yaml
-model_ref: docs/ddd/domain-model.yaml
+model_ref: domain-model.yaml
 layer_structures:
   - context_ref: bc.billing
-    cqrs: true
+    cqrs: false
     packages:
-      - { role: command, code: { language: rust, package: billing-domain } }
-      - { role: query, code: { language: rust, package: billing-query } }
-      - { role: rmu, code: { language: rust, package: billing-rmu } }
+      - { role: command, code: { language: typescript, package: "@acme/billing-domain" } }
+      - { role: command, code: { language: typescript, package: "@acme/billing-use-case" } }
+      - { role: command, code: { language: typescript, package: "@acme/billing-interface-adapter" } }
     dependencies:
-      - { code: { language: rust, package: billing-domain }, depends_on: [] }
-      - { code: { language: rust, package: billing-query }, depends_on: [] }
-      - { code: { language: rust, package: billing-rmu }, depends_on: [{ language: rust, package: billing-domain }, { language: rust, package: billing-query }] }
+      - { code: { language: typescript, package: "@acme/billing-domain" }, depends_on: [] }
+      - { code: { language: typescript, package: "@acme/billing-use-case" }, depends_on: [{ language: typescript, package: "@acme/billing-domain" }] }
+      - { code: { language: typescript, package: "@acme/billing-interface-adapter" }, depends_on: [{ language: typescript, package: "@acme/billing-domain" }, { language: typescript, package: "@acme/billing-use-case" }] }
     ports:
-      - { name: InvoiceRepository, kind: repository, verbs: [find_by_id, store, delete_by_id] }
+      - { name: InvoiceRepository, kind: repository, verbs: [findById, store] }
     repositories:
-      - { name: InvoiceRepository, aggregate_ref: aggregate.invoice, io_unit: single, verbs: [find_by_id, store, delete_by_id], store_semantics: upsert }
+      - { name: InvoiceRepository, aggregate_ref: aggregate.invoice, io_unit: single, verbs: [findById, store], store_semantics: upsert }
     restoration_paths:
       - { aggregate_ref: aggregate.invoice, via: full-constructor }
-    persistence_backend: PostgreSQL
+    persistence_backend: in-memory
 ```
 
 ## Deriving the Model
@@ -152,7 +165,7 @@ Execution model and persistence are independent choices, and both are independen
 | `persistence_method` | `state-sourcing` | The current state is stored; `store` re-persists it with an expected version |
 | | `event-sourcing` | Events are appended; state is rebuilt by replaying declared methods |
 
-State sourcing can still emit domain events. Event sourcing separates deciding (a command checks rules and yields events) from applying (a replay method changes state from a fact and decides nothing).
+Every command that changes state returns the one event it produced, whichever the persistence method. With event sourcing the command changes the state through a declared replay method, and restoring replays the stored events through the same method; the replay method decides nothing.
 
 ## Idempotency and Recovery
 

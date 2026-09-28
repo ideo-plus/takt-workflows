@@ -22,6 +22,7 @@
 | 不変条件を持たない集約がある | REJECT。候補を統合するか格下げする |
 | コマンドが状態効果（`transitions` か `none`）を宣言していない、または宣言と遷移が食い違う | REJECT |
 | コマンドやファクトリ規則にドメインエラーがない、または別の操作が所有するエラーを指している | REJECT |
+| コマンドがイベントを宣言していない、2 つ以上宣言している（`events: [...]`）、またはその `event` を別のコマンドが生む | REJECT。コマンドが生むイベントはちょうど 1 つ（`event: <イベント ID>`） |
 | `effect: accumulation` のコマンドに `command-id-memory` の冪等性戦略がない | REJECT |
 | 要素 ID を改名した、廃止後に再利用した、または `<kind>.<segments>` の形式に従っていない | REJECT |
 | 分割・統合・廃止が `lineage` に記録されていない | REJECT |
@@ -34,7 +35,7 @@
 |------|------|
 | モデルの集約に写像の行がない | REJECT |
 | 集約が `programming_model`（`actor` か `class`）と `persistence_method`（`state-sourcing` か `event-sourcing`）を宣言していない | REJECT |
-| コマンドやファクトリ規則に写像されたメソッドとエラー型がない、またはドメインエラーに写像された case がない | REJECT |
+| コマンドやファクトリ規則に写像されたメソッドとエラー型がない、コマンドに写像された `success_type` がない、またはドメインエラーに写像された case がない | REJECT |
 | イベントソーシングの集約が `replay_methods` にないメソッドでイベントを適用している | REJECT |
 | 写像の行が ID を引用せず要素を再定義している | REJECT |
 | ドメインコードを置くパッケージやモジュールが `domain_packages` にない、またはその親の階層がない | REJECT |

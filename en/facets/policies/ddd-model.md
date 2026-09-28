@@ -22,6 +22,7 @@ Keep one domain model declaration as the only definition of the business concept
 | An aggregate has no invariant | REJECT. Merge or demote the candidate |
 | A command does not state its state effect (`transitions` or `none`), or the stated effect disagrees with its transitions | REJECT |
 | A command or factory rule has no domain error, or names an error owned by another operation | REJECT |
+| A command declares no event or more than one (`events: [...]`), or its `event` is produced by another command | REJECT. A command produces exactly one event: `event: <event id>` |
 | A command with `effect: accumulation` has no `command-id-memory` idempotency strategy | REJECT |
 | An element ID is renamed, reused after retirement, or does not follow `<kind>.<segments>` | REJECT |
 | A split, merge, or deprecation is not recorded in `lineage` | REJECT |
@@ -34,7 +35,7 @@ Keep one domain model declaration as the only definition of the business concept
 |-----------|----------|
 | An aggregate of the model has no mapping row | REJECT |
 | An aggregate does not declare `programming_model` (`actor` or `class`) and `persistence_method` (`state-sourcing` or `event-sourcing`) | REJECT |
-| A command or factory rule has no mapped method and error type, or a domain error has no mapped case | REJECT |
+| A command or factory rule has no mapped method and error type, a command has no mapped `success_type`, or a domain error has no mapped case | REJECT |
 | An event-sourced aggregate applies events through methods not listed in `replay_methods` | REJECT |
 | A mapping row redefines an element instead of citing its ID | REJECT |
 | A package or module that holds domain code is missing from `domain_packages`, or its parent levels are missing | REJECT |

@@ -27,6 +27,7 @@ Apply the DDD layer rules to Rust with its own visibility, construction, mutatio
 | Criterion | Judgment |
 |-----------|----------|
 | A `&mut self` method is not mapped to a declared command or a declared replay method | REJECT |
+| A mapped command takes `&self` or `self` and returns its event without changing the aggregate | REJECT. The command takes `&mut self`, changes the state, and returns `Result<Event, Error>` |
 | `Cell`, `RefCell`, `Mutex`, `RwLock`, or atomics hold business state of a domain type | REJECT. Use them only for technical caches, and say so |
 | A value object or Domain Primitive has a `&mut self` method | REJECT |
 
