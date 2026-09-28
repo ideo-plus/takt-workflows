@@ -32,6 +32,7 @@ Keep use cases as orchestrators that load, ask the domain to decide, and persist
 | An additive (accumulating) command has no request-ID memory, or remembers only the last request | REJECT |
 | An unknown persistence outcome is retried without reconciliation by request ID or equivalent evidence | REJECT |
 | First success, duplicate success, and rejection are not distinguishable to the caller | REJECT |
+| A retry of an already-applied request ID is checked after state or invariant rejections, so it can come back as a rejection (`AlreadyIssued`) once later commands change the state | REJECT. Recognize the remembered request ID first and return duplicate success |
 | Events or new state are published before persistence succeeds | REJECT |
 | Upsert is presented as sufficient proof of idempotency | REJECT. State the idempotency strategy |
 
