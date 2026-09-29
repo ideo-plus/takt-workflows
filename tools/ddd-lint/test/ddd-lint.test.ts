@@ -204,6 +204,16 @@ describe("TypeScript", () => {
     ]);
   });
 
+  test("a repository port declared in a domain package is reported", () => {
+    const result = lint(sample.files, (files) => {
+      files[invoice] += "\nexport interface InvoiceRepository {\n  findById(invoiceId: string): Invoice | undefined;\n}\n";
+    });
+    expect(result.unavailable).toEqual([]);
+    expect(result.findings.filter((entry) => entry.rule_id === "port-placement").map((entry) => `${entry.check}: ${entry.message}`)).toEqual([
+      "typescript-domain: repository port InvoiceRepository is declared in the domain layer; declare it in the use-case layer",
+    ]);
+  });
+
   test("a Domain Primitive factory that does not return Result is reported", () => {
     const result = lint(sample.files, (files) =>
       replace(files, "packages/command/billing-domain/src/customer-id.ts", "static parse(value: string): Result<CustomerId, ParseCustomerIdError>", "static parse(value: string): CustomerId"),
@@ -369,6 +379,16 @@ impl ObservesTotal for InvoiceLine {
     const result = lint(sample.files, (files) => replace(files, invoice, "    lines: InvoiceLines,\n    issued: bool,", "    lines: Vec<InvoiceLine>,\n    issued: bool,"));
     expect(result.findings.filter((entry) => entry.rule_id === "collection").map((entry) => entry.message)).toEqual([
       "Invoice holds lines as a bare collection (Vec<InvoiceLine>); wrap it in a first-class collection type",
+    ]);
+  });
+
+  test("a repository port declared in a domain crate is reported", () => {
+    const result = lint(sample.files, (files) => {
+      files[invoice] += "\npub trait InvoiceRepository {\n    fn find_by_id(&self, invoice_id: &str) -> Option<Invoice>;\n}\n";
+    });
+    expect(result.unavailable).toEqual([]);
+    expect(result.findings.filter((entry) => entry.rule_id === "port-placement").map((entry) => `${entry.check}: ${entry.message}`)).toEqual([
+      "rust-domain: repository port InvoiceRepository is declared in the domain layer; declare it in the use-case layer",
     ]);
   });
 

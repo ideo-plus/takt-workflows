@@ -323,7 +323,7 @@ export { InvoiceLines } from "./invoice/lines.ts";
 
 ## ユースケースとインターフェイスアダプタ
 
-リポジトリポートは `<Aggregate>Repository` という名前の `interface` で、ユースケースのパッケージ（またはドメインのパッケージ）に宣言する。検索は自分のエラー型を返す。
+リポジトリポートは `<Aggregate>Repository` という名前の `interface` で、ユースケースのパッケージに宣言し、ドメインのパッケージには宣言しない。検索は自分のエラー型を返す。
 
 ```ts
 import type { Invoice } from "@acme/billing-domain";

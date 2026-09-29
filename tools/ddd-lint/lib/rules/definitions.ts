@@ -71,6 +71,15 @@ export const RULES: readonly RuleDefinition[] = [
     per_file: true,
   },
   {
+    rule_id: "port-placement",
+    name: "use-case-port",
+    statement: "a repository port is declared in the domain layer instead of the use-case layer",
+    target_layers: ["domain"],
+    requires_model: false,
+    facts: ["traits"],
+    per_file: true,
+  },
+  {
     rule_id: "c",
     name: "incomplete-construction",
     statement: "domain type is constructed outside the full constructor",

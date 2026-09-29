@@ -300,7 +300,7 @@ The mapping lists `apply_issued` in `replay_methods` with `event_ref: event.invo
 
 ## Ports, Use Cases, and Adapters
 
-The repository port is a trait named after the aggregate, declared in the use-case crate. A use case holds it through a trait object (or a generic parameter for static dispatch), stores the invoice the command changed, and returns the event for the caller to publish after persistence.
+The repository port is a trait named after the aggregate, declared in the use-case crate and never in a domain crate. A use case holds it through a trait object (or a generic parameter for static dispatch), stores the invoice the command changed, and returns the event for the caller to publish after persistence.
 
 ```rust
 use billing_domain::invoice::Invoice;

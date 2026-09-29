@@ -48,7 +48,7 @@ Judges the code of the domain layer (aggregates, Entities, value objects, Domain
 | Criterion | Judgment |
 |-----------|----------|
 | Domain-layer or use-case-layer code reads a domain object's state through a getter and compares, calculates, or branches on it | REJECT. Move the decision into an operation of the object that owns the state |
-| A getter result is passed unchanged to a repository port method, directly or through an immutable local | OK |
+| Use-case code passes a getter result unchanged to a repository port method, directly or through an immutable local | OK |
 | A query method returns a copy or a read-only value for display or persistence | OK |
 
 ## Business Failures

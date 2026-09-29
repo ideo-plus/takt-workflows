@@ -192,6 +192,25 @@ export function ruleCollection(inspection: TsInspection, target: TsTarget): Find
   return findings;
 }
 
+// --- (port-placement) a port belongs to the use-case layer ----------------------------------------
+
+/**
+ * A repository port — an interface, or a type literal alias, named `…Repository` — declared in a
+ * domain source. Ports belong to the use-case layer: the use case loads and stores through them, and
+ * the domain never declares, holds or calls one. A port is known by its name, as rules (l) and (m)
+ * know it.
+ */
+export function rulePortPlacement(inspection: TsInspection, target: TsTarget): FindingInput[] {
+  return factsOf(inspection, target.file)
+    .declarations.filter((declaration) => isPortDeclaration(declaration) && declaration.name.endsWith("Repository"))
+    .map((declaration) => ({
+      rule_id: "port-placement",
+      file: target.file,
+      message: `repository port ${declaration.name} is declared in the domain layer; declare it in the use-case layer`,
+      line: declaration.span.start_line,
+    }));
+}
+
 // --- (c) incomplete construction -----------------------------------------------------------------
 
 export function ruleC(inspection: TsInspection, target: TsTarget): FindingInput[] {
@@ -243,8 +262,8 @@ function sameSpan(a: Span, b: Span): boolean {
 /**
  * Whether the result of a getter call written in a use-case source reaches nothing but repository
  * ports: every call it is handed to unchanged is a method a port declares — an interface or a type
- * literal alias of the domain or use-case layer named `…Repository` — called on a receiver stated to
- * be that port. What
+ * literal alias of the use-case layer named `…Repository` — called on a receiver stated to be that
+ * port. What
  * cannot be proven so leaves the getter call a finding rather than undecided, as the Rust gate
  * leaves an unproven forwarding.
  */
@@ -265,7 +284,7 @@ function isRepositoryForwarding(
     const { declaration, pkg } = port.entry;
     return (
       isPortDeclaration(declaration) &&
-      (pkg.assignment.layer === "domain" || pkg.assignment.layer === "use-case") &&
+      pkg.assignment.layer === "use-case" &&
       declaration.name.endsWith("Repository") &&
       declaration.members.some((member) => member.kind === "method" && member.name === consumer.callee_text)
     );
