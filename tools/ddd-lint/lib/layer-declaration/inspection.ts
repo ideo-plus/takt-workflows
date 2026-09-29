@@ -38,11 +38,22 @@ function carriesDomainMarker(identity: PackageIdentity): boolean {
   return packageWord(bare) !== bare.replace(/-/g, "_");
 }
 
-function checkRequiredItems(report: LayerReport, structure: LayerStructure, where: string): void {
+function checkRequiredItems(
+  report: LayerReport,
+  structure: LayerStructure,
+  domainPackages: ReadonlySet<string>,
+  where: string,
+): void {
+  const aggregateOnlyWithoutPersistence =
+    structure.persistence_backend === "none" &&
+    structure.ports.length === 0 &&
+    structure.repositories.length === 0 &&
+    structure.packages.length > 0 &&
+    structure.packages.every((entry) => domainPackages.has(identityKey(entry.code)));
   if (
     structure.dependencies.length === 0 ||
-    structure.ports.length === 0 ||
-    structure.repositories.length === 0 ||
+    (!aggregateOnlyWithoutPersistence && structure.ports.length === 0) ||
+    (!aggregateOnlyWithoutPersistence && structure.repositories.length === 0) ||
     structure.restoration_paths.length === 0
   )
     report.add(
@@ -115,11 +126,13 @@ export function inspectLayerDeclaration(
   declaration: LayerDeclaration,
   model: DomainModel,
   file: string,
+  domainPackages: readonly PackageIdentity[],
 ): readonly FindingInput[] {
   const report = new LayerReport(file);
+  const domainPackageKeys = new Set(domainPackages.map(identityKey));
   for (const structure of declaration.layer_structures) {
     const where = structureWhere(structure.context_ref);
-    checkRequiredItems(report, structure, where);
+    checkRequiredItems(report, structure, domainPackageKeys, where);
     checkDependencyRows(report, structure, where);
     if (structure.cqrs && !structure.packages.some((entry) => entry.role === "query"))
       report.add(LAYER_RULES.cqrsSides, `${where}: the context is cqrs but declares no query-side package`);

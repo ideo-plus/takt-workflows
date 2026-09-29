@@ -14,6 +14,8 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync, realpathSync, statSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
+import { formatReportCheck } from './sandbox-report.mjs';
+import { checkStepRouting } from './sandbox-routing.mjs';
 
 // ---------------------------------------------------------------- arguments
 const [command, ...rest] = process.argv.slice(2);
@@ -182,7 +184,6 @@ function verify() {
   const runtime = YAML.parse(readFileSync(runtimePath(project), 'utf8'));
   const provider = runtime.provider ?? {};
   const profiles = provider.profiles ?? {};
-  const stepTargets = provider.targets?.steps ?? {};
   const companionTargets = provider.targets?.companions ?? {};
   const describe = (name) => {
     const p = profiles[name];
@@ -192,11 +193,6 @@ function verify() {
     const names = assignment?.ladder ?? (assignment?.profile ? [assignment.profile] : []);
     return { names, models: names.map(describe) };
   };
-  const expectedForStep = (key) => {
-    if (stepTargets[key]) return { source: key, ...allowedFor(stepTargets[key]) };
-    return { source: 'defaults', ...allowedFor(provider.defaults) };
-  };
-
   const checks = [];
   const add = (group, name, ok, detail) => checks.push({ group, name, ok, detail });
 
@@ -220,14 +216,15 @@ function verify() {
 
     // Step routing.
     const starts = events.filter((e) => e.type === 'step_start' && e.model);
+    const configPath = join(project, '.takt', 'config.yaml');
+    const config = existsSync(configPath) ? YAML.parse(readFileSync(configPath, 'utf8')) : {};
+    const routing = checkStepRouting(events, runtime, config);
     const visited = new Set();
-    for (const e of starts) {
+    for (const [index, e] of starts.entries()) {
       const key = `${e.workflow}/${e.step}`;
       visited.add(key);
-      const expected = expectedForStep(key);
-      const actual = `${e.provider}/${e.model}`;
-      add('routing', `${key} (#${e.iteration ?? '?'})`, expected.models.includes(actual),
-        `${actual}  expected ${expected.models.join(' | ')} [${expected.source}: ${expected.names.join(' > ')}]`);
+      const check = routing[index];
+      add('routing', `${key} (#${e.iteration ?? '?'})`, check?.ok === true, check?.detail ?? 'no routing result');
     }
     // Parallel sub-steps (the reviewers) log phase events instead of step_start.
     for (const e of events.filter((ev) => ev.type === 'phase_start' && ev.workflow && ev.step)) visited.add(`${e.workflow}/${e.step}`);
@@ -290,7 +287,7 @@ function verify() {
     '',
     '| | group | check | detail |',
     '|---|---|---|---|',
-    ...checks.map((c) => `| ${c.ok ? 'ok' : '**NG**'} | ${c.group} | ${c.name} | ${String(c.detail).replace(/\|/g, '\\|')} |`),
+    ...checks.map(formatReportCheck),
     '',
   ];
   const report = lines.join('\n');

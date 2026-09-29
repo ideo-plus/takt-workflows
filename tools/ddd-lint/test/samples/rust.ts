@@ -11,6 +11,11 @@
 
 import { DOMAIN_MODEL } from "./typescript.ts";
 
+export const RUST_DOMAIN_MODEL = DOMAIN_MODEL.replace(
+  "          - { element_id: primitive.customer-id, kind: domain-primitive, name: CustomerId, aggregate: aggregate.invoice, attributes: [{ name: value, type: string, required: true }] }",
+  '          - { element_id: primitive.customer-id, kind: domain-primitive, name: CustomerId, aggregate: aggregate.invoice, attributes: [{ name: value, type: string, required: true }] }\n          - { element_id: primitive.money, kind: domain-primitive, name: Money, aggregate: aggregate.invoice, unconstrained: "individual line amounts may be positive, zero, or negative", attributes: [{ name: value, type: decimal, required: true }] }',
+);
+
 export type RustLayout = "file" | "mod-rs";
 
 export const RUST_LAYOUTS: readonly RustLayout[] = ["file", "mod-rs"];
@@ -51,22 +56,43 @@ impl CustomerId {
 `;
 
 export const RUST_INVOICE_LINE = `#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Money(i64);
+
+impl Money {
+    pub fn of(value: i64) -> Self {
+        Money(value)
+    }
+
+    pub fn zero() -> Self {
+        Money(0)
+    }
+
+    pub fn add(&mut self, rhs: &Money) {
+        self.0 += rhs.0;
+    }
+
+    pub fn is_negative(&self) -> bool {
+        self.0 < 0
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InvoiceLine {
-    amount: i64,
+    amount: Money,
 }
 
 impl InvoiceLine {
     pub fn of(amount: i64) -> Self {
-        InvoiceLine { amount }
+        InvoiceLine { amount: Money::of(amount) }
     }
 
-    pub fn add_to(&self, total: &mut i64) {
-        *total += self.amount;
+    pub fn with_amount<R>(&self, use_amount: impl FnOnce(&Money) -> R) -> R {
+        use_amount(&self.amount)
     }
 }
 `;
 
-export const RUST_INVOICE_LINES = `use super::line::InvoiceLine;
+export const RUST_INVOICE_LINES = `use super::line::{InvoiceLine, Money};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InvoiceLines(Vec<InvoiceLine>);
@@ -80,10 +106,10 @@ impl InvoiceLines {
         self.0.push(line);
     }
 
-    pub fn total(&self) -> i64 {
-        let mut total = 0;
+    pub fn total(&self) -> Money {
+        let mut total = Money::zero();
         for line in &self.0 {
-            line.add_to(&mut total);
+            line.with_amount(|amount| total.add(amount));
         }
         total
     }
@@ -136,7 +162,7 @@ pub mod line;
 pub mod lines;
 
 use self::add_line_requests::AddLineRequests;
-use self::line::InvoiceLine;
+use self::line::{InvoiceLine, Money};
 use self::lines::InvoiceLines;
 use crate::customer_id::CustomerId;
 
@@ -223,7 +249,7 @@ impl Invoice {
     }
 
     pub fn open(id: &str, customer: CustomerId, lines: InvoiceLines) -> Result<Self, OpenInvoiceError> {
-        if lines.total() < 0 {
+        if lines.total().is_negative() {
             return Err(OpenInvoiceError::NegativeTotal);
         }
         Ok(Self::new(id.to_string(), customer, lines, false, AddLineRequests::of(Vec::new())))
@@ -236,7 +262,7 @@ impl Invoice {
         issued: bool,
         add_line_requests: AddLineRequests,
     ) -> Result<Self, CorruptInvoiceState> {
-        if (issued && lines.is_empty()) || lines.total() < 0 {
+        if (issued && lines.is_empty()) || lines.total().is_negative() {
             return Err(CorruptInvoiceState);
         }
         Ok(Self::new(id.to_string(), customer, lines, issued, add_line_requests))
@@ -250,8 +276,8 @@ impl Invoice {
             return Err(AddInvoiceLineError::AlreadyIssued);
         }
         let mut total = self.lines.total();
-        line.add_to(&mut total);
-        if total < 0 {
+        line.with_amount(|amount| total.add(amount));
+        if total.is_negative() {
             return Err(AddInvoiceLineError::NegativeTotal);
         }
         self.lines.add(line.clone());
@@ -274,7 +300,7 @@ impl Invoice {
         &self.customer == customer
     }
 
-    pub fn total(&self) -> i64 {
+    pub fn total(&self) -> Money {
         self.lines.total()
     }
 
@@ -429,7 +455,7 @@ export const RUST_AGGREGATE_MAPPING = [
   "domain_packages:",
   `  - { term: Billing, model_refs: [bc.billing], rationale: owns the billing business, code: ${location([])} }`,
   `  - { term: Invoice, model_refs: [aggregate.invoice], rationale: opens and issues invoices, code: ${location(["invoice"])} }`,
-  `  - { term: Invoice line, model_refs: [vo.invoice-line], rationale: the amounts an invoice adds up, code: ${location(["invoice", "line"])} }`,
+  `  - { term: Invoice line, model_refs: [vo.invoice-line, primitive.money], rationale: the amounts an invoice adds up, code: ${location(["invoice", "line"])} }`,
   `  - { term: Invoice lines, model_refs: [vo.invoice-line], rationale: the lines of one invoice and their total, code: ${location(["invoice", "lines"])} }`,
   `  - { term: Add-line requests, model_refs: [command.invoice.add-line], rationale: the add-line requests an invoice has applied, code: ${location(["invoice", "add_line_requests"])} }`,
   `  - { term: Customer ID, model_refs: [primitive.customer-id], rationale: identifies the customer an invoice bills, code: ${location(["customer_id"])} }`,
@@ -472,7 +498,7 @@ export interface RustSample {
 export function rustSample(layout: RustLayout): RustSample {
   const files: Record<string, string> = {
     ".ddd.toml": `languages = ["rust"]\n\n[rust]\nmodule_layout = "${layout}"\n`,
-    "docs/ddd/domain-model.yaml": DOMAIN_MODEL,
+    "docs/ddd/domain-model.yaml": RUST_DOMAIN_MODEL,
     "docs/ddd/aggregate-mapping.yaml": RUST_AGGREGATE_MAPPING,
     "docs/ddd/layer-structure.yaml": RUST_LAYER_STRUCTURE,
     "Cargo.toml": WORKSPACE_MANIFEST,

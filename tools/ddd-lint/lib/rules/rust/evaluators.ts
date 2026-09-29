@@ -178,8 +178,7 @@ function producedType(returnTypeText: string): string {
 }
 
 /**
- * A domain type changes a value through `&mut`: its own state through `&mut self`, a value it adds
- * itself to through a `&mut` parameter. A method taking `&self` or `self` that hands back a new
+ * A domain type changes its own state through `&mut self`. A method taking `&self` or `self` that hands back a new
  * instance of its own type, or a changed copy of a value it took by value, is the copy-on-change style
  * Rust code does not use; so are the operator traits whose method returns a new value.
  */
@@ -190,6 +189,18 @@ function ruleInPlace(target: InspectionTarget, context: InspectionContext): Find
   for (const type of context.program.types.filter((entry) => entry.kind !== "trait")) {
     for (const { method, trait, file: methodFile } of type.methods) {
       if (methodFile !== file) continue;
+      const externalMutable = method.params.find(
+        (param) => param.name !== "self" && /^&\s*(?:'[^\s]+\s*)?mut\s+/.test(param.type_text.trim()),
+      );
+      if (externalMutable !== undefined)
+        out.push(
+          finding(
+            "in-place",
+            file,
+            `${type.name}::${method.name} changes a &mut argument it received; change the value itself through &mut self instead`,
+            method.line,
+          ),
+        );
       if (trait !== undefined) {
         const operator = trait.replace(/<.*$/s, "").split("::").pop()?.trim() ?? "";
         if (COPYING_OPERATORS.has(operator))
@@ -208,7 +219,12 @@ function ruleInPlace(target: InspectionTarget, context: InspectionContext): Find
         );
       else if (copied !== undefined)
         out.push(
-          finding("in-place", file, `${type.name}::${method.name} returns a changed copy of ${copied.name}; take it as &mut ${copied.type_text.trim()} and change it in place`, method.line),
+          finding(
+            "in-place",
+            file,
+            `${type.name}::${method.name} returns a changed copy of ${copied.name}; make that value the receiver and change it through &mut self instead`,
+            method.line,
+          ),
         );
     }
   }

@@ -23,6 +23,7 @@ Rust では、変えるものを `&mut` で受け取り、その場で変える�
 | 基準 | 判定 |
 |------|------|
 | `&self` や `self` を取り、自分の型の新しいインスタンス（`Self`、`Result<Self, E>`、`Option<Self>`）を返すメソッドがある | REJECT。`&mut self` を取ってその場で変える。戻り値は `()`、失敗し得るなら `Result<(), E>` |
-| 値で受け取った引数を変えた複製として返すメソッドがある（`fn add_to(&self, total: i64) -> i64`） | REJECT。変わるものを `&mut` で受け取って変える（`fn add_to(&self, total: &mut i64)`） |
+| 値で受け取った引数を変更後の複製として返すメソッドがある（`fn add_to(&self, total: Money) -> Money`） | REJECT。変更する値自身を受け手とし、`&mut self` で変更する |
+| 外部の可変参照引数を変更するメソッドがある（`fn add_to(&self, total: &mut Money)`） | REJECT。変わる値自身を `&mut self` で変更する。この規則は構文を判定するもので、引数を実際に変更する文までは証明しない |
 | ドメインの型が `Add`、`Sub`、`Mul`、`Div`、`Rem` を実装している | REJECT。新しい値を返す演算子ではなく、`AddAssign` などのその場で変える演算子を実装する |
 | `&self` を取る問い合わせが、自分とは別の型の値（合計、表示や永続化のための複製）を返す | OK |

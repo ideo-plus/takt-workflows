@@ -157,6 +157,8 @@ layer_structures:
     persistence_backend: in-memory
 ```
 
+An aggregate-only context with no persistence still declares its package, dependency row, and restoration path. It may explicitly declare `ports: []`, `repositories: []`, and `persistence_backend: none`.
+
 ## Deriving the Model
 
 The model is derived from behavior, not from data tables: stories give past-tense domain events, each event has the command and actor that produce it, events that change the same state group into an aggregate, and the aggregate's invariant explains why they belong together.

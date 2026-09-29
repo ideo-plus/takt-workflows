@@ -10,7 +10,7 @@ pub mod line;
 pub mod lines;
 
 use self::add_line_requests::AddLineRequests;
-use self::line::InvoiceLine;
+use self::line::{InvoiceLine, Money};
 use self::lines::InvoiceLines;
 use crate::customer_id::CustomerId;
 
@@ -97,7 +97,7 @@ impl Invoice {
     }
 
     pub fn open(id: &str, customer: CustomerId, lines: InvoiceLines) -> Result<Self, OpenInvoiceError> {
-        if lines.total() < 0 {
+        if lines.total().is_negative() {
             return Err(OpenInvoiceError::NegativeTotal);
         }
         Ok(Self::new(id.to_string(), customer, lines, false, AddLineRequests::of(Vec::new())))
@@ -110,7 +110,7 @@ impl Invoice {
         issued: bool,
         add_line_requests: AddLineRequests,
     ) -> Result<Self, CorruptInvoiceState> {
-        if (issued && lines.is_empty()) || lines.total() < 0 {
+        if (issued && lines.is_empty()) || lines.total().is_negative() {
             return Err(CorruptInvoiceState);
         }
         Ok(Self::new(id.to_string(), customer, lines, issued, add_line_requests))
@@ -124,8 +124,8 @@ impl Invoice {
             return Err(AddInvoiceLineError::AlreadyIssued);
         }
         let mut total = self.lines.total();
-        line.add_to(&mut total);
-        if total < 0 {
+        line.with_amount(|amount| total.add(amount));
+        if total.is_negative() {
             return Err(AddInvoiceLineError::NegativeTotal);
         }
         self.lines.add(line.clone());
@@ -148,7 +148,7 @@ impl Invoice {
         &self.customer == customer
     }
 
-    pub fn total(&self) -> i64 {
+    pub fn total(&self) -> Money {
         self.lines.total()
     }
 
@@ -158,30 +158,51 @@ impl Invoice {
 }
 ```
 
-`restore` reports a corrupt state with its own type because it is not a business failure. `add_line` remembers the request IDs it applied and recognizes a resent one before any other check: it returns `AddInvoiceLineOutcome::Duplicate`, changes nothing, and produces no event, so the event is never published twice. It checks the new total before it changes anything. Events are domain types too: their fields are private, they are built by their own `new` inside the aggregate's module, and they offer read-only accessors to the code that publishes them. The customer is the Domain Primitive `CustomerId`, and the lines and the applied request IDs are the first-class collections `InvoiceLines` and `AddLineRequests`. The invoice ID and the amounts stay `&str` / `i64` only to keep the example short; real code wraps them the same way.
+`restore` reports a corrupt state with its own type because it is not a business failure. `add_line` remembers the request IDs it applied and recognizes a resent one before any other check: it returns `AddInvoiceLineOutcome::Duplicate`, changes nothing, and produces no event, so the event is never published twice. It checks the new total before it changes anything. Events are domain types too: their fields are private, they are built by their own `new` inside the aggregate's module, and they offer read-only accessors to the code that publishes them. The customer is the Domain Primitive `CustomerId`, the line amounts are the Domain Primitive `Money`, and the lines and the applied request IDs are the first-class collections `InvoiceLines` and `AddLineRequests`. The invoice ID stays `&str` only to keep the example short.
 
 ## Changing in Place
 
-What changes is taken as `&mut` and changed in place, whatever kind of domain type it is. A value object, Domain Primitive, or collection that changes takes `&mut self` and returns `()`, or `Result<(), E>` when the change can fail; it does not take `&self` or `self` and hand back a new instance, and it does not implement operators such as `Add` that return a new value. Ownership keeps this safe: a value shared through `&` cannot change, and a caller that needs the value before the change clones it first. The `&mut self` methods of the values inside an aggregate are not commands; the aggregate's commands call them.
+What changes is taken as `&mut` and changed in place, whatever kind of domain type it is. A value object, Domain Primitive, or collection that changes takes `&mut self` and returns `()`, or `Result<(), E>` when the change can fail; it does not take `&self` or `self` and hand back a new instance, and it does not implement operators such as `Add` that return a new value. A domain method must not mutate an external `&mut` argument; the receiver owns the change. The in-place rule detects that forbidden parameter shape syntactically, but cannot prove which statements in the body mutate it. Ownership keeps this safe: a value shared through `&` cannot change, and a caller that needs the value before the change clones it first. The `&mut self` methods of the values inside an aggregate are not commands; the aggregate's commands call them.
 
 ```rust
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Money(i64);
+
+impl Money {
+    pub fn of(value: i64) -> Self {
+        Money(value)
+    }
+
+    pub fn zero() -> Self {
+        Money(0)
+    }
+
+    pub fn add(&mut self, rhs: &Money) {
+        self.0 += rhs.0;
+    }
+
+    pub fn is_negative(&self) -> bool {
+        self.0 < 0
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InvoiceLine {
-    amount: i64,
+    amount: Money,
 }
 
 impl InvoiceLine {
     pub fn of(amount: i64) -> Self {
-        InvoiceLine { amount }
+        InvoiceLine { amount: Money::of(amount) }
     }
 
-    pub fn add_to(&self, total: &mut i64) {
-        *total += self.amount;
+    pub fn with_amount<R>(&self, use_amount: impl FnOnce(&Money) -> R) -> R {
+        use_amount(&self.amount)
     }
 }
 ```
 
-`add_to` changes the total, not the line, so the total is the `&mut` parameter and the line is `&self`. Nothing is read out of the line; the line adds itself.
+`Money` is a Domain Primitive whose model declaration marks individual line amounts `unconstrained` with a rationale: a negative line can be balanced by another line, while the aggregate keeps the total non-negative. `Money::add` changes the receiving `Money` through `&mut self`; `InvoiceLine` supplies the Domain Primitive to an operation without exposing a bare value or a getter. The in-place rule rejects methods that receive an external `&mut` value, but permits ordinary `&self` queries.
 
 ## Domain Primitives
 
@@ -214,7 +235,7 @@ A primitive without a rule declares `unconstrained` with a rationale in the mode
 A domain type that holds a collection beside other state wraps it in a first-class collection: a type whose whole state is the collection, which owns the operations and decisions on it. `InvoiceLines` adds a line in place and totals the lines; the aggregate never touches the `Vec`.
 
 ```rust
-use super::line::InvoiceLine;
+use super::line::{InvoiceLine, Money};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InvoiceLines(Vec<InvoiceLine>);
@@ -228,10 +249,10 @@ impl InvoiceLines {
         self.0.push(line);
     }
 
-    pub fn total(&self) -> i64 {
-        let mut total = 0;
+    pub fn total(&self) -> Money {
+        let mut total = Money::zero();
         for line in &self.0 {
-            line.add_to(&mut total);
+            line.with_amount(|amount| total.add(amount));
         }
         total
     }
@@ -376,8 +397,8 @@ impl InvoiceRepository for InMemoryInvoiceRepository {
 
 | Layout | Module with children | Leaf |
 |--------|---------------------|------|
-| `file` | `src/invoice.rs` + `src/invoice/line.rs` | `src/money.rs` |
-| `mod-rs` | `src/invoice/mod.rs` + `src/invoice/line.rs` | `src/money.rs` |
+| `file` | `src/invoice.rs` | `src/invoice/line.rs` |
+| `mod-rs` | `src/invoice/mod.rs` | `src/invoice/line.rs` |
 
 `lib.rs`, `main.rs`, and the roots Cargo names keep their names in both layouts. The layout applies to every package, test, example, bench, and build script. A `#[cfg(test)]` module, in its own file or inline, is test code and is not checked as business code.
 
