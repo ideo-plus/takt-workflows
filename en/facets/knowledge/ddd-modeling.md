@@ -56,7 +56,7 @@ bounded_contexts:
               - { element_id: error.invoice.add-line.already-issued, name: AlreadyIssued, operation: command.invoice.add-line, condition: the invoice is issued }
               - { element_id: error.invoice.add-line.negative-total, name: NegativeTotal, operation: command.invoice.add-line, condition: the line would make the total negative }
             event: event.invoice.line-added
-            idempotency: { strategy: command-id-memory, retention: multiple, retention_count: 1000, rationale: a retried request must not add its line twice }
+            idempotency: { strategy: command-id-memory, retention: last-one, rationale: "a client sends the next add-line of an invoice only after the previous one is acknowledged, so an older add-line is never resent after a newer one" }
           - element_id: command.invoice.issue
             name: Issue
             aggregate: aggregate.invoice
@@ -127,11 +127,10 @@ domain_packages:
   - { term: Invoice, model_refs: [aggregate.invoice], rationale: opens and issues invoices, code: { language: typescript, package: "@acme/billing-domain", module: [invoice] } }
   - { term: Invoice line, model_refs: [vo.invoice-line], rationale: the amounts an invoice adds up, code: { language: typescript, package: "@acme/billing-domain", module: [invoice, line] } }
   - { term: Invoice lines, model_refs: [vo.invoice-line], rationale: the lines of one invoice and their total, code: { language: typescript, package: "@acme/billing-domain", module: [invoice, lines] } }
-  - { term: Add-line requests, model_refs: [command.invoice.add-line], rationale: the add-line requests an invoice has applied, code: { language: typescript, package: "@acme/billing-domain", module: [invoice, add-line-requests] } }
   - { term: Customer ID, model_refs: [primitive.customer-id], rationale: identifies the customer an invoice bills, code: { language: typescript, package: "@acme/billing-domain", module: [customer-id] } }
 ```
 
-`model_ref` is relative to `docs/ddd`. `success_type` names what a command returns on success: in TypeScript the outcome type holding the new instance and the event, in Rust the event, or an outcome enum when the command recognizes resent requests. A factory rule's success is the aggregate type. `module` lists the segments below the package root, so the root is `[]`. Every level from the root down is declared. In TypeScript the case strings are the literal union members (`already-issued`); in Rust they are enum variants (`AlreadyIssued`).
+`model_ref` is relative to `docs/ddd`. `success_type` names what a command returns on success: in TypeScript the outcome type holding the new instance and the event, in Rust the event, or an outcome enum when the command recognizes resent commands. A factory rule's success is the aggregate type. `module` lists the segments below the package root, so the root is `[]`. Every level from the root down is declared. In TypeScript the case strings are the literal union members (`already-issued`); in Rust they are enum variants (`AlreadyIssued`).
 
 ### Layer structure
 
@@ -189,9 +188,9 @@ Every command that changes state returns the one event it produced, whichever th
 | Condition | Meaning / options |
 |-----------|-------------------|
 | `effect: transition` | Repeating the command finds the target state already reached; the transition itself guards it |
-| `effect: accumulation` | Repeating adds twice; remember command IDs (`command-id-memory`) with a retention of several IDs or a time window |
+| `effect: accumulation` | Repeating adds twice; remember command IDs (`command-id-memory`): the last one (`last-one`) when the rationale states why an older command is never resent after a newer one, otherwise several IDs (`multiple`) or a time window (`time-window`) |
 | Only the last command ID is remembered | Does not stop the resend of C1 after C2 |
-| The persistence outcome is unknown | Reconcile by request ID before retrying |
+| The persistence outcome is unknown | Reconcile by command ID before retrying |
 | A multi-aggregate flow fails midway | Earlier commits remain; recover by re-execution or compensation, which is a new business operation |
 
 | Recovery policy | Meaning |

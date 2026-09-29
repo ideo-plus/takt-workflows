@@ -12,6 +12,7 @@ Defines what the declarations under `docs/ddd/` (domain model, aggregate mapping
 | A command declares no event or more than one (`events: [...]`), or its `event` is produced by another command | REJECT. A command produces exactly one event (`event: <event ID>`) |
 | A command or factory rule has no domain error, or names an error owned by another operation | REJECT |
 | A command with `effect: accumulation` has no `command-id-memory` idempotency strategy | REJECT |
+| A command with `retention: last-one` has no `rationale` stating why an older command is never resent after a newer one (`C1 → C2 → retry C1`) | REJECT. Choose `multiple` or `time-window` when it can be |
 | A Domain Primitive declares neither a value rule (an invariant whose `element` is the primitive and a factory rule whose `target_element` is the primitive) nor that it has none (`unconstrained` with a rationale), or declares both | REJECT. Declare exactly one |
 | An element attribute holds an element of another aggregate as its type instead of its ID | REJECT. Refer to other aggregates by ID |
 | An element ID is renamed, reused after retirement, or does not follow `<kind>.<segments>` | REJECT. A rename changes only `name` |

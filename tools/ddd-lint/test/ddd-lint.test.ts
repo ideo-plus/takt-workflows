@@ -158,7 +158,7 @@ describe("TypeScript", () => {
       replace(
         files,
         invoice,
-        "    const invoice: Invoice = new Invoice(this.#id, this.#customer, this.#lines, true, this.#addLineRequests);",
+        "    const invoice: Invoice = new Invoice(this.#id, this.#customer, this.#lines, true, this.#lastAddLineCommandId);",
         "    this.#issued = true;\n    const invoice: Invoice = this;",
       );
     });
@@ -173,7 +173,7 @@ describe("TypeScript", () => {
       replace(
         files,
         invoice,
-        "        const invoice: Invoice = Invoice.restore(state.id, state.customer, state.lines, true, state.requests);",
+        "        const invoice: Invoice = Invoice.restore(state.id, state.customer, state.lines, true, state.lastAddLineCommandId);",
         "        state.issued = true;\n        const invoice: Invoice = instance;",
       ),
     );
@@ -189,7 +189,7 @@ describe("TypeScript", () => {
         files,
         invoice,
         "        const next: InvoiceLines = state.lines.add(line);",
-        "        const kept: InvoiceLine[] = [];\n        kept.push(line);\n        state.seen.add(requestId);\n        const next: InvoiceLines = state.lines.add(line);",
+        "        const kept: InvoiceLine[] = [];\n        kept.push(line);\n        state.seen.add(commandId);\n        const next: InvoiceLines = state.lines.add(line);",
       ),
     );
     expect(result.findings.map((entry) => `${entry.rule_id}: ${entry.message}`)).toEqual([
@@ -404,6 +404,8 @@ impl ObservesTotal for InvoiceLine {
 
 describe("model files", () => {
   const sample = typeScriptSample("class", "named-file");
+  const LAST_ONE =
+    'idempotency: { strategy: command-id-memory, retention: last-one, rationale: "a client sends the next add-line of an invoice only after the previous one is acknowledged, so an older add-line is never resent after a newer one" }';
 
   test("a command declares exactly one event", () => {
     const result = lint(sample.files, (files) =>
@@ -414,12 +416,21 @@ describe("model files", () => {
     expect(messages.join("\n")).toContain('"event" must be a non-empty string');
   });
 
+  test("keeping only the last command ID states why an older command is never resent", () => {
+    const result = lint(sample.files, (files) =>
+      replace(files, "docs/ddd/domain-model.yaml", LAST_ONE, "idempotency: { strategy: command-id-memory, retention: last-one }"),
+    );
+    expect(result.findings.map((entry) => `${entry.rule_id}: ${entry.message}`)).toEqual([
+      "idempotency.last-one: command command.invoice.add-line keeps only the last command ID (retention last-one) but its rationale does not state why an older command is never resent after a newer one",
+    ]);
+  });
+
   test("an accumulating command without command-id-memory is reported", () => {
     const result = lint(sample.files, (files) =>
       replace(
         files,
         "docs/ddd/domain-model.yaml",
-        "idempotency: { strategy: command-id-memory, retention: multiple, retention_count: 1000, rationale: a retried request must not add its line twice }",
+        LAST_ONE,
         "idempotency: { strategy: none }",
       ),
     );

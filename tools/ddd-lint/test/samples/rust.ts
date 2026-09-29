@@ -3,10 +3,10 @@
  * model files ddd-lint reads.
  *
  * Each project is a Cargo workspace of three crates under `packages/command/`: a domain crate with the
- * `invoice` aggregate and its child modules `invoice::line`, `invoice::lines` and
- * `invoice::add_line_requests`, a use-case crate with the repository port and the use case that
- * issues an invoice, and an interface-adapter crate that implements the port in memory. The model is the one the TypeScript samples use; the mapping spells each method, type and
- * error case the Rust way.
+ * `invoice` aggregate and its child modules `invoice::line` and `invoice::lines`, a use-case crate
+ * with the repository port and the use case that issues an invoice, and an interface-adapter crate
+ * that implements the port in memory. The model is the one the TypeScript samples use; the mapping
+ * spells each method, type and error case the Rust way.
  */
 
 import { DOMAIN_MODEL } from "./typescript.ts";
@@ -124,44 +124,9 @@ impl InvoiceLines {
 }
 `;
 
-export const RUST_ADD_LINE_REQUESTS = `/// The model's retention_count for command.invoice.add-line.
-const RETENTION: usize = 1000;
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AddLineRequests(Vec<String>);
-
-impl AddLineRequests {
-    pub fn of(request_ids: Vec<String>) -> Self {
-        let mut requests = AddLineRequests(request_ids);
-        requests.forget_oldest();
-        requests
-    }
-
-    pub fn contains(&self, request_id: &str) -> bool {
-        self.0.iter().any(|seen| seen == request_id)
-    }
-
-    pub fn add(&mut self, request_id: &str) {
-        self.0.push(request_id.to_string());
-        self.forget_oldest();
-    }
-
-    pub fn to_vec(&self) -> Vec<String> {
-        self.0.clone()
-    }
-
-    fn forget_oldest(&mut self) {
-        let excess = self.0.len().saturating_sub(RETENTION);
-        self.0.drain(..excess);
-    }
-}
-`;
-
-export const RUST_INVOICE = `pub mod add_line_requests;
-pub mod line;
+export const RUST_INVOICE = `pub mod line;
 pub mod lines;
 
-use self::add_line_requests::AddLineRequests;
 use self::line::{InvoiceLine, Money};
 use self::lines::InvoiceLines;
 use crate::customer_id::CustomerId;
@@ -190,21 +155,21 @@ pub struct CorruptInvoiceState;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InvoiceLineAdded {
     invoice_id: String,
-    request_id: String,
+    command_id: String,
     line: InvoiceLine,
 }
 
 impl InvoiceLineAdded {
-    fn new(invoice_id: &str, request_id: &str, line: InvoiceLine) -> Self {
-        InvoiceLineAdded { invoice_id: invoice_id.to_string(), request_id: request_id.to_string(), line }
+    fn new(invoice_id: &str, command_id: &str, line: InvoiceLine) -> Self {
+        InvoiceLineAdded { invoice_id: invoice_id.to_string(), command_id: command_id.to_string(), line }
     }
 
     pub fn invoice_id(&self) -> &str {
         &self.invoice_id
     }
 
-    pub fn request_id(&self) -> &str {
-        &self.request_id
+    pub fn command_id(&self) -> &str {
+        &self.command_id
     }
 
     pub fn line(&self) -> &InvoiceLine {
@@ -227,7 +192,7 @@ impl InvoiceIssued {
     }
 }
 
-/// A request id already applied changes nothing and produces no event.
+/// A command ID already applied changes nothing and produces no event.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AddInvoiceLineOutcome {
     Applied(InvoiceLineAdded),
@@ -240,19 +205,25 @@ pub struct Invoice {
     customer: CustomerId,
     lines: InvoiceLines,
     issued: bool,
-    add_line_requests: AddLineRequests,
+    last_add_line_command_id: Option<String>,
 }
 
 impl Invoice {
-    fn new(id: String, customer: CustomerId, lines: InvoiceLines, issued: bool, add_line_requests: AddLineRequests) -> Self {
-        Invoice { id, customer, lines, issued, add_line_requests }
+    fn new(
+        id: String,
+        customer: CustomerId,
+        lines: InvoiceLines,
+        issued: bool,
+        last_add_line_command_id: Option<String>,
+    ) -> Self {
+        Invoice { id, customer, lines, issued, last_add_line_command_id }
     }
 
     pub fn open(id: &str, customer: CustomerId, lines: InvoiceLines) -> Result<Self, OpenInvoiceError> {
         if lines.total().is_negative() {
             return Err(OpenInvoiceError::NegativeTotal);
         }
-        Ok(Self::new(id.to_string(), customer, lines, false, AddLineRequests::of(Vec::new())))
+        Ok(Self::new(id.to_string(), customer, lines, false, None))
     }
 
     pub fn restore(
@@ -260,16 +231,16 @@ impl Invoice {
         customer: CustomerId,
         lines: InvoiceLines,
         issued: bool,
-        add_line_requests: AddLineRequests,
+        last_add_line_command_id: Option<String>,
     ) -> Result<Self, CorruptInvoiceState> {
         if (issued && lines.is_empty()) || lines.total().is_negative() {
             return Err(CorruptInvoiceState);
         }
-        Ok(Self::new(id.to_string(), customer, lines, issued, add_line_requests))
+        Ok(Self::new(id.to_string(), customer, lines, issued, last_add_line_command_id))
     }
 
-    pub fn add_line(&mut self, request_id: &str, line: InvoiceLine) -> Result<AddInvoiceLineOutcome, AddInvoiceLineError> {
-        if self.add_line_requests.contains(request_id) {
+    pub fn add_line(&mut self, command_id: &str, line: InvoiceLine) -> Result<AddInvoiceLineOutcome, AddInvoiceLineError> {
+        if self.last_add_line_command_id.as_deref() == Some(command_id) {
             return Ok(AddInvoiceLineOutcome::Duplicate);
         }
         if self.issued {
@@ -281,8 +252,8 @@ impl Invoice {
             return Err(AddInvoiceLineError::NegativeTotal);
         }
         self.lines.add(line.clone());
-        self.add_line_requests.add(request_id);
-        Ok(AddInvoiceLineOutcome::Applied(InvoiceLineAdded::new(&self.id, request_id, line)))
+        self.last_add_line_command_id = Some(command_id.to_string());
+        Ok(AddInvoiceLineOutcome::Applied(InvoiceLineAdded::new(&self.id, command_id, line)))
     }
 
     pub fn issue(&mut self) -> Result<InvoiceIssued, IssueInvoiceError> {
@@ -336,19 +307,19 @@ pub enum IssueInvoiceFailure {
 }
 
 pub struct IssueInvoice<'a> {
-    invoices: &'a dyn InvoiceRepository,
+    invoice_repository: &'a dyn InvoiceRepository,
 }
 
 impl<'a> IssueInvoice<'a> {
-    pub fn new(invoices: &'a dyn InvoiceRepository) -> Self {
-        IssueInvoice { invoices }
+    pub fn new(invoice_repository: &'a dyn InvoiceRepository) -> Self {
+        IssueInvoice { invoice_repository }
     }
 
     /// Issues the invoice, stores it, and hands back the event for the caller to publish.
     pub fn execute(&self, invoice_id: &str) -> Result<InvoiceIssued, IssueInvoiceFailure> {
-        let mut invoice = self.invoices.find_by_id(invoice_id).map_err(IssueInvoiceFailure::NotFound)?;
+        let mut invoice = self.invoice_repository.find_by_id(invoice_id).map_err(IssueInvoiceFailure::NotFound)?;
         let issued = invoice.issue().map_err(IssueInvoiceFailure::Rejected)?;
-        self.invoices.store(invoice_id, invoice);
+        self.invoice_repository.store(invoice_id, invoice);
         Ok(issued)
     }
 }
@@ -361,7 +332,6 @@ export const RUST_IN_MEMORY_INVOICE_REPOSITORY = `use std::cell::RefCell;
 use std::collections::HashMap;
 
 use billing_domain::customer_id::CustomerId;
-use billing_domain::invoice::add_line_requests::AddLineRequests;
 use billing_domain::invoice::line::InvoiceLine;
 use billing_domain::invoice::lines::InvoiceLines;
 use billing_domain::invoice::Invoice;
@@ -371,7 +341,7 @@ pub struct InvoiceRecord {
     pub customer: String,
     pub amounts: Vec<i64>,
     pub issued: bool,
-    pub add_line_requests: Vec<String>,
+    pub last_add_line_command_id: Option<String>,
 }
 
 /// The invoices stored here take precedence over the records they were first read from.
@@ -394,8 +364,8 @@ impl InvoiceRepository for InMemoryInvoiceRepository {
         let record = self.records.get(invoice_id).ok_or(InvoiceNotFound)?;
         let customer = CustomerId::parse(&record.customer).expect("corrupt invoice record: customer ID");
         let lines = InvoiceLines::of(record.amounts.iter().map(|amount| InvoiceLine::of(*amount)).collect());
-        let requests = AddLineRequests::of(record.add_line_requests.clone());
-        let invoice = Invoice::restore(invoice_id, customer, lines, record.issued, requests).expect("corrupt invoice record");
+        let invoice = Invoice::restore(invoice_id, customer, lines, record.issued, record.last_add_line_command_id.clone())
+            .expect("corrupt invoice record");
         Ok(invoice)
     }
 
@@ -457,7 +427,6 @@ export const RUST_AGGREGATE_MAPPING = [
   `  - { term: Invoice, model_refs: [aggregate.invoice], rationale: opens and issues invoices, code: ${location(["invoice"])} }`,
   `  - { term: Invoice line, model_refs: [vo.invoice-line, primitive.money], rationale: the amounts an invoice adds up, code: ${location(["invoice", "line"])} }`,
   `  - { term: Invoice lines, model_refs: [vo.invoice-line], rationale: the lines of one invoice and their total, code: ${location(["invoice", "lines"])} }`,
-  `  - { term: Add-line requests, model_refs: [command.invoice.add-line], rationale: the add-line requests an invoice has applied, code: ${location(["invoice", "add_line_requests"])} }`,
   `  - { term: Customer ID, model_refs: [primitive.customer-id], rationale: identifies the customer an invoice bills, code: ${location(["customer_id"])} }`,
   "",
 ].join("\n");
@@ -508,7 +477,6 @@ export function rustSample(layout: RustLayout): RustSample {
     [rustParentModuleFile(layout)]: RUST_INVOICE,
     [`${DOMAIN_DIR}/src/invoice/line.rs`]: RUST_INVOICE_LINE,
     [`${DOMAIN_DIR}/src/invoice/lines.rs`]: RUST_INVOICE_LINES,
-    [`${DOMAIN_DIR}/src/invoice/add_line_requests.rs`]: RUST_ADD_LINE_REQUESTS,
     [`${USE_CASE_DIR}/Cargo.toml`]: crateManifest(USE_CASE_CRATE, [DOMAIN_CRATE]),
     [`${USE_CASE_DIR}/src/lib.rs`]: USE_CASE_LIB,
     [`${USE_CASE_DIR}/src/invoice_repository.rs`]: RUST_INVOICE_REPOSITORY_PORT,

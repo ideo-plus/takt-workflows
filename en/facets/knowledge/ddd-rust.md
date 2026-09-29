@@ -5,11 +5,9 @@
 An aggregate keeps private fields, a private constructor that takes the whole state, validating factories that return the operation's own error enum, a `restore` function for persisted state, and commands that take `&mut self`, change the state, and return the one event they produce. A command that fails changes nothing and produces no event.
 
 ```rust
-pub mod add_line_requests;
 pub mod line;
 pub mod lines;
 
-use self::add_line_requests::AddLineRequests;
 use self::line::{InvoiceLine, Money};
 use self::lines::InvoiceLines;
 use crate::customer_id::CustomerId;
@@ -38,21 +36,21 @@ pub struct CorruptInvoiceState;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InvoiceLineAdded {
     invoice_id: String,
-    request_id: String,
+    command_id: String,
     line: InvoiceLine,
 }
 
 impl InvoiceLineAdded {
-    fn new(invoice_id: &str, request_id: &str, line: InvoiceLine) -> Self {
-        InvoiceLineAdded { invoice_id: invoice_id.to_string(), request_id: request_id.to_string(), line }
+    fn new(invoice_id: &str, command_id: &str, line: InvoiceLine) -> Self {
+        InvoiceLineAdded { invoice_id: invoice_id.to_string(), command_id: command_id.to_string(), line }
     }
 
     pub fn invoice_id(&self) -> &str {
         &self.invoice_id
     }
 
-    pub fn request_id(&self) -> &str {
-        &self.request_id
+    pub fn command_id(&self) -> &str {
+        &self.command_id
     }
 
     pub fn line(&self) -> &InvoiceLine {
@@ -75,7 +73,7 @@ impl InvoiceIssued {
     }
 }
 
-/// A request id already applied changes nothing and produces no event.
+/// A command ID already applied changes nothing and produces no event.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AddInvoiceLineOutcome {
     Applied(InvoiceLineAdded),
@@ -88,19 +86,25 @@ pub struct Invoice {
     customer: CustomerId,
     lines: InvoiceLines,
     issued: bool,
-    add_line_requests: AddLineRequests,
+    last_add_line_command_id: Option<String>,
 }
 
 impl Invoice {
-    fn new(id: String, customer: CustomerId, lines: InvoiceLines, issued: bool, add_line_requests: AddLineRequests) -> Self {
-        Invoice { id, customer, lines, issued, add_line_requests }
+    fn new(
+        id: String,
+        customer: CustomerId,
+        lines: InvoiceLines,
+        issued: bool,
+        last_add_line_command_id: Option<String>,
+    ) -> Self {
+        Invoice { id, customer, lines, issued, last_add_line_command_id }
     }
 
     pub fn open(id: &str, customer: CustomerId, lines: InvoiceLines) -> Result<Self, OpenInvoiceError> {
         if lines.total().is_negative() {
             return Err(OpenInvoiceError::NegativeTotal);
         }
-        Ok(Self::new(id.to_string(), customer, lines, false, AddLineRequests::of(Vec::new())))
+        Ok(Self::new(id.to_string(), customer, lines, false, None))
     }
 
     pub fn restore(
@@ -108,16 +112,16 @@ impl Invoice {
         customer: CustomerId,
         lines: InvoiceLines,
         issued: bool,
-        add_line_requests: AddLineRequests,
+        last_add_line_command_id: Option<String>,
     ) -> Result<Self, CorruptInvoiceState> {
         if (issued && lines.is_empty()) || lines.total().is_negative() {
             return Err(CorruptInvoiceState);
         }
-        Ok(Self::new(id.to_string(), customer, lines, issued, add_line_requests))
+        Ok(Self::new(id.to_string(), customer, lines, issued, last_add_line_command_id))
     }
 
-    pub fn add_line(&mut self, request_id: &str, line: InvoiceLine) -> Result<AddInvoiceLineOutcome, AddInvoiceLineError> {
-        if self.add_line_requests.contains(request_id) {
+    pub fn add_line(&mut self, command_id: &str, line: InvoiceLine) -> Result<AddInvoiceLineOutcome, AddInvoiceLineError> {
+        if self.last_add_line_command_id.as_deref() == Some(command_id) {
             return Ok(AddInvoiceLineOutcome::Duplicate);
         }
         if self.issued {
@@ -129,8 +133,8 @@ impl Invoice {
             return Err(AddInvoiceLineError::NegativeTotal);
         }
         self.lines.add(line.clone());
-        self.add_line_requests.add(request_id);
-        Ok(AddInvoiceLineOutcome::Applied(InvoiceLineAdded::new(&self.id, request_id, line)))
+        self.last_add_line_command_id = Some(command_id.to_string());
+        Ok(AddInvoiceLineOutcome::Applied(InvoiceLineAdded::new(&self.id, command_id, line)))
     }
 
     pub fn issue(&mut self) -> Result<InvoiceIssued, IssueInvoiceError> {
@@ -158,7 +162,7 @@ impl Invoice {
 }
 ```
 
-`restore` reports a corrupt state with its own type because it is not a business failure. `add_line` remembers the request IDs it applied and recognizes a resent one before any other check: it returns `AddInvoiceLineOutcome::Duplicate`, changes nothing, and produces no event, so the event is never published twice. It checks the new total before it changes anything. Events are domain types too: their fields are private, they are built by their own `new` inside the aggregate's module, and they offer read-only accessors to the code that publishes them. The customer is the Domain Primitive `CustomerId`, the line amounts are the Domain Primitive `Money`, and the lines and the applied request IDs are the first-class collections `InvoiceLines` and `AddLineRequests`. The invoice ID stays `&str` only to keep the example short.
+`restore` reports a corrupt state with its own type because it is not a business failure. `add_line` remembers the ID of the last add-line command it applied (the model declares `retention: last-one`) and recognizes a resent command before any other check: it returns `AddInvoiceLineOutcome::Duplicate`, changes nothing, and produces no event, so the event is never published twice. It checks the new total before it changes anything. Events are domain types too: their fields are private, they are built by their own `new` inside the aggregate's module, and they offer read-only accessors to the code that publishes them. The customer is the Domain Primitive `CustomerId`, the line amounts are the Domain Primitive `Money`, and the lines are the first-class collection `InvoiceLines`. The invoice ID and the command ID stay `&str` only to keep the example short.
 
 ## Changing in Place
 
@@ -267,8 +271,6 @@ impl InvoiceLines {
 }
 ```
 
-`AddLineRequests` wraps the applied request IDs the same way: `contains` answers whether a request was applied, and `add` remembers one in place and forgets the oldest beyond the model's `retention_count`.
-
 | Condition | Meaning / options |
 |-----------|-------------------|
 | The value has a business rule (format, range) | Domain Primitive whose factory checks the rule and returns a Result |
@@ -324,32 +326,31 @@ pub enum IssueInvoiceFailure {
 }
 
 pub struct IssueInvoice<'a> {
-    invoices: &'a dyn InvoiceRepository,
+    invoice_repository: &'a dyn InvoiceRepository,
 }
 
 impl<'a> IssueInvoice<'a> {
-    pub fn new(invoices: &'a dyn InvoiceRepository) -> Self {
-        IssueInvoice { invoices }
+    pub fn new(invoice_repository: &'a dyn InvoiceRepository) -> Self {
+        IssueInvoice { invoice_repository }
     }
 
     /// Issues the invoice, stores it, and hands back the event for the caller to publish.
     pub fn execute(&self, invoice_id: &str) -> Result<InvoiceIssued, IssueInvoiceFailure> {
-        let mut invoice = self.invoices.find_by_id(invoice_id).map_err(IssueInvoiceFailure::NotFound)?;
+        let mut invoice = self.invoice_repository.find_by_id(invoice_id).map_err(IssueInvoiceFailure::NotFound)?;
         let issued = invoice.issue().map_err(IssueInvoiceFailure::Rejected)?;
-        self.invoices.store(invoice_id, invoice);
+        self.invoice_repository.store(invoice_id, invoice);
         Ok(issued)
     }
 }
 ```
 
-The adapter implements the port, may prefix its name with the storage medium, and restores the aggregate through `restore`, the customer through `parse`, and the collections through `of`.
+The adapter implements the port, may prefix its name with the storage medium, and restores the aggregate through `restore`, the customer through `parse`, and the lines through `of`.
 
 ```rust
 use std::cell::RefCell;
 use std::collections::HashMap;
 
 use billing_domain::customer_id::CustomerId;
-use billing_domain::invoice::add_line_requests::AddLineRequests;
 use billing_domain::invoice::line::InvoiceLine;
 use billing_domain::invoice::lines::InvoiceLines;
 use billing_domain::invoice::Invoice;
@@ -359,7 +360,7 @@ pub struct InvoiceRecord {
     pub customer: String,
     pub amounts: Vec<i64>,
     pub issued: bool,
-    pub add_line_requests: Vec<String>,
+    pub last_add_line_command_id: Option<String>,
 }
 
 /// The invoices stored here take precedence over the records they were first read from.
@@ -382,8 +383,8 @@ impl InvoiceRepository for InMemoryInvoiceRepository {
         let record = self.records.get(invoice_id).ok_or(InvoiceNotFound)?;
         let customer = CustomerId::parse(&record.customer).expect("corrupt invoice record: customer ID");
         let lines = InvoiceLines::of(record.amounts.iter().map(|amount| InvoiceLine::of(*amount)).collect());
-        let requests = AddLineRequests::of(record.add_line_requests.clone());
-        let invoice = Invoice::restore(invoice_id, customer, lines, record.issued, requests).expect("corrupt invoice record");
+        let invoice = Invoice::restore(invoice_id, customer, lines, record.issued, record.last_add_line_command_id.clone())
+            .expect("corrupt invoice record");
         Ok(invoice)
     }
 

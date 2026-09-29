@@ -56,7 +56,7 @@ bounded_contexts:
               - { element_id: error.invoice.add-line.already-issued, name: AlreadyIssued, operation: command.invoice.add-line, condition: 請求書は発行済みである }
               - { element_id: error.invoice.add-line.negative-total, name: NegativeTotal, operation: command.invoice.add-line, condition: 追加すると合計が負になる }
             event: event.invoice.line-added
-            idempotency: { strategy: command-id-memory, retention: multiple, retention_count: 1000, rationale: 再試行された要求で明細を二重に加えない }
+            idempotency: { strategy: command-id-memory, retention: last-one, rationale: "クライアントは前の明細追加の応答を受けてから次の明細追加を送るので、古い明細追加が新しい明細追加の後に再送されることはない" }
           - element_id: command.invoice.issue
             name: Issue
             aggregate: aggregate.invoice
@@ -127,11 +127,10 @@ domain_packages:
   - { term: 請求書, model_refs: [aggregate.invoice], rationale: 請求書を作成し発行する, code: { language: typescript, package: "@acme/billing-domain", module: [invoice] } }
   - { term: 請求書明細, model_refs: [vo.invoice-line], rationale: 請求書が合計する金額, code: { language: typescript, package: "@acme/billing-domain", module: [invoice, line] } }
   - { term: 請求書明細の並び, model_refs: [vo.invoice-line], rationale: 1 通の請求書の明細とその合計, code: { language: typescript, package: "@acme/billing-domain", module: [invoice, lines] } }
-  - { term: 明細追加の要求, model_refs: [command.invoice.add-line], rationale: 請求書が反映した明細追加の要求, code: { language: typescript, package: "@acme/billing-domain", module: [invoice, add-line-requests] } }
   - { term: 顧客 ID, model_refs: [primitive.customer-id], rationale: 請求書の請求先の顧客を識別する, code: { language: typescript, package: "@acme/billing-domain", module: [customer-id] } }
 ```
 
-`model_ref` は `docs/ddd` からの相対パスで書く。`success_type` はコマンドが成功時に返すものの型名である。TypeScript では新しいインスタンスとイベントを持つ成功値の型、Rust ではイベント、再送された要求を認識するコマンドでは成功値の enum になる。ファクトリ規則の成功値は集約の型である。`module` はパッケージのルートより下の区切りを並べたもので、ルートは `[]` になる。ルートから下のすべての階層を宣言する。TypeScript では case の文字列がリテラルの union のメンバー（`already-issued`）になり、Rust では enum のバリアント（`AlreadyIssued`）になる。
+`model_ref` は `docs/ddd` からの相対パスで書く。`success_type` はコマンドが成功時に返すものの型名である。TypeScript では新しいインスタンスとイベントを持つ成功値の型、Rust ではイベント、再送されたコマンドを認識するコマンドでは成功値の enum になる。ファクトリ規則の成功値は集約の型である。`module` はパッケージのルートより下の区切りを並べたもので、ルートは `[]` になる。ルートから下のすべての階層を宣言する。TypeScript では case の文字列がリテラルの union のメンバー（`already-issued`）になり、Rust では enum のバリアント（`AlreadyIssued`）になる。
 
 ### 層構造
 
@@ -189,9 +188,9 @@ layer_structures:
 | 条件 | 意味・選択肢 |
 |------|-------------|
 | `effect: transition` | 同じコマンドを繰り返しても目的の状態に達しているので、遷移そのものが守る |
-| `effect: accumulation` | 繰り返すと二重に加わる。コマンド ID を記憶し（`command-id-memory`）、複数件か時間窓で保持する |
+| `effect: accumulation` | 繰り返すと二重に加わる。コマンド ID を記憶する（`command-id-memory`）。古いコマンドが新しいコマンドの後に再送されない理由を `rationale` に書けるなら最後の 1 件（`last-one`）、書けなければ複数件（`multiple`）か時間窓（`time-window`）で保持する |
 | 直前のコマンド ID だけを覚えている | C2 の後に届いた C1 の再送を防げない |
-| 永続化の結果が不明 | 再試行する前に要求 ID で照合する |
+| 永続化の結果が不明 | 再試行する前にコマンド ID で照合する |
 | 複数集約のフローが途中で失敗する | 先のコミットは残る。再実行か補償で回復する。補償は新しい業務操作である |
 
 | 回復方針 | 意味 |

@@ -38,10 +38,10 @@ Judges the code of the domain layer (aggregates, Entities, value objects, Domain
 
 | Criterion | Judgment |
 |-----------|----------|
-| Applied request IDs are not remembered, or only the last one is | REJECT |
-| An applied request ID is checked after state or invariant rejections | REJECT. Check the remembered request ID first |
-| A retry of an applied request ID changes state, returns an event, or returns a rejection | REJECT. Change nothing and return a duplicate success without an event |
-| The ID of a rejected request is remembered | REJECT. Remember applied requests only |
+| The command IDs the aggregate remembers do not follow the command's declared `retention` (`last-one`: the last one; `multiple`: the latest `retention_count`; `time-window`: those within `retention_window`) | REJECT |
+| An applied command ID is checked after state or invariant rejections | REJECT. Check the remembered command ID first |
+| A retry of an applied command ID changes state, returns an event, or returns a rejection | REJECT. Change nothing and return a duplicate success without an event |
+| The ID of a rejected command is remembered | REJECT. Remember applied commands only |
 
 ## Getters and Decisions
 

@@ -10,18 +10,17 @@
 | チームが素の型と関数を好む | `companion`: `type` リテラルと同名の `const` オブジェクト。ファクトリのクロージャが状態を持つ |
 | 集約ごとに実行モデルや永続化が違う | この選択には関係しない。表現はプロジェクト全体で 1 つ |
 
-以下の例では、顧客を Domain Primitive `CustomerId`、明細と反映済みの要求 ID をファーストクラスコレクション `InvoiceLines`、`AddLineRequests` で持つ。請求書 ID と金額は例を短く保つために裸の `string` と `number` のままにしている。実際のコードでは同じ作り方で包む。
+以下の例では、顧客を Domain Primitive `CustomerId`、明細をファーストクラスコレクション `InvoiceLines` で持つ。請求書 ID、コマンド ID、金額は例を短く保つために裸の `string` と `number` のままにしている。実際のコードでは同じ作り方で包む。
 
 `private`、`protected`、`readonly` は実行時に消える。`#` フィールドとクロージャは実行時にも非公開である。ブランドは同じ形のオブジェクトの代入を防ぐが、ファクトリが組み立てたことの証明にはならない。
 
 ### class 表現
 
-`open` は検証して非公開のコンストラクタで組み立て、`Result` を返す。`restore` は状態全体を検証してから永続化された請求書を組み立て直し、壊れた状態では throw する。これは業務上の失敗ではない。コマンド `addLine`（`command.invoice.add-line`）と `issue` は、呼ばれた請求書を変えない。変更後の状態で非公開のコンストラクタから新しい請求書を組み立て、生んだ 1 つのイベントと一緒に、写像の `success_type` が名付ける成功値の型（`AddInvoiceLineOutcome`、`IssueInvoiceOutcome`）で返す。`addLine` は反映した要求 ID を記憶し、再送された要求をほかのどの判定より先に認識する。そのときは `kind: "duplicate"` と変わらない請求書を返し、イベントは返さないので、イベントが二重に公開されない。イベント（`InvoiceLineAdded`、`InvoiceIssued`）は集約のモジュールで宣言する読み取り専用のデータ型である。`#` フィールドはすべて `readonly` にする。`total()` は明細のコレクションに合計を頼み、`lines()` は明細の複製を返す。
+`open` は検証して非公開のコンストラクタで組み立て、`Result` を返す。`restore` は状態全体を検証してから永続化された請求書を組み立て直し、壊れた状態では throw する。これは業務上の失敗ではない。コマンド `addLine`（`command.invoice.add-line`）と `issue` は、呼ばれた請求書を変えない。変更後の状態で非公開のコンストラクタから新しい請求書を組み立て、生んだ 1 つのイベントと一緒に、写像の `success_type` が名付ける成功値の型（`AddInvoiceLineOutcome`、`IssueInvoiceOutcome`）で返す。`addLine` は最後に反映した明細追加のコマンド ID を記憶し（モデルは `retention: last-one` を宣言する）、再送されたコマンドをほかのどの判定より先に認識する。そのときは `kind: "duplicate"` と変わらない請求書を返し、イベントは返さないので、イベントが二重に公開されない。イベント（`InvoiceLineAdded`、`InvoiceIssued`）は集約のモジュールで宣言する読み取り専用のデータ型である。`#` フィールドはすべて `readonly` にする。`total()` は明細のコレクションに合計を頼み、`lines()` は明細の複製を返す。
 
 ```ts
 import type { Result } from "@acme/language-extensions";
 import type { CustomerId } from "./customer-id.ts";
-import { AddLineRequests } from "./invoice/add-line-requests.ts";
 import type { InvoiceLine } from "./invoice/line.ts";
 import type { InvoiceLines } from "./invoice/lines.ts";
 
@@ -29,7 +28,7 @@ export type OpenInvoiceError = "negative-total";
 export type AddInvoiceLineError = "already-issued" | "negative-total";
 export type IssueInvoiceError = "already-issued" | "empty-lines";
 
-export type InvoiceLineAdded = { readonly invoiceId: string; readonly requestId: string; readonly line: InvoiceLine };
+export type InvoiceLineAdded = { readonly invoiceId: string; readonly commandId: string; readonly line: InvoiceLine };
 export type InvoiceIssued = { readonly invoiceId: string };
 
 export type AddInvoiceLineOutcome =
@@ -42,25 +41,25 @@ export class Invoice {
   readonly #customer: CustomerId;
   readonly #lines: InvoiceLines;
   readonly #issued: boolean;
-  readonly #addLineRequests: AddLineRequests;
+  readonly #lastAddLineCommandId: string | undefined;
 
   private constructor(
     id: string,
     customer: CustomerId,
     lines: InvoiceLines,
     issued: boolean,
-    addLineRequests: AddLineRequests,
+    lastAddLineCommandId: string | undefined,
   ) {
     this.#id = id;
     this.#customer = customer;
     this.#lines = lines;
     this.#issued = issued;
-    this.#addLineRequests = addLineRequests;
+    this.#lastAddLineCommandId = lastAddLineCommandId;
   }
 
   static open(id: string, customer: CustomerId, lines: InvoiceLines): Result<Invoice, OpenInvoiceError> {
     if (lines.total() < 0) return { ok: false, error: "negative-total" };
-    return { ok: true, value: new Invoice(id, customer, lines, false, AddLineRequests.of([])) };
+    return { ok: true, value: new Invoice(id, customer, lines, false, undefined) };
   }
 
   static restore(
@@ -68,26 +67,26 @@ export class Invoice {
     customer: CustomerId,
     lines: InvoiceLines,
     issued: boolean,
-    addLineRequests: AddLineRequests,
+    lastAddLineCommandId: string | undefined,
   ): Invoice {
     if ((issued && lines.isEmpty()) || lines.total() < 0) throw new Error("corrupt invoice state");
-    return new Invoice(id, customer, lines, issued, addLineRequests);
+    return new Invoice(id, customer, lines, issued, lastAddLineCommandId);
   }
 
-  addLine(requestId: string, line: InvoiceLine): Result<AddInvoiceLineOutcome, AddInvoiceLineError> {
-    if (this.#addLineRequests.has(requestId)) return { ok: true, value: { kind: "duplicate", invoice: this } };
+  addLine(commandId: string, line: InvoiceLine): Result<AddInvoiceLineOutcome, AddInvoiceLineError> {
+    if (commandId === this.#lastAddLineCommandId) return { ok: true, value: { kind: "duplicate", invoice: this } };
     if (this.#issued) return { ok: false, error: "already-issued" };
     const lines: InvoiceLines = this.#lines.add(line);
     if (lines.total() < 0) return { ok: false, error: "negative-total" };
-    const invoice: Invoice = new Invoice(this.#id, this.#customer, lines, false, this.#addLineRequests.add(requestId));
-    const event: InvoiceLineAdded = { invoiceId: this.#id, requestId, line };
+    const invoice: Invoice = new Invoice(this.#id, this.#customer, lines, false, commandId);
+    const event: InvoiceLineAdded = { invoiceId: this.#id, commandId, line };
     return { ok: true, value: { kind: "applied", invoice, event } };
   }
 
   issue(): Result<IssueInvoiceOutcome, IssueInvoiceError> {
     if (this.#issued) return { ok: false, error: "already-issued" };
     if (this.#lines.isEmpty()) return { ok: false, error: "empty-lines" };
-    const invoice: Invoice = new Invoice(this.#id, this.#customer, this.#lines, true, this.#addLineRequests);
+    const invoice: Invoice = new Invoice(this.#id, this.#customer, this.#lines, true, this.#lastAddLineCommandId);
     const event: InvoiceIssued = { invoiceId: this.#id };
     return { ok: true, value: { invoice, event } };
   }
@@ -113,7 +112,6 @@ export class Invoice {
 ```ts
 import type { Result } from "@acme/language-extensions";
 import type { CustomerId } from "./customer-id.ts";
-import { AddLineRequests } from "./invoice/add-line-requests.ts";
 import type { InvoiceLine } from "./invoice/line.ts";
 import type { InvoiceLines } from "./invoice/lines.ts";
 
@@ -121,7 +119,7 @@ export type OpenInvoiceError = "negative-total";
 export type AddInvoiceLineError = "already-issued" | "negative-total";
 export type IssueInvoiceError = "already-issued" | "empty-lines";
 
-export type InvoiceLineAdded = { readonly invoiceId: string; readonly requestId: string; readonly line: InvoiceLine };
+export type InvoiceLineAdded = { readonly invoiceId: string; readonly commandId: string; readonly line: InvoiceLine };
 export type InvoiceIssued = { readonly invoiceId: string };
 
 export type AddInvoiceLineOutcome =
@@ -133,7 +131,7 @@ const brand: unique symbol = Symbol("Invoice");
 
 export type Invoice = {
   readonly [brand]: true;
-  addLine(requestId: string, line: InvoiceLine): Result<AddInvoiceLineOutcome, AddInvoiceLineError>;
+  addLine(commandId: string, line: InvoiceLine): Result<AddInvoiceLineOutcome, AddInvoiceLineError>;
   issue(): Result<IssueInvoiceOutcome, IssueInvoiceError>;
   isBilledTo(customer: CustomerId): boolean;
   total(): number;
@@ -143,32 +141,32 @@ export type Invoice = {
 export const Invoice = {
   open(id: string, customer: CustomerId, lines: InvoiceLines): Result<Invoice, OpenInvoiceError> {
     if (lines.total() < 0) return { ok: false, error: "negative-total" };
-    return { ok: true, value: Invoice.restore(id, customer, lines, false, AddLineRequests.of([])) };
+    return { ok: true, value: Invoice.restore(id, customer, lines, false, undefined) };
   },
   restore(
     id: string,
     customer: CustomerId,
     lines: InvoiceLines,
     issued: boolean,
-    addLineRequests: AddLineRequests,
+    lastAddLineCommandId: string | undefined,
   ): Invoice {
     if ((issued && lines.isEmpty()) || lines.total() < 0) throw new Error("corrupt invoice state");
-    const state = { id, customer, lines, issued, requests: addLineRequests };
+    const state = { id, customer, lines, issued, lastAddLineCommandId };
     const instance: Invoice = {
       [brand]: true,
-      addLine(requestId: string, line: InvoiceLine): Result<AddInvoiceLineOutcome, AddInvoiceLineError> {
-        if (state.requests.has(requestId)) return { ok: true, value: { kind: "duplicate", invoice: instance } };
+      addLine(commandId: string, line: InvoiceLine): Result<AddInvoiceLineOutcome, AddInvoiceLineError> {
+        if (commandId === state.lastAddLineCommandId) return { ok: true, value: { kind: "duplicate", invoice: instance } };
         if (state.issued) return { ok: false, error: "already-issued" };
         const next: InvoiceLines = state.lines.add(line);
         if (next.total() < 0) return { ok: false, error: "negative-total" };
-        const invoice: Invoice = Invoice.restore(state.id, state.customer, next, false, state.requests.add(requestId));
-        const event: InvoiceLineAdded = { invoiceId: state.id, requestId, line };
+        const invoice: Invoice = Invoice.restore(state.id, state.customer, next, false, commandId);
+        const event: InvoiceLineAdded = { invoiceId: state.id, commandId, line };
         return { ok: true, value: { kind: "applied", invoice, event } };
       },
       issue(): Result<IssueInvoiceOutcome, IssueInvoiceError> {
         if (state.issued) return { ok: false, error: "already-issued" };
         if (state.lines.isEmpty()) return { ok: false, error: "empty-lines" };
-        const invoice: Invoice = Invoice.restore(state.id, state.customer, state.lines, true, state.requests);
+        const invoice: Invoice = Invoice.restore(state.id, state.customer, state.lines, true, state.lastAddLineCommandId);
         const event: InvoiceIssued = { invoiceId: state.id };
         return { ok: true, value: { invoice, event } };
       },
@@ -252,7 +250,7 @@ export class InvoiceLines {
 }
 ```
 
-`AddLineRequests` も同じ作り方で反映済みの要求 ID を包む。`has` は要求を反映したかを答え、`add` は要求を記憶した新しいインスタンスを返し、モデルの `retention_count` を超えた古いものを忘れる。companion 表現では、それぞれを自分のブランドを持つ `type` と `const` オブジェクトで書く。
+companion 表現では、コレクションを自分のブランドを持つ `type` と `const` オブジェクトで書く。
 
 ## Result と操作のエラー
 
@@ -272,7 +270,7 @@ export type Result<T, E> =
 
 ## モジュール配置と指定子
 
-パッケージの中では、モジュールを `.ts` 拡張子付きの相対指定子で指す。子 `invoice/line` を持つモジュール `invoice` は次のように置く。ほかの子（`invoice/lines`、`invoice/add-line-requests`）も `invoice/line` と同じように置く。
+パッケージの中では、モジュールを `.ts` 拡張子付きの相対指定子で指す。子 `invoice/line` を持つモジュール `invoice` は次のように置く。ほかの子 `invoice/lines` も `invoice/line` と同じように置く。
 
 | 配置 | 親モジュール | 子 | エントリからの親の指し方 |
 |------|-------------|----|-------------------------|
@@ -294,7 +292,6 @@ export type {
   OpenInvoiceError,
 } from "./invoice.ts";
 export { Invoice } from "./invoice.ts";
-export { AddLineRequests } from "./invoice/add-line-requests.ts";
 export { InvoiceLine } from "./invoice/line.ts";
 export { InvoiceLines } from "./invoice/lines.ts";
 ```
@@ -314,7 +311,6 @@ export type {
   OpenInvoiceError,
 } from "./invoice/index.ts";
 export { Invoice } from "./invoice/index.ts";
-export { AddLineRequests } from "./invoice/add-line-requests.ts";
 export { InvoiceLine } from "./invoice/line.ts";
 export { InvoiceLines } from "./invoice/lines.ts";
 ```
@@ -347,29 +343,29 @@ import type { InvoiceNotFound, InvoiceRepository } from "./invoice-repository.ts
 export type IssueInvoiceFailure = InvoiceNotFound | IssueInvoiceError;
 
 export class IssueInvoice {
-  readonly #invoices: InvoiceRepository;
+  readonly #invoiceRepository: InvoiceRepository;
 
-  constructor(invoices: InvoiceRepository) {
-    this.#invoices = invoices;
+  constructor(invoiceRepository: InvoiceRepository) {
+    this.#invoiceRepository = invoiceRepository;
   }
 
   execute(invoiceId: string): Result<InvoiceIssued, IssueInvoiceFailure> {
-    const found: Result<Invoice, InvoiceNotFound> = this.#invoices.findById(invoiceId);
+    const found: Result<Invoice, InvoiceNotFound> = this.#invoiceRepository.findById(invoiceId);
     if (!found.ok) return found;
     const invoice: Invoice = found.value;
     const issued: Result<IssueInvoiceOutcome, IssueInvoiceError> = invoice.issue();
     if (!issued.ok) return issued;
     const outcome: IssueInvoiceOutcome = issued.value;
-    this.#invoices.store(invoiceId, outcome.invoice);
+    this.#invoiceRepository.store(invoiceId, outcome.invoice);
     return { ok: true, value: outcome.event };
   }
 }
 ```
 
-アダプタはポートを実装し、名前に保存媒体の接頭辞を付けてよい。集約は `restore`、顧客は `parse`、明細と要求 ID のコレクションは `of` で組み立て直す。
+アダプタはポートを実装し、名前に保存媒体の接頭辞を付けてよい。集約は `restore`、顧客は `parse`、明細のコレクションは `of` で組み立て直す。
 
 ```ts
-import { AddLineRequests, CustomerId, Invoice, InvoiceLine, InvoiceLines } from "@acme/billing-domain";
+import { CustomerId, Invoice, InvoiceLine, InvoiceLines } from "@acme/billing-domain";
 import type { ParseCustomerIdError } from "@acme/billing-domain";
 import type { InvoiceNotFound, InvoiceRepository } from "@acme/billing-use-case";
 import type { Result } from "@acme/language-extensions";
@@ -378,7 +374,7 @@ export type InvoiceRecord = {
   readonly customer: string;
   readonly amounts: readonly number[];
   readonly issued: boolean;
-  readonly addLineRequests: readonly string[];
+  readonly lastAddLineCommandId: string | undefined;
 };
 
 export class InMemoryInvoiceRepository implements InvoiceRepository {
@@ -398,8 +394,7 @@ export class InMemoryInvoiceRepository implements InvoiceRepository {
     const customer: Result<CustomerId, ParseCustomerIdError> = CustomerId.parse(record.customer);
     if (!customer.ok) throw new Error("corrupt invoice record");
     const lines: InvoiceLines = InvoiceLines.of(record.amounts.map((amount: number) => InvoiceLine.of(amount)));
-    const requests: AddLineRequests = AddLineRequests.of(record.addLineRequests);
-    const invoice: Invoice = Invoice.restore(invoiceId, customer.value, lines, record.issued, requests);
+    const invoice: Invoice = Invoice.restore(invoiceId, customer.value, lines, record.issued, record.lastAddLineCommandId);
     return { ok: true, value: invoice };
   }
 
