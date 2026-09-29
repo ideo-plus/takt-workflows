@@ -194,70 +194,9 @@ export const InvoiceLines = {
 };
 `;
 
-export const CLASS_ADD_LINE_REQUESTS = `/** The model's retention_count for command.invoice.add-line. */
-const RETENTION = 1000;
-
-export class AddLineRequests {
-  readonly #ids: readonly string[];
-
-  private constructor(ids: readonly string[]) {
-    this.#ids = ids.slice(-RETENTION);
-  }
-
-  static of(ids: readonly string[]): AddLineRequests {
-    return new AddLineRequests(ids);
-  }
-
-  has(requestId: string): boolean {
-    return this.#ids.includes(requestId);
-  }
-
-  add(requestId: string): AddLineRequests {
-    return new AddLineRequests([...this.#ids, requestId]);
-  }
-
-  toArray(): readonly string[] {
-    return [...this.#ids];
-  }
-}
-`;
-
-const COMPANION_ADD_LINE_REQUESTS = `/** The model's retention_count for command.invoice.add-line. */
-const RETENTION = 1000;
-
-const brand: unique symbol = Symbol("AddLineRequests");
-
-export type AddLineRequests = {
-  readonly [brand]: true;
-  has(requestId: string): boolean;
-  add(requestId: string): AddLineRequests;
-  toArray(): readonly string[];
-};
-
-export const AddLineRequests = {
-  of(ids: readonly string[]): AddLineRequests {
-    const kept: readonly string[] = ids.slice(-RETENTION);
-    const instance: AddLineRequests = {
-      [brand]: true,
-      has(requestId: string): boolean {
-        return kept.includes(requestId);
-      },
-      add(requestId: string): AddLineRequests {
-        return AddLineRequests.of([...kept, requestId]);
-      },
-      toArray(): readonly string[] {
-        return [...kept];
-      },
-    };
-    return instance;
-  },
-};
-`;
-
 function header(specifiers: Specifiers): string {
   return `import type { Result } from "${RESULT_NAME}";
 import type { CustomerId } from "${specifiers.customer}";
-import { AddLineRequests } from "${specifiers.requests}";
 import type { InvoiceLine } from "${specifiers.line}";
 import type { InvoiceLines } from "${specifiers.lines}";
 
@@ -265,7 +204,7 @@ export type OpenInvoiceError = "negative-total";
 export type AddInvoiceLineError = "already-issued" | "negative-total";
 export type IssueInvoiceError = "already-issued" | "empty-lines";
 
-export type InvoiceLineAdded = { readonly invoiceId: string; readonly requestId: string; readonly line: InvoiceLine };
+export type InvoiceLineAdded = { readonly invoiceId: string; readonly commandId: string; readonly line: InvoiceLine };
 export type InvoiceIssued = { readonly invoiceId: string };
 
 export type AddInvoiceLineOutcome =
@@ -278,7 +217,6 @@ export type IssueInvoiceOutcome = { readonly invoice: Invoice; readonly event: I
 /** Where the parent module `invoice` names its neighbors, under a module layout. */
 export interface Specifiers {
   readonly customer: string;
-  readonly requests: string;
   readonly line: string;
   readonly lines: string;
 }
@@ -287,7 +225,6 @@ export function specifiersFor(layout: Layout): Specifiers {
   const named = layout === "named-file";
   return {
     customer: named ? "./customer-id.ts" : "../customer-id.ts",
-    requests: named ? "./invoice/add-line-requests.ts" : "./add-line-requests.ts",
     line: named ? "./invoice/line.ts" : "./line.ts",
     lines: named ? "./invoice/lines.ts" : "./lines.ts",
   };
@@ -300,25 +237,25 @@ export class Invoice {
   readonly #customer: CustomerId;
   readonly #lines: InvoiceLines;
   readonly #issued: boolean;
-  readonly #addLineRequests: AddLineRequests;
+  readonly #lastAddLineCommandId: string | undefined;
 
   private constructor(
     id: string,
     customer: CustomerId,
     lines: InvoiceLines,
     issued: boolean,
-    addLineRequests: AddLineRequests,
+    lastAddLineCommandId: string | undefined,
   ) {
     this.#id = id;
     this.#customer = customer;
     this.#lines = lines;
     this.#issued = issued;
-    this.#addLineRequests = addLineRequests;
+    this.#lastAddLineCommandId = lastAddLineCommandId;
   }
 
   static open(id: string, customer: CustomerId, lines: InvoiceLines): Result<Invoice, OpenInvoiceError> {
     if (lines.total() < 0) return { ok: false, error: "negative-total" };
-    return { ok: true, value: new Invoice(id, customer, lines, false, AddLineRequests.of([])) };
+    return { ok: true, value: new Invoice(id, customer, lines, false, undefined) };
   }
 
   static restore(
@@ -326,26 +263,26 @@ export class Invoice {
     customer: CustomerId,
     lines: InvoiceLines,
     issued: boolean,
-    addLineRequests: AddLineRequests,
+    lastAddLineCommandId: string | undefined,
   ): Invoice {
     if ((issued && lines.isEmpty()) || lines.total() < 0) throw new Error("corrupt invoice state");
-    return new Invoice(id, customer, lines, issued, addLineRequests);
+    return new Invoice(id, customer, lines, issued, lastAddLineCommandId);
   }
 
-  addLine(requestId: string, line: InvoiceLine): Result<AddInvoiceLineOutcome, AddInvoiceLineError> {
-    if (this.#addLineRequests.has(requestId)) return { ok: true, value: { kind: "duplicate", invoice: this } };
+  addLine(commandId: string, line: InvoiceLine): Result<AddInvoiceLineOutcome, AddInvoiceLineError> {
+    if (commandId === this.#lastAddLineCommandId) return { ok: true, value: { kind: "duplicate", invoice: this } };
     if (this.#issued) return { ok: false, error: "already-issued" };
     const lines: InvoiceLines = this.#lines.add(line);
     if (lines.total() < 0) return { ok: false, error: "negative-total" };
-    const invoice: Invoice = new Invoice(this.#id, this.#customer, lines, false, this.#addLineRequests.add(requestId));
-    const event: InvoiceLineAdded = { invoiceId: this.#id, requestId, line };
+    const invoice: Invoice = new Invoice(this.#id, this.#customer, lines, false, commandId);
+    const event: InvoiceLineAdded = { invoiceId: this.#id, commandId, line };
     return { ok: true, value: { kind: "applied", invoice, event } };
   }
 
   issue(): Result<IssueInvoiceOutcome, IssueInvoiceError> {
     if (this.#issued) return { ok: false, error: "already-issued" };
     if (this.#lines.isEmpty()) return { ok: false, error: "empty-lines" };
-    const invoice: Invoice = new Invoice(this.#id, this.#customer, this.#lines, true, this.#addLineRequests);
+    const invoice: Invoice = new Invoice(this.#id, this.#customer, this.#lines, true, this.#lastAddLineCommandId);
     const event: InvoiceIssued = { invoiceId: this.#id };
     return { ok: true, value: { invoice, event } };
   }
@@ -371,7 +308,7 @@ const brand: unique symbol = Symbol("Invoice");
 
 export type Invoice = {
   readonly [brand]: true;
-  addLine(requestId: string, line: InvoiceLine): Result<AddInvoiceLineOutcome, AddInvoiceLineError>;
+  addLine(commandId: string, line: InvoiceLine): Result<AddInvoiceLineOutcome, AddInvoiceLineError>;
   issue(): Result<IssueInvoiceOutcome, IssueInvoiceError>;
   isBilledTo(customer: CustomerId): boolean;
   total(): number;
@@ -381,32 +318,32 @@ export type Invoice = {
 export const Invoice = {
   open(id: string, customer: CustomerId, lines: InvoiceLines): Result<Invoice, OpenInvoiceError> {
     if (lines.total() < 0) return { ok: false, error: "negative-total" };
-    return { ok: true, value: Invoice.restore(id, customer, lines, false, AddLineRequests.of([])) };
+    return { ok: true, value: Invoice.restore(id, customer, lines, false, undefined) };
   },
   restore(
     id: string,
     customer: CustomerId,
     lines: InvoiceLines,
     issued: boolean,
-    addLineRequests: AddLineRequests,
+    lastAddLineCommandId: string | undefined,
   ): Invoice {
     if ((issued && lines.isEmpty()) || lines.total() < 0) throw new Error("corrupt invoice state");
-    const state = { id, customer, lines, issued, requests: addLineRequests };
+    const state = { id, customer, lines, issued, lastAddLineCommandId };
     const instance: Invoice = {
       [brand]: true,
-      addLine(requestId: string, line: InvoiceLine): Result<AddInvoiceLineOutcome, AddInvoiceLineError> {
-        if (state.requests.has(requestId)) return { ok: true, value: { kind: "duplicate", invoice: instance } };
+      addLine(commandId: string, line: InvoiceLine): Result<AddInvoiceLineOutcome, AddInvoiceLineError> {
+        if (commandId === state.lastAddLineCommandId) return { ok: true, value: { kind: "duplicate", invoice: instance } };
         if (state.issued) return { ok: false, error: "already-issued" };
         const next: InvoiceLines = state.lines.add(line);
         if (next.total() < 0) return { ok: false, error: "negative-total" };
-        const invoice: Invoice = Invoice.restore(state.id, state.customer, next, false, state.requests.add(requestId));
-        const event: InvoiceLineAdded = { invoiceId: state.id, requestId, line };
+        const invoice: Invoice = Invoice.restore(state.id, state.customer, next, false, commandId);
+        const event: InvoiceLineAdded = { invoiceId: state.id, commandId, line };
         return { ok: true, value: { kind: "applied", invoice, event } };
       },
       issue(): Result<IssueInvoiceOutcome, IssueInvoiceError> {
         if (state.issued) return { ok: false, error: "already-issued" };
         if (state.lines.isEmpty()) return { ok: false, error: "empty-lines" };
-        const invoice: Invoice = Invoice.restore(state.id, state.customer, state.lines, true, state.requests);
+        const invoice: Invoice = Invoice.restore(state.id, state.customer, state.lines, true, state.lastAddLineCommandId);
         const event: InvoiceIssued = { invoiceId: state.id };
         return { ok: true, value: { invoice, event } };
       },
@@ -439,7 +376,6 @@ export type {
   OpenInvoiceError,
 } from "${parentSpecifier}";
 export { Invoice } from "${parentSpecifier}";
-export { AddLineRequests } from "./invoice/add-line-requests.ts";
 export { InvoiceLine } from "./invoice/line.ts";
 export { InvoiceLines } from "./invoice/lines.ts";
 `;
@@ -463,20 +399,20 @@ import type { InvoiceNotFound, InvoiceRepository } from "./invoice-repository.ts
 export type IssueInvoiceFailure = InvoiceNotFound | IssueInvoiceError;
 
 export class IssueInvoice {
-  readonly #invoices: InvoiceRepository;
+  readonly #invoiceRepository: InvoiceRepository;
 
-  constructor(invoices: InvoiceRepository) {
-    this.#invoices = invoices;
+  constructor(invoiceRepository: InvoiceRepository) {
+    this.#invoiceRepository = invoiceRepository;
   }
 
   execute(invoiceId: string): Result<InvoiceIssued, IssueInvoiceFailure> {
-    const found: Result<Invoice, InvoiceNotFound> = this.#invoices.findById(invoiceId);
+    const found: Result<Invoice, InvoiceNotFound> = this.#invoiceRepository.findById(invoiceId);
     if (!found.ok) return found;
     const invoice: Invoice = found.value;
     const issued: Result<IssueInvoiceOutcome, IssueInvoiceError> = invoice.issue();
     if (!issued.ok) return issued;
     const outcome: IssueInvoiceOutcome = issued.value;
-    this.#invoices.store(invoiceId, outcome.invoice);
+    this.#invoiceRepository.store(invoiceId, outcome.invoice);
     return { ok: true, value: outcome.event };
   }
 }
@@ -487,7 +423,7 @@ export type { IssueInvoiceFailure } from "./issue-invoice.ts";
 export { IssueInvoice } from "./issue-invoice.ts";
 `;
 
-export const IN_MEMORY_INVOICE_REPOSITORY = `import { AddLineRequests, CustomerId, Invoice, InvoiceLine, InvoiceLines } from "${DOMAIN_NAME}";
+export const IN_MEMORY_INVOICE_REPOSITORY = `import { CustomerId, Invoice, InvoiceLine, InvoiceLines } from "${DOMAIN_NAME}";
 import type { ParseCustomerIdError } from "${DOMAIN_NAME}";
 import type { InvoiceNotFound, InvoiceRepository } from "${USE_CASE_NAME}";
 import type { Result } from "${RESULT_NAME}";
@@ -496,7 +432,7 @@ export type InvoiceRecord = {
   readonly customer: string;
   readonly amounts: readonly number[];
   readonly issued: boolean;
-  readonly addLineRequests: readonly string[];
+  readonly lastAddLineCommandId: string | undefined;
 };
 
 export class InMemoryInvoiceRepository implements InvoiceRepository {
@@ -516,8 +452,7 @@ export class InMemoryInvoiceRepository implements InvoiceRepository {
     const customer: Result<CustomerId, ParseCustomerIdError> = CustomerId.parse(record.customer);
     if (!customer.ok) throw new Error("corrupt invoice record");
     const lines: InvoiceLines = InvoiceLines.of(record.amounts.map((amount: number) => InvoiceLine.of(amount)));
-    const requests: AddLineRequests = AddLineRequests.of(record.addLineRequests);
-    const invoice: Invoice = Invoice.restore(invoiceId, customer.value, lines, record.issued, requests);
+    const invoice: Invoice = Invoice.restore(invoiceId, customer.value, lines, record.issued, record.lastAddLineCommandId);
     return { ok: true, value: invoice };
   }
 
@@ -559,7 +494,7 @@ export const DOMAIN_MODEL = `bounded_contexts:
               - { element_id: error.invoice.add-line.already-issued, name: AlreadyIssued, operation: command.invoice.add-line, condition: the invoice is issued }
               - { element_id: error.invoice.add-line.negative-total, name: NegativeTotal, operation: command.invoice.add-line, condition: the line would make the total negative }
             event: event.invoice.line-added
-            idempotency: { strategy: command-id-memory, retention: multiple, retention_count: 1000, rationale: a retried request must not add its line twice }
+            idempotency: { strategy: command-id-memory, retention: last-one, rationale: "a client sends the next add-line of an invoice only after the previous one is acknowledged, so an older add-line is never resent after a newer one" }
           - element_id: command.invoice.issue
             name: Issue
             aggregate: aggregate.invoice
@@ -629,7 +564,6 @@ export const AGGREGATE_MAPPING = [
   `  - { term: Invoice, model_refs: [aggregate.invoice], rationale: opens and issues invoices, code: ${location(["invoice"])} }`,
   `  - { term: Invoice line, model_refs: [vo.invoice-line], rationale: the amounts an invoice adds up, code: ${location(["invoice", "line"])} }`,
   `  - { term: Invoice lines, model_refs: [vo.invoice-line], rationale: the lines of one invoice and their total, code: ${location(["invoice", "lines"])} }`,
-  `  - { term: Add-line requests, model_refs: [command.invoice.add-line], rationale: the add-line requests an invoice has applied, code: ${location(["invoice", "add-line-requests"])} }`,
   `  - { term: Customer ID, model_refs: [primitive.customer-id], rationale: identifies the customer an invoice bills, code: ${location(["customer-id"])} }`,
   "",
 ].join("\n");
@@ -718,8 +652,6 @@ export function typeScriptSample(representation: Representation, layout: Layout)
     [parentModuleFile(layout)]:
       representation === "class" ? classInvoice(specifiersFor(layout)) : companionInvoice(specifiersFor(layout)),
     [`${DOMAIN_DIR}/src/invoice/lines.ts`]: representation === "class" ? CLASS_LINES : COMPANION_LINES,
-    [`${DOMAIN_DIR}/src/invoice/add-line-requests.ts`]:
-      representation === "class" ? CLASS_ADD_LINE_REQUESTS : COMPANION_ADD_LINE_REQUESTS,
     [`${DOMAIN_DIR}/src/customer-id.ts`]: representation === "class" ? CLASS_CUSTOMER_ID : COMPANION_CUSTOMER_ID,
     [`${DOMAIN_DIR}/src/invoice/line.ts`]: representation === "class" ? CLASS_LINE : COMPANION_LINE,
     [`${USE_CASE_DIR}/package.json`]: packageManifest(USE_CASE_NAME, { [DOMAIN_NAME]: "0.1.0", [RESULT_NAME]: "0.1.0" }),

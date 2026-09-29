@@ -5,11 +5,9 @@
 集約は、非公開のフィールド、状態全体を受け取る非公開のコンストラクタ、操作固有のエラー enum を返す検証付きのファクトリ、永続化された状態のための `restore` 関数、`&mut self` を取って状態を変え、生んだ 1 つのイベントを返すコマンドを持つ。失敗したコマンドは何も変えず、イベントも生まない。
 
 ```rust
-pub mod add_line_requests;
 pub mod line;
 pub mod lines;
 
-use self::add_line_requests::AddLineRequests;
 use self::line::{InvoiceLine, Money};
 use self::lines::InvoiceLines;
 use crate::customer_id::CustomerId;
@@ -38,21 +36,21 @@ pub struct CorruptInvoiceState;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InvoiceLineAdded {
     invoice_id: String,
-    request_id: String,
+    command_id: String,
     line: InvoiceLine,
 }
 
 impl InvoiceLineAdded {
-    fn new(invoice_id: &str, request_id: &str, line: InvoiceLine) -> Self {
-        InvoiceLineAdded { invoice_id: invoice_id.to_string(), request_id: request_id.to_string(), line }
+    fn new(invoice_id: &str, command_id: &str, line: InvoiceLine) -> Self {
+        InvoiceLineAdded { invoice_id: invoice_id.to_string(), command_id: command_id.to_string(), line }
     }
 
     pub fn invoice_id(&self) -> &str {
         &self.invoice_id
     }
 
-    pub fn request_id(&self) -> &str {
-        &self.request_id
+    pub fn command_id(&self) -> &str {
+        &self.command_id
     }
 
     pub fn line(&self) -> &InvoiceLine {
@@ -75,7 +73,7 @@ impl InvoiceIssued {
     }
 }
 
-/// A request id already applied changes nothing and produces no event.
+/// A command ID already applied changes nothing and produces no event.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AddInvoiceLineOutcome {
     Applied(InvoiceLineAdded),
@@ -88,19 +86,25 @@ pub struct Invoice {
     customer: CustomerId,
     lines: InvoiceLines,
     issued: bool,
-    add_line_requests: AddLineRequests,
+    last_add_line_command_id: Option<String>,
 }
 
 impl Invoice {
-    fn new(id: String, customer: CustomerId, lines: InvoiceLines, issued: bool, add_line_requests: AddLineRequests) -> Self {
-        Invoice { id, customer, lines, issued, add_line_requests }
+    fn new(
+        id: String,
+        customer: CustomerId,
+        lines: InvoiceLines,
+        issued: bool,
+        last_add_line_command_id: Option<String>,
+    ) -> Self {
+        Invoice { id, customer, lines, issued, last_add_line_command_id }
     }
 
     pub fn open(id: &str, customer: CustomerId, lines: InvoiceLines) -> Result<Self, OpenInvoiceError> {
         if lines.total().is_negative() {
             return Err(OpenInvoiceError::NegativeTotal);
         }
-        Ok(Self::new(id.to_string(), customer, lines, false, AddLineRequests::of(Vec::new())))
+        Ok(Self::new(id.to_string(), customer, lines, false, None))
     }
 
     pub fn restore(
@@ -108,16 +112,16 @@ impl Invoice {
         customer: CustomerId,
         lines: InvoiceLines,
         issued: bool,
-        add_line_requests: AddLineRequests,
+        last_add_line_command_id: Option<String>,
     ) -> Result<Self, CorruptInvoiceState> {
         if (issued && lines.is_empty()) || lines.total().is_negative() {
             return Err(CorruptInvoiceState);
         }
-        Ok(Self::new(id.to_string(), customer, lines, issued, add_line_requests))
+        Ok(Self::new(id.to_string(), customer, lines, issued, last_add_line_command_id))
     }
 
-    pub fn add_line(&mut self, request_id: &str, line: InvoiceLine) -> Result<AddInvoiceLineOutcome, AddInvoiceLineError> {
-        if self.add_line_requests.contains(request_id) {
+    pub fn add_line(&mut self, command_id: &str, line: InvoiceLine) -> Result<AddInvoiceLineOutcome, AddInvoiceLineError> {
+        if self.last_add_line_command_id.as_deref() == Some(command_id) {
             return Ok(AddInvoiceLineOutcome::Duplicate);
         }
         if self.issued {
@@ -129,8 +133,8 @@ impl Invoice {
             return Err(AddInvoiceLineError::NegativeTotal);
         }
         self.lines.add(line.clone());
-        self.add_line_requests.add(request_id);
-        Ok(AddInvoiceLineOutcome::Applied(InvoiceLineAdded::new(&self.id, request_id, line)))
+        self.last_add_line_command_id = Some(command_id.to_string());
+        Ok(AddInvoiceLineOutcome::Applied(InvoiceLineAdded::new(&self.id, command_id, line)))
     }
 
     pub fn issue(&mut self) -> Result<InvoiceIssued, IssueInvoiceError> {
@@ -158,7 +162,7 @@ impl Invoice {
 }
 ```
 
-`restore` は、壊れた状態を専用の型で知らせる。業務上の失敗ではないからである。`add_line` は反映した要求 ID を記憶し、再送された要求をほかのどの判定より先に認識する。そのときは `AddInvoiceLineOutcome::Duplicate` を返し、何も変えず、イベントも生まないので、イベントが二重に公開されない。何かを変える前に、変えた後の合計を確かめる。イベントもドメイン型であり、フィールドは非公開、集約のモジュールの中で自分の `new` によって組み立て、公開する側には読み取り専用のアクセサを提供する。顧客は Domain Primitive `CustomerId`、明細金額は Domain Primitive `Money`、明細と反映済みの要求 ID はファーストクラスコレクション `InvoiceLines`、`AddLineRequests` である。請求書 ID は例を短く保つために `&str` のままにしている。
+`restore` は、壊れた状態を専用の型で知らせる。業務上の失敗ではないからである。`add_line` は最後に反映した明細追加のコマンド ID を記憶し（モデルは `retention: last-one` を宣言する）、再送されたコマンドをほかのどの判定より先に認識する。そのときは `AddInvoiceLineOutcome::Duplicate` を返し、何も変えず、イベントも生まないので、イベントが二重に公開されない。何かを変える前に、変えた後の合計を確かめる。イベントもドメイン型であり、フィールドは非公開、集約のモジュールの中で自分の `new` によって組み立て、公開する側には読み取り専用のアクセサを提供する。顧客は Domain Primitive `CustomerId`、明細金額は Domain Primitive `Money`、明細はファーストクラスコレクション `InvoiceLines` である。請求書 ID とコマンド ID は例を短く保つために `&str` のままにしている。
 
 ## その場での変更
 
@@ -267,8 +271,6 @@ impl InvoiceLines {
 }
 ```
 
-`AddLineRequests` も同じ作り方で反映済みの要求 ID を包む。`contains` は要求を反映したかを答え、`add` はその場で要求を記憶し、モデルの `retention_count` を超えた古いものを忘れる。
-
 | 条件 | 意味・選択肢 |
 |------|-------------|
 | 値に業務上の規則（形式、範囲）がある | ファクトリが規則を確かめて Result を返す Domain Primitive |
@@ -324,32 +326,31 @@ pub enum IssueInvoiceFailure {
 }
 
 pub struct IssueInvoice<'a> {
-    invoices: &'a dyn InvoiceRepository,
+    invoice_repository: &'a dyn InvoiceRepository,
 }
 
 impl<'a> IssueInvoice<'a> {
-    pub fn new(invoices: &'a dyn InvoiceRepository) -> Self {
-        IssueInvoice { invoices }
+    pub fn new(invoice_repository: &'a dyn InvoiceRepository) -> Self {
+        IssueInvoice { invoice_repository }
     }
 
     /// Issues the invoice, stores it, and hands back the event for the caller to publish.
     pub fn execute(&self, invoice_id: &str) -> Result<InvoiceIssued, IssueInvoiceFailure> {
-        let mut invoice = self.invoices.find_by_id(invoice_id).map_err(IssueInvoiceFailure::NotFound)?;
+        let mut invoice = self.invoice_repository.find_by_id(invoice_id).map_err(IssueInvoiceFailure::NotFound)?;
         let issued = invoice.issue().map_err(IssueInvoiceFailure::Rejected)?;
-        self.invoices.store(invoice_id, invoice);
+        self.invoice_repository.store(invoice_id, invoice);
         Ok(issued)
     }
 }
 ```
 
-アダプタはポートを実装し、名前に保存媒体の接頭辞を付けてよい。集約は `restore`、顧客は `parse`、明細と要求 ID のコレクションは `of` で組み立て直す。
+アダプタはポートを実装し、名前に保存媒体の接頭辞を付けてよい。集約は `restore`、顧客は `parse`、明細のコレクションは `of` で組み立て直す。
 
 ```rust
 use std::cell::RefCell;
 use std::collections::HashMap;
 
 use billing_domain::customer_id::CustomerId;
-use billing_domain::invoice::add_line_requests::AddLineRequests;
 use billing_domain::invoice::line::InvoiceLine;
 use billing_domain::invoice::lines::InvoiceLines;
 use billing_domain::invoice::Invoice;
@@ -359,7 +360,7 @@ pub struct InvoiceRecord {
     pub customer: String,
     pub amounts: Vec<i64>,
     pub issued: bool,
-    pub add_line_requests: Vec<String>,
+    pub last_add_line_command_id: Option<String>,
 }
 
 /// The invoices stored here take precedence over the records they were first read from.
@@ -382,8 +383,8 @@ impl InvoiceRepository for InMemoryInvoiceRepository {
         let record = self.records.get(invoice_id).ok_or(InvoiceNotFound)?;
         let customer = CustomerId::parse(&record.customer).expect("corrupt invoice record: customer ID");
         let lines = InvoiceLines::of(record.amounts.iter().map(|amount| InvoiceLine::of(*amount)).collect());
-        let requests = AddLineRequests::of(record.add_line_requests.clone());
-        let invoice = Invoice::restore(invoice_id, customer, lines, record.issued, requests).expect("corrupt invoice record");
+        let invoice = Invoice::restore(invoice_id, customer, lines, record.issued, record.last_add_line_command_id.clone())
+            .expect("corrupt invoice record");
         Ok(invoice)
     }
 
