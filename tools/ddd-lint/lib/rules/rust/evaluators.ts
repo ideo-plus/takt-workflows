@@ -344,7 +344,7 @@ function isRepositoryArgument(
       );
       return false;
     }
-    if (port.kind !== "trait" || !["domain", "use-case"].includes(port.layer) || !port.name.endsWith("Repository")) {
+    if (port.kind !== "trait" || port.layer !== "use-case" || !port.name.endsWith("Repository")) {
       return false;
     }
     return port.traitMethods.includes(consumer.callee_text);
@@ -549,6 +549,24 @@ function ruleM(target: InspectionTarget, context: InspectionContext): FindingInp
   return out;
 }
 
+// --- (port-placement) a port belongs to the use-case layer -----------------
+// A repository port (a trait named `…Repository`) declared in a domain crate. The use case loads
+// and stores through its ports; the domain never declares, holds or calls one.
+function rulePortPlacement(target: InspectionTarget, context: InspectionContext): FindingInput[] {
+  if (!target.file) return [];
+  const file = target.file;
+  return declarationsOf(context, file)
+    .traits.filter((trait) => trait.name.endsWith("Repository"))
+    .map((trait) =>
+      finding(
+        "port-placement",
+        file,
+        `repository port ${trait.name} is declared in the domain layer; declare it in the use-case layer`,
+        trait.line,
+      ),
+    );
+}
+
 // --- (n) restoration bypass -------------------------------------------------
 function ruleN(target: InspectionTarget, context: InspectionContext): FindingInput[] {
   if (!target.file) return [];
@@ -593,6 +611,7 @@ export const PER_FILE_EVALUATORS: Record<
   operation: ruleOperation,
   "in-place": ruleInPlace,
   collection: ruleCollection,
+  "port-placement": rulePortPlacement,
   c: ruleC,
   d: ruleD,
   h: ruleH,

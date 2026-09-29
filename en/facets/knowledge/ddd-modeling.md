@@ -215,8 +215,8 @@ A use case declared in a plan states: `use_case_id` (`uc.<slug>`), `name`, `targ
 
 | Layer | Holds | Depends on |
 |-------|-------|------------|
-| domain | Aggregates, Entities, value objects, Domain Primitives, stateless domain services, ports the domain needs | infrastructure |
-| use-case | Loading, calling domain operations, storing, recovery; command-side `execute(ID, values)`; query use cases | domain, infrastructure |
+| domain | Aggregates, Entities, value objects, Domain Primitives, stateless domain services | infrastructure |
+| use-case | Ports (repository ports and the other ports the layer structure declares); loading, calling domain operations, storing, recovery; command-side `execute(ID, values)`; query use cases | domain, infrastructure |
 | interface-adapter | Controllers, repository implementations, DAOs, database and RPC clients | use-case, domain, infrastructure |
 | infrastructure | Language extensions only, such as `Result` in TypeScript | none |
 | composition root | Wiring of implementations to ports | every layer |

@@ -323,7 +323,7 @@ Module paths map to the `module` segments of the aggregate mapping: `src/index.t
 
 ## Use Case and Interface Adapter
 
-The repository port is an `interface` named `<Aggregate>Repository`, declared in the use-case package (or a domain package). Its lookup returns its own error type.
+The repository port is an `interface` named `<Aggregate>Repository`, declared in the use-case package and never in a domain package. Its lookup returns its own error type.
 
 ```ts
 import type { Invoice } from "@acme/billing-domain";

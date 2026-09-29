@@ -215,8 +215,8 @@ layer_structures:
 
 | 層 | 置くもの | 依存先 |
 |----|----------|--------|
-| domain | 集約、Entity、値オブジェクト、Domain Primitive、状態を持たないドメインサービス、ドメインが必要とするポート | infrastructure |
-| use-case | 読み込み、ドメイン操作の呼び出し、保存、回復。コマンド側の `execute(ID, 値)`、クエリのユースケース | domain、infrastructure |
+| domain | 集約、Entity、値オブジェクト、Domain Primitive、状態を持たないドメインサービス | infrastructure |
+| use-case | ポート（リポジトリポートと、層構造が宣言するほかのポート）。読み込み、ドメイン操作の呼び出し、保存、回復。コマンド側の `execute(ID, 値)`、クエリのユースケース | domain、infrastructure |
 | interface-adapter | コントローラ、リポジトリ実装、DAO、データベースと RPC のクライアント | use-case、domain、infrastructure |
 | infrastructure | 言語拡張だけ（TypeScript の `Result` など） | なし |
 | composition root | 実装とポートの結線 | すべての層 |
