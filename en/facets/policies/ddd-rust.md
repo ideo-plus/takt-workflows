@@ -23,6 +23,7 @@ Rust code takes what changes as `&mut` and changes it in place: aggregates, and 
 | Criterion | Judgment |
 |-----------|----------|
 | A method takes `&self` or `self` and returns a new instance of its own type (`Self`, `Result<Self, E>`, `Option<Self>`) | REJECT. Take `&mut self` and change in place; return `()`, or `Result<(), E>` when it can fail |
-| A method returns a changed copy of an argument it took by value (`fn add_to(&self, total: i64) -> i64`) | REJECT. Take what changes as `&mut` and change it (`fn add_to(&self, total: &mut i64)`) |
+| A method returns a changed copy of an argument it took by value (`fn add_to(&self, total: Money) -> Money`) | REJECT. Make the value being changed the receiver and change it through `&mut self` |
+| A method changes an external mutable reference argument (`fn add_to(&self, total: &mut Money)`) | REJECT. Change the value itself through `&mut self`; this rule is syntactic and does not prove which statements mutate the argument |
 | A domain type implements `Add`, `Sub`, `Mul`, `Div`, or `Rem` | REJECT. Implement the operators that change in place, such as `AddAssign`, not operators that return a new value |
 | A query taking `&self` returns a value of another type (a total, a copy for display or persistence) | OK |

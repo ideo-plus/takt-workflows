@@ -13,7 +13,7 @@
  */
 
 import { existsSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { loadAggregateMapping } from "./lib/aggregate-mapping/index.ts";
 import { inspectLayerDeclaration, loadLayerDeclaration } from "./lib/layer-declaration/index.ts";
 import { readLayoutSelection } from "./lib/module-layout/settings.ts";
@@ -25,6 +25,7 @@ import {
   finding,
   type ProjectContext,
   projectContext,
+  projectSources,
   relPath,
   ToolUnavailableError,
 } from "./lib/project/context.ts";
@@ -35,12 +36,15 @@ import {
   evaluateTypeScriptInterfaceAdapter,
   evaluateTypeScriptUseCase,
 } from "./lib/rules/typescript/evaluate.ts";
+import { workspacePackages } from "./lib/rules/typescript/packages.ts";
 import { classifyDomainFactExtractor } from "./lib/rust/domain-facts/index.ts";
 import { LAYER_FILE, MAPPING_FILE, MODEL_FILE } from "./lib/schema/artifacts.ts";
 import { checkCompleteness } from "./lib/schema/completeness.ts";
 import { loadDomainModel } from "./lib/schema/loader.ts";
 import { collectUnresolved } from "./lib/schema/unresolved.ts";
 import type { FindingInput } from "./lib/shared/findings.ts";
+import type { PackageIdentity } from "./lib/layer-declaration/contract.ts";
+import { assignLayers, scanWorkspace } from "./lib/workspace/resolver.ts";
 
 interface CheckResult {
   readonly check: string;
@@ -109,7 +113,24 @@ function checkLayers(context: ProjectContext): Omit<CheckResult, "check"> {
   if (!existsSync(path)) return { findings: [finding("layer.missing", file, `${LAYER_FILE} is missing`)] };
   const loaded = loadLayerDeclaration(path);
   if (!loaded.ok) return { findings: loaded.findings.map((entry) => ({ ...entry, file })) };
-  return { findings: inspectLayerDeclaration(loaded.declaration, loaded.model, file) };
+  // A mapping declares business ownership, not the package's layer. Resolve the same manifest
+  // names and placements the language checks use before granting the aggregate-only exception.
+  const domainPackages: PackageIdentity[] = workspacePackages(context.root)
+    .filter((pkg) => pkg.assignment.layer === "domain")
+    .map((pkg) => ({ language: "typescript", package: pkg.name }));
+  const seenCrates = new Set<string>();
+  for (const manifest of projectSources(context, [".toml"])) {
+    if (!manifest.resolved_path || basename(manifest.path) !== "Cargo.toml") continue;
+    const root = dirname(manifest.resolved_path);
+    for (const assignment of assignLayers(scanWorkspace(root))) {
+      const cratePath = resolve(root, assignment.path);
+      if (seenCrates.has(cratePath)) continue;
+      seenCrates.add(cratePath);
+      if (assignment.layer === "domain")
+        domainPackages.push({ language: "rust", package: assignment.crate_name });
+    }
+  }
+  return { findings: inspectLayerDeclaration(loaded.declaration, loaded.model, file, domainPackages) };
 }
 
 async function checkRust(context: ProjectContext): Promise<CheckResult[]> {

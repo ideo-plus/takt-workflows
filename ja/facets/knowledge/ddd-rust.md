@@ -10,7 +10,7 @@ pub mod line;
 pub mod lines;
 
 use self::add_line_requests::AddLineRequests;
-use self::line::InvoiceLine;
+use self::line::{InvoiceLine, Money};
 use self::lines::InvoiceLines;
 use crate::customer_id::CustomerId;
 
@@ -97,7 +97,7 @@ impl Invoice {
     }
 
     pub fn open(id: &str, customer: CustomerId, lines: InvoiceLines) -> Result<Self, OpenInvoiceError> {
-        if lines.total() < 0 {
+        if lines.total().is_negative() {
             return Err(OpenInvoiceError::NegativeTotal);
         }
         Ok(Self::new(id.to_string(), customer, lines, false, AddLineRequests::of(Vec::new())))
@@ -110,7 +110,7 @@ impl Invoice {
         issued: bool,
         add_line_requests: AddLineRequests,
     ) -> Result<Self, CorruptInvoiceState> {
-        if (issued && lines.is_empty()) || lines.total() < 0 {
+        if (issued && lines.is_empty()) || lines.total().is_negative() {
             return Err(CorruptInvoiceState);
         }
         Ok(Self::new(id.to_string(), customer, lines, issued, add_line_requests))
@@ -124,8 +124,8 @@ impl Invoice {
             return Err(AddInvoiceLineError::AlreadyIssued);
         }
         let mut total = self.lines.total();
-        line.add_to(&mut total);
-        if total < 0 {
+        line.with_amount(|amount| total.add(amount));
+        if total.is_negative() {
             return Err(AddInvoiceLineError::NegativeTotal);
         }
         self.lines.add(line.clone());
@@ -148,7 +148,7 @@ impl Invoice {
         &self.customer == customer
     }
 
-    pub fn total(&self) -> i64 {
+    pub fn total(&self) -> Money {
         self.lines.total()
     }
 
@@ -158,30 +158,51 @@ impl Invoice {
 }
 ```
 
-`restore` は、壊れた状態を専用の型で知らせる。業務上の失敗ではないからである。`add_line` は反映した要求 ID を記憶し、再送された要求をほかのどの判定より先に認識する。そのときは `AddInvoiceLineOutcome::Duplicate` を返し、何も変えず、イベントも生まないので、イベントが二重に公開されない。何かを変える前に、変えた後の合計を確かめる。イベントもドメイン型であり、フィールドは非公開、集約のモジュールの中で自分の `new` によって組み立て、公開する側には読み取り専用のアクセサを提供する。顧客は Domain Primitive `CustomerId`、明細と反映済みの要求 ID はファーストクラスコレクション `InvoiceLines`、`AddLineRequests` である。請求書 ID と金額は例を短く保つために `&str` / `i64` のままにしている。実際のコードでは同じ作り方で包む。
+`restore` は、壊れた状態を専用の型で知らせる。業務上の失敗ではないからである。`add_line` は反映した要求 ID を記憶し、再送された要求をほかのどの判定より先に認識する。そのときは `AddInvoiceLineOutcome::Duplicate` を返し、何も変えず、イベントも生まないので、イベントが二重に公開されない。何かを変える前に、変えた後の合計を確かめる。イベントもドメイン型であり、フィールドは非公開、集約のモジュールの中で自分の `new` によって組み立て、公開する側には読み取り専用のアクセサを提供する。顧客は Domain Primitive `CustomerId`、明細金額は Domain Primitive `Money`、明細と反映済みの要求 ID はファーストクラスコレクション `InvoiceLines`、`AddLineRequests` である。請求書 ID は例を短く保つために `&str` のままにしている。
 
 ## その場での変更
 
-ドメインの型の種類によらず、変わるものを `&mut` で受け取り、その場で変える。変わる値オブジェクト、Domain Primitive、コレクションは `&mut self` を取り、`()` を返す。変更が失敗し得るなら `Result<(), E>` を返す。`&self` や `self` を取って新しいインスタンスを返すことはせず、`Add` のような新しい値を返す演算子も実装しない。所有権があるので安全である。`&` で共有された値は変えられず、変える前の値が要る呼び出し側は先に `clone` する。集約の中の値の `&mut self` のメソッドはコマンドではなく、集約のコマンドがそれを呼ぶ。
+ドメインの型の種類によらず、変わるものを `&mut` で受け取り、その場で変える。変わる値オブジェクト、Domain Primitive、コレクションは `&mut self` を取り、`()` を返す。変更が失敗し得るなら `Result<(), E>` を返す。ドメインメソッドは外部の `&mut` 引数を変更せず、変更の受け手自身を receiver にする。その禁止形は構文から検出するが、本体の文が実際に引数を変更するかまでは証明しない。`&self` や `self` を取って新しいインスタンスを返すことはせず、`Add` のような新しい値を返す演算子も実装しない。所有権があるので安全である。`&` で共有された値は変えられず、変える前の値が要る呼び出し側は先に `clone` する。集約の中の値の `&mut self` のメソッドはコマンドではなく、集約のコマンドがそれを呼ぶ。
 
 ```rust
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Money(i64);
+
+impl Money {
+    pub fn of(value: i64) -> Self {
+        Money(value)
+    }
+
+    pub fn zero() -> Self {
+        Money(0)
+    }
+
+    pub fn add(&mut self, rhs: &Money) {
+        self.0 += rhs.0;
+    }
+
+    pub fn is_negative(&self) -> bool {
+        self.0 < 0
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InvoiceLine {
-    amount: i64,
+    amount: Money,
 }
 
 impl InvoiceLine {
     pub fn of(amount: i64) -> Self {
-        InvoiceLine { amount }
+        InvoiceLine { amount: Money::of(amount) }
     }
 
-    pub fn add_to(&self, total: &mut i64) {
-        *total += self.amount;
+    pub fn with_amount<R>(&self, use_amount: impl FnOnce(&Money) -> R) -> R {
+        use_amount(&self.amount)
     }
 }
 ```
 
-`add_to` で変わるのは明細ではなく合計なので、合計を `&mut` の引数にし、明細は `&self` にする。明細から値を読み出さず、明細が自分を加える。
+`Money` は Domain Primitive であり、モデルでは個々の明細金額を理由付きの `unconstrained` として宣言する。負の明細を別の明細で相殺できる一方、集約が合計の非負を守るためである。`Money::add` は受け手の `Money` 自身を `&mut self` で変更し、`InvoiceLine` は裸の値やgetterを公開せず、Domain Primitiveを操作へ渡す。その場での変更規則は外部の `&mut` 引数を拒否するが、通常の `&self` 問い合わせは許可する。
 
 ## Domain Primitive
 
@@ -214,7 +235,7 @@ impl CustomerId {
 ほかの状態と並べてコレクションを持つドメインの型は、それをファーストクラスコレクションで包む。状態がそのコレクションだけの型で、コレクションへの操作と判断を持つ。`InvoiceLines` はその場で明細を加え、合計を出す。集約は `Vec` に触れない。
 
 ```rust
-use super::line::InvoiceLine;
+use super::line::{InvoiceLine, Money};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InvoiceLines(Vec<InvoiceLine>);
@@ -228,10 +249,10 @@ impl InvoiceLines {
         self.0.push(line);
     }
 
-    pub fn total(&self) -> i64 {
-        let mut total = 0;
+    pub fn total(&self) -> Money {
+        let mut total = Money::zero();
         for line in &self.0 {
-            line.add_to(&mut total);
+            line.with_amount(|amount| total.add(amount));
         }
         total
     }
@@ -376,8 +397,8 @@ impl InvoiceRepository for InMemoryInvoiceRepository {
 
 | 配置 | 子を持つモジュール | 葉 |
 |------|-------------------|----|
-| `file` | `src/invoice.rs` と `src/invoice/line.rs` | `src/money.rs` |
-| `mod-rs` | `src/invoice/mod.rs` と `src/invoice/line.rs` | `src/money.rs` |
+| `file` | `src/invoice.rs` | `src/invoice/line.rs` |
+| `mod-rs` | `src/invoice/mod.rs` | `src/invoice/line.rs` |
 
 `lib.rs`、`main.rs`、Cargo が指定するルートは、どちらの配置でも名前を変えない。配置はすべてのパッケージ、テスト、example、bench、ビルドスクリプトに適用する。`#[cfg(test)]` のモジュールは、別ファイルでもインラインでもテストコードであり、業務コードとしては検査しない。
 

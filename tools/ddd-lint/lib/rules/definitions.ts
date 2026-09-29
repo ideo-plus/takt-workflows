@@ -55,7 +55,7 @@ export const RULES: readonly RuleDefinition[] = [
   {
     rule_id: "in-place",
     name: "in-place-change",
-    statement: "a domain method returns a changed copy instead of changing the value in place through &mut",
+    statement: "a domain method changes an external &mut argument or returns a changed copy instead of changing the value in place through &mut self",
     target_layers: ["domain"],
     requires_model: false,
     facts: ["impls"],
