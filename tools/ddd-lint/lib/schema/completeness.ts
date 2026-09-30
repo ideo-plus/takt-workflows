@@ -71,7 +71,8 @@ export function checkCompleteness(model: DomainModel, file = "docs/ddd/domain-mo
         }
         // Keeping only the last command ID holds only when an older command is never resent after a
         // newer one (C1 -> C2 -> retry C1); the rationale states why.
-        if (command.idempotency.retention === "last-one" && command.idempotency.rationale === undefined) {
+        // A rationale of blanks states nothing, so it counts as missing.
+        if (command.idempotency.retention === "last-one" && !command.idempotency.rationale?.trim()) {
           findings.push({
             rule_id: "idempotency.last-one",
             file,

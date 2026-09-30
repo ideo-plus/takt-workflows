@@ -425,6 +425,13 @@ describe("model files", () => {
     ]);
   });
 
+  test("a rationale of blanks does not state why an older command is never resent", () => {
+    const result = lint(sample.files, (files) =>
+      replace(files, "docs/ddd/domain-model.yaml", LAST_ONE, 'idempotency: { strategy: command-id-memory, retention: last-one, rationale: "   " }'),
+    );
+    expect(result.findings.map((entry) => entry.rule_id)).toEqual(["idempotency.last-one"]);
+  });
+
   test("an accumulating command without command-id-memory is reported", () => {
     const result = lint(sample.files, (files) =>
       replace(
