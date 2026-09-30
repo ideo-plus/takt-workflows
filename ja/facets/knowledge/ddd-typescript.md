@@ -342,7 +342,7 @@ import type { InvoiceNotFound, InvoiceRepository } from "./invoice-repository.ts
 
 export type IssueInvoiceFailure = InvoiceNotFound | IssueInvoiceError;
 
-export class IssueInvoice {
+export class IssueInvoiceUseCase {
   readonly #invoiceRepository: InvoiceRepository;
 
   constructor(invoiceRepository: InvoiceRepository) {

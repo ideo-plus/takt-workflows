@@ -5,8 +5,8 @@
  * - domain: the layer diagnostics, rules (a), (b), (c), (d) and port placement over each checked
  *   domain source, then the dependency direction (g), and domain packaging over each domain package
  *   the checked sources touch;
- * - use-case: rules (h), (i) and (d) over each checked use-case source, then the dependency
- *   direction and external I/O (g);
+ * - use-case: rules (h), (i), (d) and use-case naming over each checked use-case source, then the
+ *   dependency direction and external I/O (g);
  * - interface-adapter: rules (l), (m) and (n) over each checked interface-adapter or rmu source and
  *   each checked query-side source, then the cross-side rule (k) and the dependency direction (g).
  *
@@ -34,7 +34,7 @@ import { factsOf } from "./file-facts.ts";
 import { ruleL, ruleM, ruleN } from "./interface-adapter.ts";
 import { ruleA } from "./state-hiding.ts";
 import type { TsGate, TsInspection, TsTarget } from "./types.ts";
-import { ruleH, ruleI } from "./use-case.ts";
+import { ruleH, ruleI, ruleUseCaseName } from "./use-case.ts";
 
 const DOMAIN: TsGate = {
   label: "domain",
@@ -118,6 +118,7 @@ export function evaluateTypeScriptUseCase(run: ProjectContext, api: CheckApi): C
       ...ruleH(inspection, target),
       ...ruleI(inspection, target),
       ...ruleD(inspection, target),
+      ...ruleUseCaseName(inspection, target),
     ],
     whole: (inspection) => ruleG(buildEdges(inspection)),
   });

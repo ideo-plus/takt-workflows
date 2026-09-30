@@ -398,7 +398,7 @@ import type { InvoiceNotFound, InvoiceRepository } from "./invoice-repository.ts
 
 export type IssueInvoiceFailure = InvoiceNotFound | IssueInvoiceError;
 
-export class IssueInvoice {
+export class IssueInvoiceUseCase {
   readonly #invoiceRepository: InvoiceRepository;
 
   constructor(invoiceRepository: InvoiceRepository) {
@@ -420,7 +420,7 @@ export class IssueInvoice {
 
 const USE_CASE_INDEX = `export type { InvoiceNotFound, InvoiceRepository } from "./invoice-repository.ts";
 export type { IssueInvoiceFailure } from "./issue-invoice.ts";
-export { IssueInvoice } from "./issue-invoice.ts";
+export { IssueInvoiceUseCase } from "./issue-invoice.ts";
 `;
 
 export const IN_MEMORY_INVOICE_REPOSITORY = `import { CustomerId, Invoice, InvoiceLine, InvoiceLines } from "${DOMAIN_NAME}";
