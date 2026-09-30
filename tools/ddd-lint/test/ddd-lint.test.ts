@@ -214,6 +214,17 @@ describe("TypeScript", () => {
     ]);
   });
 
+  test("a use case type not named <Verb><Object>UseCase is reported", () => {
+    const result = lint(sample.files, (files) => {
+      replace(files, "packages/command/billing-use-case/src/issue-invoice.ts", "export class IssueInvoiceUseCase {", "export class IssueInvoice {");
+      replace(files, "packages/command/billing-use-case/src/index.ts", "export { IssueInvoiceUseCase }", "export { IssueInvoice }");
+    });
+    expect(result.unavailable).toEqual([]);
+    expect(result.findings.filter((entry) => entry.rule_id === "use-case-name").map((entry) => `${entry.check}: ${entry.message}`)).toEqual([
+      "typescript-use-case: use case IssueInvoice is not named <Verb><Object>UseCase; name it IssueInvoiceUseCase",
+    ]);
+  });
+
   test("a Domain Primitive factory that does not return Result is reported", () => {
     const result = lint(sample.files, (files) =>
       replace(files, "packages/command/billing-domain/src/customer-id.ts", "static parse(value: string): Result<CustomerId, ParseCustomerIdError>", "static parse(value: string): CustomerId"),
@@ -389,6 +400,19 @@ impl ObservesTotal for InvoiceLine {
     expect(result.unavailable).toEqual([]);
     expect(result.findings.filter((entry) => entry.rule_id === "port-placement").map((entry) => `${entry.check}: ${entry.message}`)).toEqual([
       "rust-domain: repository port InvoiceRepository is declared in the domain layer; declare it in the use-case layer",
+    ]);
+  });
+
+  test("a use case type not named <Verb><Object>UseCase is reported", () => {
+    const useCase = "packages/command/billing-use-case/src/issue_invoice.rs";
+    const result = lint(sample.files, (files) => {
+      replace(files, useCase, "pub struct IssueInvoiceUseCase<'a> {", "pub struct IssueInvoice<'a> {");
+      replace(files, useCase, "impl<'a> IssueInvoiceUseCase<'a> {", "impl<'a> IssueInvoice<'a> {");
+      replace(files, useCase, "        IssueInvoiceUseCase { invoice_repository }", "        IssueInvoice { invoice_repository }");
+    });
+    expect(result.unavailable).toEqual([]);
+    expect(result.findings.filter((entry) => entry.rule_id === "use-case-name").map((entry) => `${entry.check}: ${entry.message}`)).toEqual([
+      "rust-use-case: use case IssueInvoice is not named <Verb><Object>UseCase; name it IssueInvoiceUseCase",
     ]);
   });
 

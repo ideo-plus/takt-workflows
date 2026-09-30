@@ -439,6 +439,31 @@ function ruleH(target: InspectionTarget, context: InspectionContext): FindingInp
   return out;
 }
 
+// --- (use-case-name) a use case type ends with UseCase ----------------------
+// The type an impl block with `execute` belongs to is a use case, and its name ends with `UseCase`
+// (`IssueInvoiceUseCase`). A free `fn execute` has no type to name.
+function ruleUseCaseName(target: InspectionTarget, context: InspectionContext): FindingInput[] {
+  if (!target.file) return [];
+  const file = target.file;
+  const out: FindingInput[] = [];
+  const reported = new Set<string>();
+  for (const block of declarationsOf(context, file).impls) {
+    if (!block.methods.some((method) => method.name === "execute")) continue;
+    const name = block.target_type_text.replace(/<[\s\S]*$/, "").trim().split("::").pop() ?? "";
+    if (name === "" || name.endsWith("UseCase") || reported.has(name)) continue;
+    reported.add(name);
+    out.push(
+      finding(
+        "use-case-name",
+        file,
+        `use case ${name} is not named <Verb><Object>UseCase; name it ${name}UseCase`,
+        block.span.start_line,
+      ),
+    );
+  }
+  return out;
+}
+
 // --- (i) use case chaining --------------------------------------------------
 function ruleI(target: InspectionTarget, context: InspectionContext): FindingInput[] {
   if (!target.file) return [];
@@ -616,6 +641,7 @@ export const PER_FILE_EVALUATORS: Record<
   d: ruleD,
   h: ruleH,
   i: ruleI,
+  "use-case-name": ruleUseCaseName,
   l: ruleL,
   m: ruleM,
   n: ruleN,

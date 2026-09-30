@@ -106,6 +106,29 @@ export function ruleH(inspection: TsInspection, target: TsTarget): FindingInput[
   return findings;
 }
 
+// --- (use-case-name) a use case type ends with UseCase ----------------------------------------------
+
+/**
+ * A class of a use-case source that declares `execute` is a use case, and its name ends with
+ * `UseCase` (`IssueInvoiceUseCase`). A use case written as a function at the top of the file has no
+ * type to name.
+ */
+export function ruleUseCaseName(inspection: TsInspection, target: TsTarget): FindingInput[] {
+  return factsOf(inspection, target.file)
+    .declarations.filter(
+      (declaration) =>
+        declaration.kind === "class" &&
+        !declaration.name.endsWith("UseCase") &&
+        declaration.members.some((member) => member.kind === "method" && member.name === "execute"),
+    )
+    .map((declaration) => ({
+      rule_id: "use-case-name",
+      file: target.file,
+      message: `use case ${declaration.name} is not named <Verb><Object>UseCase; name it ${declaration.name}UseCase`,
+      line: declaration.span.start_line,
+    }));
+}
+
 // --- (i) use case chaining -----------------------------------------------------------------------
 
 /**

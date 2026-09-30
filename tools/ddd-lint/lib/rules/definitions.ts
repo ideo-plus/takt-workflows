@@ -116,6 +116,15 @@ export const RULES: readonly RuleDefinition[] = [
     per_file: true,
   },
   {
+    rule_id: "use-case-name",
+    name: "use-case-suffix",
+    statement: "a use case type (the type whose method is execute) is not named <Verb><Object>UseCase",
+    target_layers: ["use-case"],
+    requires_model: false,
+    facts: ["impls"],
+    per_file: true,
+  },
+  {
     rule_id: "i",
     name: "use-case-chaining",
     statement: "use case calls another use case",

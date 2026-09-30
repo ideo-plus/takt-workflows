@@ -325,13 +325,13 @@ pub enum IssueInvoiceFailure {
     Rejected(IssueInvoiceError),
 }
 
-pub struct IssueInvoice<'a> {
+pub struct IssueInvoiceUseCase<'a> {
     invoice_repository: &'a dyn InvoiceRepository,
 }
 
-impl<'a> IssueInvoice<'a> {
+impl<'a> IssueInvoiceUseCase<'a> {
     pub fn new(invoice_repository: &'a dyn InvoiceRepository) -> Self {
-        IssueInvoice { invoice_repository }
+        IssueInvoiceUseCase { invoice_repository }
     }
 
     /// Issues the invoice, stores it, and hands back the event for the caller to publish.

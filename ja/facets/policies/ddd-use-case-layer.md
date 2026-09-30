@@ -10,6 +10,7 @@
 | ユースケースが別のユースケースの `execute` を呼ぶ | REJECT |
 | ポートを、ポートの型を付けたフィールドや引数で持つ | OK |
 | ポートを持つフィールドや引数の名前が、ポートの名前に合っていない（`InvoiceRepository` なら `invoice_repository` や `#invoiceRepository`）。たとえば `invoices` のような集約の複数形 | REJECT |
+| `execute` を持つ型の名前が `<動詞><対象>UseCase`（`IssueInvoiceUseCase`）になっていない | REJECT。関数だけで書いたユースケースには名付ける型がない |
 
 ## 再実行と公開
 

@@ -10,6 +10,7 @@ Judges the code of the use-case layer. A use case orchestrates: it loads, calls 
 | A use case calls another use case's `execute` | REJECT |
 | A port is held in a field or parameter typed as the port | OK |
 | A field or parameter that holds a port is not named after the port (`invoice_repository` or `#invoiceRepository` for `InvoiceRepository`), for example a plural of the aggregate such as `invoices` | REJECT |
+| The type whose method is `execute` is not named `<Verb><Object>UseCase` (`IssueInvoiceUseCase`) | REJECT. A use case written as a bare function has no type to name |
 
 ## Re-Execution and Publishing
 
