@@ -20,7 +20,7 @@
 ## クイックスタート
 
 ### 必要なもの
-- TAKT 0.67 以降（`npm i -g takt`）
+- TAKT 0.67 以降（`npm i -g takt`。プロジェクトごとに [mise](https://mise.jdx.dev) で固定するなら、プロジェクトの `mise.toml` の `[tools]` に `"npm:takt" = "0.67.0"` を書きます。`node` より前に書くと、その node にグローバルで入れた `takt` より優先されます）
 - ワークフローの `runtime.yaml` に書かれた provider（各ワークフローの節を参照）
 
 ### 作業するプロジェクトに導入する
@@ -187,6 +187,7 @@ scripts/sandbox-verify.sh --mode real --workflow ddd-rust-default   # 結果を 
 - **2 言語、1 構造。** `en/` と `ja/` は常に同期させます。ファイル名は同一で、YAML は `description`、rule の `condition` 文、コメント以外は同じにします。builtin をコピーしたワークフローは、builtin の `en` / `ja` に同じ改変を加えたものなので、構造を変えるときは両方を変えてください。
 - **builtin はコピーせず参照する。** builtin のワークフローをコピーするのは、ステップを変える必要があるときだけにします。builtin の facet は `builtin-` 接頭辞の 1 行 `{extends:...}` ファイルで参照します。
 - **テンプレート。** `runtime.project.yaml` と `config.project.yaml` はインストーラがプロジェクトへコピーするものです。このリポジトリ内の `.takt/{workflows,steps,facets}` は `scripts/use-lang.sh`（リポジトリ直下で実行）が生成するもので、追跡しません。
+- **ツールのバージョン。** `mise.toml` に、CI が入れるのと同じバージョン（TAKT、Node、Bun）を固定しています。一度 `mise install` を実行すれば、このリポジトリの中ではグローバルに入っている版にかかわらず、固定した TAKT が使われます。`mise.toml` と `.github/workflows/ci.yml` は一緒に変えてください。
 - **検証。** 変更を出す前に、両言語で `scripts/sandbox-verify.sh --mode mock --lang <en|ja>` を通してください。CI でも実行します。facet や tier を変えたときは `--mode real` も実行してください。
 
 ### flash-default の設計メモ

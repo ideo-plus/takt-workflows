@@ -1,0 +1,9 @@
+# Tool versions for working on this repository, the same ones CI installs
+# (.github/workflows/ci.yml: setup-node, BUN_VERSION, TAKT_VERSION); change them together.
+# Pinning TAKT here runs the version the bundle targets inside this repository without
+# changing a global install.
+[tools]
+# Listed first so its takt wins over a takt installed globally into this node.
+"npm:takt" = "0.67.0"
+node = "24"
+bun = "1.4.2"
