@@ -3,10 +3,8 @@
 # Commit it: TAKT runs tasks in worktree clones, and the whole team should use the same tiers.
 #
 # Profiles (provider + model) and step assignments both live here, so nothing depends on
-# ~/.takt/runtime.yaml. The profiles below are the ones verified in full runs, except t3-judge:
-# gpt-6.1-sol at reasoning_effort medium (the effort gpt-6-astra judged at by default) replaced the
-# verified gpt-6-astra and has not been through a full run yet. Replace them with what your
-# environment provides. Keep the profile NAMES, the step assignments use them.
+# ~/.takt/runtime.yaml. The profiles below are the ones verified in full runs; replace them
+# with what your environment provides. Keep the profile NAMES, the step assignments use them.
 #
 # Note: TAKT accepts a non-loopback base_url (e.g. a DGX Spark on the LAN) only in the
 # "global" runtime.yaml. To keep that per project too, point TAKT_CONFIG_DIR at a directory
@@ -26,7 +24,7 @@ provider:
     t2: { provider: claude, model: claude-opus-5-5 }
     # T3 (optional): planning and sign-off on different vendors
     t3-plan:  { provider: claude, model: claude-fable-5-1 }
-    t3-judge: { provider: codex,  model: gpt-6.1-sol, options: { reasoning_effort: medium } }
+    t3-judge: { provider: codex,  model: gpt-6-astra }
   targets:
     steps:
       # T3 (optional): remove these four lines to run them on t2 instead

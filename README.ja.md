@@ -83,7 +83,7 @@ builtin の `default` ワークフロー（シナリオベースの計画、テ�
 | T2 | `reimplement_final`、`fix` の昇格先、その他すべてのステップの既定 | 最も強い汎用モデル | `claude` / `claude-opus-5-5` |
 | T3（任意） | `plan`、`replan`、裁定、`final-gate` | トークン消費が少なく判断の影響が大きいステップ向けの最上位モデル | `claude` / `claude-fable-5-1`（計画）、`codex` / `gpt-6-astra`（検収） |
 
-この例は、実走で実際に使った profile そのものです。雛形の `t3-judge` は現在 `codex` / `gpt-6.1-sol`（`reasoning_effort: medium`。`gpt-6-astra` が既定で判定していたレベル）にしており、こちらはまだ実走で確かめていません。T1 には構造化出力に対応した provider（`claude`、`claude-sdk`、`claude-terminal`、`codex`、`opencode` のいずれか）が必要です。
+この例は、実走で実際に使った profile そのものです。T1 には構造化出力に対応した provider（`claude`、`claude-sdk`、`claude-terminal`、`codex`、`opencode` のいずれか）が必要です。
 
 ### `.takt/runtime.yaml`
 ```yaml
@@ -102,7 +102,7 @@ provider:
     t2: { provider: claude, model: claude-opus-5-5 }
     # T3 (optional): planning and sign-off on different vendors
     t3-plan:  { provider: claude, model: claude-fable-5-1 }
-    t3-judge: { provider: codex,  model: gpt-6.1-sol, options: { reasoning_effort: medium } }
+    t3-judge: { provider: codex,  model: gpt-6-astra }
   targets:
     steps:
       # T3 (optional): remove these four lines to run them on t2 instead
