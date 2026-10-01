@@ -81,9 +81,9 @@ The builtin `default` workflow (scenario-based planning, test-first implementati
 | T0 | `write_tests`, first `implement` | Flash-class model (DGX Spark, Ollama Cloud, LM Studio) | `opencode` / `ollama/glm-5.3-flash:cloud` (tests), `opencode` / `opencode-go/gpt-5.6-luna` (implement) |
 | T1 | `reimplement`, `fix`, review companions, facet selector | Mid-size model with structured output | `claude` / `claude-sonnet-5` |
 | T2 | `reimplement_final`, `fix` escalation, default for every other step | Strongest general model | `claude` / `claude-opus-5-5` |
-| T3 (optional) | `plan`, `replan`, adjudication, `final-gate` | Top model for low-token, high-leverage judgment steps | `claude` / `claude-fable-5-1` (plan), `codex` / `gpt-6-astra` (judge) |
+| T3 (optional) | `plan`, `replan`, adjudication, `final-gate` | Top model for low-token, high-leverage judgment steps | `claude` / `claude-fable-5-1` (plan), `codex` / `gpt-6.1-sol` with `reasoning_effort: high` (judge) |
 
-The examples are the exact profiles used in the verified full runs. The template's `t3-judge` now uses `codex` / `gpt-6.1-sol`, the top Codex model (`gpt-6-astra` ranks next), with `reasoning_effort: high` for the judgment steps; it has not been through a full run yet. It needs TAKT 0.67 or later: the Codex CLI that TAKT 0.66 bundles rejects it for ChatGPT accounts. T1 needs a provider with structured output: `claude`, `claude-sdk`, `claude-terminal`, `codex`, or `opencode`.
+The examples are the exact profiles used in the verified full runs. `gpt-6.1-sol` is the top Codex model (`gpt-6-astra` ranks next); it needs TAKT 0.67 or later, as the Codex CLI that TAKT 0.66 bundles rejects it for ChatGPT accounts. T1 needs a provider with structured output: `claude`, `claude-sdk`, `claude-terminal`, `codex`, or `opencode`.
 
 ### `.takt/runtime.yaml`
 ```yaml

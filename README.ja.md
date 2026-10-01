@@ -81,9 +81,9 @@ builtin の `default` ワークフロー（シナリオベースの計画、テ�
 | T0 | `write_tests`、初回の `implement` | Flash 級モデル（DGX Spark、Ollama Cloud、LM Studio） | `opencode` / `ollama/glm-5.3-flash:cloud`（テスト）、`opencode` / `opencode-go/gpt-5.6-luna`（実装） |
 | T1 | `reimplement`、`fix`、review companion、facet selector | 構造化出力に対応した中規模モデル | `claude` / `claude-sonnet-5` |
 | T2 | `reimplement_final`、`fix` の昇格先、その他すべてのステップの既定 | 最も強い汎用モデル | `claude` / `claude-opus-5-5` |
-| T3（任意） | `plan`、`replan`、裁定、`final-gate` | トークン消費が少なく判断の影響が大きいステップ向けの最上位モデル | `claude` / `claude-fable-5-1`（計画）、`codex` / `gpt-6-astra`（検収） |
+| T3（任意） | `plan`、`replan`、裁定、`final-gate` | トークン消費が少なく判断の影響が大きいステップ向けの最上位モデル | `claude` / `claude-fable-5-1`（計画）、`codex` / `gpt-6.1-sol`（`reasoning_effort: high`、検収） |
 
-この例は、実走で実際に使った profile そのものです。雛形の `t3-judge` は現在、Codex の最上位モデルの `codex` / `gpt-6.1-sol`（次点は `gpt-6-astra`）にしており、判定のステップなので `reasoning_effort: high` を指定しています。こちらはまだ実走で確かめていません。TAKT 0.67 以降が必要です（TAKT 0.66 が同梱する Codex CLI では ChatGPT アカウントで使えません）。T1 には構造化出力に対応した provider（`claude`、`claude-sdk`、`claude-terminal`、`codex`、`opencode` のいずれか）が必要です。
+この例は、実走で実際に使った profile そのものです。`gpt-6.1-sol` は Codex の最上位モデルです（次点は `gpt-6-astra`）。TAKT 0.67 以降が必要です（TAKT 0.66 が同梱する Codex CLI では ChatGPT アカウントで使えません）。T1 には構造化出力に対応した provider（`claude`、`claude-sdk`、`claude-terminal`、`codex`、`opencode` のいずれか）が必要です。
 
 ### `.takt/runtime.yaml`
 ```yaml
