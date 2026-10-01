@@ -9,6 +9,7 @@ A growing collection of TAKT (0.67) workflows, facets, and operational know-how,
 ## Commands
 
 ```sh
+mise install                                                 # the tool versions CI uses (TAKT 0.67.0, Node 24, Bun) for this repository
 node --test 'scripts/**/*.test.mjs'                          # script unit tests (node:test, no package.json)
 node --test scripts/check-facet-budget.test.mjs              # a single test file
 (cd tools/ddd-lint && bun install && bun run typecheck && bun test)   # ddd-lint (Bun); needs the Rust extractor for this platform
