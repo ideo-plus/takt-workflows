@@ -36,4 +36,11 @@ fi
 
 echo "run-codex: Codex の設定: $TAKT_CODEX_ACCOUNT_DIR" >&2
 echo "run-codex: TAKT_CONFIG_DIR: $TAKT_CONFIG_DIR" >&2
-exec "${TAKT_REAL_CLI:-takt}" "$@"
+# takt は、mise があれば mise exec で起動する。プロジェクトの mise.toml で固定した版を、mise が
+# 有効でないシェルや IDE から呼ばれても使うため。TAKT_REAL_CLI はテストのための差し替え。
+if [ -n "${TAKT_REAL_CLI:-}" ]; then
+    exec "$TAKT_REAL_CLI" "$@"
+elif command -v mise >/dev/null 2>&1; then
+    exec mise exec -- takt "$@"
+fi
+exec takt "$@"

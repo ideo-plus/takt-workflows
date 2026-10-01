@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -33,7 +33,7 @@ process.stdin.on('end', () => {
 });
 `);
   chmodSync(cli, 0o755);
-  return { project, account, env: {
+  return { root, cli, project, account, env: {
     PATH: process.env.PATH,
     HOME: process.env.HOME,
     TAKT_REAL_CLI: cli,
@@ -83,6 +83,21 @@ test('adapter overrides the inherited account and credentials without changing C
   assert.equal(got.env.CLAUDE_CONFIG_DIR, f.account);
   assert.equal(got.env.TAKT_AGENT, '1');
   assert.deepEqual(got.credentials, []);
+});
+
+test('launcher runs takt through mise exec when mise is available, so the project pin applies', t => {
+  const f = fixture(t);
+  const bin = join(f.root, 'bin');
+  mkdirSync(bin);
+  copyFileSync(f.cli, join(bin, 'mise'));
+  chmodSync(join(bin, 'mise'), 0o755);
+  const { TAKT_REAL_CLI, ...env } = f.env;
+  const result = spawnSync('sh', [launcher, '--claude-account', f.account, '--pipeline'], {
+    cwd: f.project, env: { ...env, PATH: `${bin}:${env.PATH}`, TEST_EXIT_CODE: '5' }, encoding: 'utf8',
+  });
+  assert.equal(result.status, 5, result.stderr);
+  const got = JSON.parse(result.stdout);
+  assert.deepEqual(got.args, ['exec', '--', 'takt', '--pipeline']);
 });
 
 test('missing or invalid account selection never launches the real CLI', t => {
