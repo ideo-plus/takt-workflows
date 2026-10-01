@@ -83,7 +83,7 @@ builtin の `default` ワークフロー（シナリオベースの計画、テ�
 | T2 | `reimplement_final`、`fix` の昇格先、その他すべてのステップの既定 | 最も強い汎用モデル | `claude` / `claude-opus-5-5` |
 | T3（任意） | `plan`、`replan`、裁定、`final-gate` | トークン消費が少なく判断の影響が大きいステップ向けの最上位モデル | `claude` / `claude-fable-5-1`（計画）、`codex` / `gpt-6-astra`（検収） |
 
-この例は、実走で実際に使った profile そのものです。T1 には構造化出力に対応した provider（`claude`、`claude-sdk`、`claude-terminal`、`codex`、`opencode` のいずれか）が必要です。
+この例は、実走で実際に使った profile そのものです。Codex のモデルでは `gpt-6.1-sol` が `gpt-6-astra` より上位になりましたが、TAKT 0.66 が同梱する Codex CLI では ChatGPT アカウントで使えないため、バンドルが TAKT 0.67 に移るまで `t3-judge` は `gpt-6-astra` のままにしています。T1 には構造化出力に対応した provider（`claude`、`claude-sdk`、`claude-terminal`、`codex`、`opencode` のいずれか）が必要です。
 
 ### `.takt/runtime.yaml`
 ```yaml

@@ -83,7 +83,7 @@ The builtin `default` workflow (scenario-based planning, test-first implementati
 | T2 | `reimplement_final`, `fix` escalation, default for every other step | Strongest general model | `claude` / `claude-opus-5-5` |
 | T3 (optional) | `plan`, `replan`, adjudication, `final-gate` | Top model for low-token, high-leverage judgment steps | `claude` / `claude-fable-5-1` (plan), `codex` / `gpt-6-astra` (judge) |
 
-The examples are the exact profiles used in the verified full runs. T1 needs a provider with structured output: `claude`, `claude-sdk`, `claude-terminal`, `codex`, or `opencode`.
+The examples are the exact profiles used in the verified full runs. `gpt-6.1-sol` now ranks above `gpt-6-astra` among the Codex models, but the Codex CLI that TAKT 0.66 bundles rejects it for ChatGPT accounts, so `t3-judge` stays on `gpt-6-astra` until the bundle moves to TAKT 0.67. T1 needs a provider with structured output: `claude`, `claude-sdk`, `claude-terminal`, `codex`, or `opencode`.
 
 ### `.takt/runtime.yaml`
 ```yaml
