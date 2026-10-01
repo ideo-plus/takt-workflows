@@ -20,7 +20,7 @@ More workflows will be added to this collection over time.
 ## Quickstart
 
 ### Requirements
-- TAKT 0.66 or later (`npm i -g takt`)
+- TAKT 0.67 or later (`npm i -g takt`)
 - The providers named in the workflow's `runtime.yaml` (see the workflow's section below)
 
 ### Add it to the project you work in
@@ -83,7 +83,7 @@ The builtin `default` workflow (scenario-based planning, test-first implementati
 | T2 | `reimplement_final`, `fix` escalation, default for every other step | Strongest general model | `claude` / `claude-opus-5-5` |
 | T3 (optional) | `plan`, `replan`, adjudication, `final-gate` | Top model for low-token, high-leverage judgment steps | `claude` / `claude-fable-5-1` (plan), `codex` / `gpt-6-astra` (judge) |
 
-The examples are the exact profiles used in the verified full runs. `gpt-6.1-sol` now ranks above `gpt-6-astra` among the Codex models, but the Codex CLI that TAKT 0.66 bundles rejects it for ChatGPT accounts, so `t3-judge` stays on `gpt-6-astra` until the bundle moves to TAKT 0.67. T1 needs a provider with structured output: `claude`, `claude-sdk`, `claude-terminal`, `codex`, or `opencode`.
+The examples are the exact profiles used in the verified full runs. The template's `t3-judge` now uses `codex` / `gpt-6.1-sol`, the top Codex model (`gpt-6-astra` ranks next), with `reasoning_effort: high` for the judgment steps; it has not been through a full run yet. It needs TAKT 0.67 or later: the Codex CLI that TAKT 0.66 bundles rejects it for ChatGPT accounts. T1 needs a provider with structured output: `claude`, `claude-sdk`, `claude-terminal`, `codex`, or `opencode`.
 
 ### `.takt/runtime.yaml`
 ```yaml
@@ -102,7 +102,7 @@ provider:
     t2: { provider: claude, model: claude-opus-5-5 }
     # T3 (optional): planning and sign-off on different vendors
     t3-plan:  { provider: claude, model: claude-fable-5-1 }
-    t3-judge: { provider: codex,  model: gpt-6-astra }
+    t3-judge: { provider: codex,  model: gpt-6.1-sol, options: { reasoning_effort: high } }
   targets:
     steps:
       # T3 (optional): remove these four lines to run them on t2 instead

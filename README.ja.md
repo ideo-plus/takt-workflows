@@ -20,7 +20,7 @@
 ## クイックスタート
 
 ### 必要なもの
-- TAKT 0.66 以降（`npm i -g takt`）
+- TAKT 0.67 以降（`npm i -g takt`）
 - ワークフローの `runtime.yaml` に書かれた provider（各ワークフローの節を参照）
 
 ### 作業するプロジェクトに導入する
@@ -83,7 +83,7 @@ builtin の `default` ワークフロー（シナリオベースの計画、テ�
 | T2 | `reimplement_final`、`fix` の昇格先、その他すべてのステップの既定 | 最も強い汎用モデル | `claude` / `claude-opus-5-5` |
 | T3（任意） | `plan`、`replan`、裁定、`final-gate` | トークン消費が少なく判断の影響が大きいステップ向けの最上位モデル | `claude` / `claude-fable-5-1`（計画）、`codex` / `gpt-6-astra`（検収） |
 
-この例は、実走で実際に使った profile そのものです。Codex のモデルでは `gpt-6.1-sol` が `gpt-6-astra` より上位になりましたが、TAKT 0.66 が同梱する Codex CLI では ChatGPT アカウントで使えないため、バンドルが TAKT 0.67 に移るまで `t3-judge` は `gpt-6-astra` のままにしています。T1 には構造化出力に対応した provider（`claude`、`claude-sdk`、`claude-terminal`、`codex`、`opencode` のいずれか）が必要です。
+この例は、実走で実際に使った profile そのものです。雛形の `t3-judge` は現在、Codex の最上位モデルの `codex` / `gpt-6.1-sol`（次点は `gpt-6-astra`）にしており、判定のステップなので `reasoning_effort: high` を指定しています。こちらはまだ実走で確かめていません。TAKT 0.67 以降が必要です（TAKT 0.66 が同梱する Codex CLI では ChatGPT アカウントで使えません）。T1 には構造化出力に対応した provider（`claude`、`claude-sdk`、`claude-terminal`、`codex`、`opencode` のいずれか）が必要です。
 
 ### `.takt/runtime.yaml`
 ```yaml
@@ -102,7 +102,7 @@ provider:
     t2: { provider: claude, model: claude-opus-5-5 }
     # T3 (optional): planning and sign-off on different vendors
     t3-plan:  { provider: claude, model: claude-fable-5-1 }
-    t3-judge: { provider: codex,  model: gpt-6-astra }
+    t3-judge: { provider: codex,  model: gpt-6.1-sol, options: { reasoning_effort: high } }
   targets:
     steps:
       # T3 (optional): remove these four lines to run them on t2 instead

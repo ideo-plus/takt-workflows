@@ -3,11 +3,11 @@
 # Commit it: TAKT runs tasks in worktree clones, and the whole team should use the same tiers.
 #
 # Profiles (provider + model) and step assignments both live here, so nothing depends on
-# ~/.takt/runtime.yaml. The profiles below are the ones verified in full runs; replace them
-# with what your environment provides. Keep the profile NAMES, the step assignments use them.
-# gpt-6.1-sol now ranks above gpt-6-astra among the Codex models, but the Codex CLI that TAKT 0.66
-# bundles (0.156) rejects it for ChatGPT accounts ("not supported when using Codex with a ChatGPT
-# account"), so the Codex profiles stay on gpt-6-astra until the bundle moves to TAKT 0.67.
+# ~/.takt/runtime.yaml. The profiles below are the ones verified in full runs, except t3-judge:
+# gpt-6.1-sol, the top Codex model (gpt-6-astra ranks next), judges at reasoning_effort high and
+# has not been through a full run yet. It needs TAKT 0.67 or later: the Codex CLI that TAKT 0.66
+# bundles rejects it for ChatGPT accounts. Replace the profiles with what your environment
+# provides. Keep the profile NAMES, the step assignments use them.
 #
 # Note: TAKT accepts a non-loopback base_url (e.g. a DGX Spark on the LAN) only in the
 # "global" runtime.yaml. To keep that per project too, point TAKT_CONFIG_DIR at a directory
@@ -27,7 +27,7 @@ provider:
     t2: { provider: claude, model: claude-opus-5-5 }
     # T3 (optional): planning and sign-off on different vendors
     t3-plan:  { provider: claude, model: claude-fable-5-1 }
-    t3-judge: { provider: codex,  model: gpt-6-astra }
+    t3-judge: { provider: codex,  model: gpt-6.1-sol, options: { reasoning_effort: high } }
   targets:
     steps:
       # T3 (optional): remove these four lines to run them on t2 instead
