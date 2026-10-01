@@ -18,13 +18,15 @@ provider:
     # T0: Flash-class models for closed, well-specified work
     t0-test-code:       { provider: codex, model: gpt-5.6-sol }
     t0-production-code: { provider: codex, model: gpt-5.6-sol }
-    # T1: mid-size model with structured output (companions and the facet selector need it)
+    # T1: mid-size model with structured output (companions and the facet selector need it);
+    # gpt-6-astra ranks next to gpt-6.1-sol
     t1: { provider: codex, model: gpt-6-astra }
-    # T2: strongest general model; default for every step not listed below
-    t2: { provider: codex, model: gpt-6-astra }
-    # T3 (optional): planning and sign-off
-    t3-plan:  { provider: codex, model: gpt-6-astra }
-    t3-judge: { provider: codex, model: gpt-6-astra }
+    # T2: strongest general model; default for every step not listed below. gpt-6.1-sol is the
+    # top Codex model; it defaults to reasoning_effort low, so the effort is stated
+    t2: { provider: codex, model: gpt-6.1-sol, options: { reasoning_effort: medium } }
+    # T3 (optional): planning and sign-off, the low-token high-leverage judgments
+    t3-plan:  { provider: codex, model: gpt-6.1-sol, options: { reasoning_effort: high } }
+    t3-judge: { provider: codex, model: gpt-6.1-sol, options: { reasoning_effort: high } }
   targets:
     steps:
       # T3 (optional): remove these four lines to run them on t2 instead
