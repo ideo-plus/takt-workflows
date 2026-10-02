@@ -11,11 +11,6 @@
 
 import { DOMAIN_MODEL } from "./typescript.ts";
 
-export const RUST_DOMAIN_MODEL = DOMAIN_MODEL.replace(
-  "          - { element_id: primitive.customer-id, kind: domain-primitive, name: CustomerId, aggregate: aggregate.invoice, attributes: [{ name: value, type: string, required: true }] }",
-  '          - { element_id: primitive.customer-id, kind: domain-primitive, name: CustomerId, aggregate: aggregate.invoice, attributes: [{ name: value, type: string, required: true }] }\n          - { element_id: primitive.money, kind: domain-primitive, name: Money, aggregate: aggregate.invoice, unconstrained: "individual line amounts may be positive, zero, or negative", attributes: [{ name: value, type: decimal, required: true }] }',
-);
-
 export type RustLayout = "file" | "mod-rs";
 
 export const RUST_LAYOUTS: readonly RustLayout[] = ["file", "mod-rs"];
@@ -82,8 +77,8 @@ pub struct InvoiceLine {
 }
 
 impl InvoiceLine {
-    pub fn of(amount: i64) -> Self {
-        InvoiceLine { amount: Money::of(amount) }
+    pub fn of(amount: Money) -> Self {
+        InvoiceLine { amount }
     }
 
     pub fn with_amount<R>(&self, use_amount: impl FnOnce(&Money) -> R) -> R {
@@ -332,7 +327,7 @@ export const RUST_IN_MEMORY_INVOICE_REPOSITORY = `use std::cell::RefCell;
 use std::collections::HashMap;
 
 use billing_domain::customer_id::CustomerId;
-use billing_domain::invoice::line::InvoiceLine;
+use billing_domain::invoice::line::{InvoiceLine, Money};
 use billing_domain::invoice::lines::InvoiceLines;
 use billing_domain::invoice::Invoice;
 use billing_use_case::invoice_repository::{InvoiceNotFound, InvoiceRepository};
@@ -363,7 +358,7 @@ impl InvoiceRepository for InMemoryInvoiceRepository {
         }
         let record = self.records.get(invoice_id).ok_or(InvoiceNotFound)?;
         let customer = CustomerId::parse(&record.customer).expect("corrupt invoice record: customer ID");
-        let lines = InvoiceLines::of(record.amounts.iter().map(|amount| InvoiceLine::of(*amount)).collect());
+        let lines = InvoiceLines::of(record.amounts.iter().map(|amount| InvoiceLine::of(Money::of(*amount))).collect());
         let invoice = Invoice::restore(invoice_id, customer, lines, record.issued, record.last_add_line_command_id.clone())
             .expect("corrupt invoice record");
         Ok(invoice)
@@ -467,7 +462,7 @@ export interface RustSample {
 export function rustSample(layout: RustLayout): RustSample {
   const files: Record<string, string> = {
     ".ddd.toml": `languages = ["rust"]\n\n[rust]\nmodule_layout = "${layout}"\n`,
-    "docs/ddd/domain-model.yaml": RUST_DOMAIN_MODEL,
+    "docs/ddd/domain-model.yaml": DOMAIN_MODEL,
     "docs/ddd/aggregate-mapping.yaml": RUST_AGGREGATE_MAPPING,
     "docs/ddd/layer-structure.yaml": RUST_LAYER_STRUCTURE,
     "Cargo.toml": WORKSPACE_MANIFEST,

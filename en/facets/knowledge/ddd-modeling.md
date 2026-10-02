@@ -42,6 +42,7 @@ bounded_contexts:
           - { element_id: entity.invoice, kind: entity, name: Invoice, aggregate: aggregate.invoice }
           - { element_id: vo.invoice-line, kind: value-object, name: InvoiceLine, aggregate: aggregate.invoice }
           - { element_id: primitive.customer-id, kind: domain-primitive, name: CustomerId, aggregate: aggregate.invoice, attributes: [{ name: value, type: string, required: true }] }
+          - { element_id: primitive.money, kind: domain-primitive, name: Money, aggregate: aggregate.invoice, unconstrained: "a discount line makes an individual line amount positive, zero, or negative", attributes: [{ name: value, type: decimal, required: true }] }
         invariants:
           - { element_id: invariant.invoice.customer-id-format, name: CustomerIdFormat, aggregate: aggregate.invoice, element: primitive.customer-id, statement: a customer ID is C followed by six digits }
           - { element_id: invariant.invoice.total-not-negative, name: TotalNotNegative, aggregate: aggregate.invoice, statement: the total of the lines is never negative }
@@ -91,7 +92,7 @@ lineage: []
 
 Element IDs are `<kind>.<segments>` in lower kebab case. `bc`, `aggregate`, `entity`, `vo`, `primitive`, and `pm` take one segment; `invariant`, `command`, `event`, `transition`, and `factory` take the aggregate and a name; `error` takes the aggregate, the operation, and a name. A `lineage` entry (`lineage-0001`, relation `renamed`, `split`, `merged`, or `deprecated`) records how an ID changed.
 
-A Domain Primitive (`kind: domain-primitive`) wraps exactly one attribute and declares its value rule. When it has one, write both an invariant whose `element` is the primitive and a factory rule whose `target_element` is the primitive and which returns a broken rule as an error (`primitive.customer-id`, `invariant.invoice.customer-id-format`, and `factory.invoice.parse-customer-id` above). When it has none, write `unconstrained` with the rationale on the element (`unconstrained: a discount line makes any integer an amount`). Never write neither, and never both. An attribute with `collection: true` is held in code as a first-class collection type.
+A Domain Primitive (`kind: domain-primitive`) wraps exactly one attribute and declares its value rule. When it has one, write both an invariant whose `element` is the primitive and a factory rule whose `target_element` is the primitive and which returns a broken rule as an error (`primitive.customer-id`, `invariant.invoice.customer-id-format`, and `factory.invoice.parse-customer-id` above). When it has none, write `unconstrained` with the rationale on the element (`primitive.money` above). Never write neither, and never both. An attribute with `collection: true` is held in code as a first-class collection type.
 
 ### Aggregate mapping
 
@@ -125,7 +126,7 @@ aggregate_mappings:
 domain_packages:
   - { term: Billing, model_refs: [bc.billing], rationale: owns the billing business, code: { language: typescript, package: "@acme/billing-domain", module: [] } }
   - { term: Invoice, model_refs: [aggregate.invoice], rationale: opens and issues invoices, code: { language: typescript, package: "@acme/billing-domain", module: [invoice] } }
-  - { term: Invoice line, model_refs: [vo.invoice-line], rationale: the amounts an invoice adds up, code: { language: typescript, package: "@acme/billing-domain", module: [invoice, line] } }
+  - { term: Invoice line, model_refs: [vo.invoice-line, primitive.money], rationale: the amounts an invoice adds up, code: { language: typescript, package: "@acme/billing-domain", module: [invoice, line] } }
   - { term: Invoice lines, model_refs: [vo.invoice-line], rationale: the lines of one invoice and their total, code: { language: typescript, package: "@acme/billing-domain", module: [invoice, lines] } }
   - { term: Customer ID, model_refs: [primitive.customer-id], rationale: identifies the customer an invoice bills, code: { language: typescript, package: "@acme/billing-domain", module: [customer-id] } }
 ```
@@ -144,9 +145,9 @@ layer_structures:
       - { role: command, code: { language: typescript, package: "@acme/billing-use-case" } }
       - { role: command, code: { language: typescript, package: "@acme/billing-interface-adapter" } }
     dependencies:
-      - { code: { language: typescript, package: "@acme/billing-domain" }, depends_on: [] }
-      - { code: { language: typescript, package: "@acme/billing-use-case" }, depends_on: [{ language: typescript, package: "@acme/billing-domain" }] }
-      - { code: { language: typescript, package: "@acme/billing-interface-adapter" }, depends_on: [{ language: typescript, package: "@acme/billing-domain" }, { language: typescript, package: "@acme/billing-use-case" }] }
+      - { code: { language: typescript, package: "@acme/billing-domain" }, depends_on: [{ language: typescript, package: "@acme/language-extensions" }] }
+      - { code: { language: typescript, package: "@acme/billing-use-case" }, depends_on: [{ language: typescript, package: "@acme/billing-domain" }, { language: typescript, package: "@acme/language-extensions" }] }
+      - { code: { language: typescript, package: "@acme/billing-interface-adapter" }, depends_on: [{ language: typescript, package: "@acme/billing-domain" }, { language: typescript, package: "@acme/billing-use-case" }, { language: typescript, package: "@acme/language-extensions" }] }
     ports:
       - { name: InvoiceRepository, kind: repository, verbs: [findById, store] }
     repositories:
@@ -155,6 +156,8 @@ layer_structures:
       - { aggregate_ref: aggregate.invoice, via: full-constructor }
     persistence_backend: in-memory
 ```
+
+`packages` lists the context's own packages with the CQRS side each stands on (`role`). A shared package outside the context, such as the language extensions (`@acme/language-extensions`), stands on no side, so it has no `packages` row and appears only in the `depends_on` of the packages that use it. A dependency row lists every package its `package.json` or `Cargo.toml` depends on directly.
 
 An aggregate-only context with no persistence still declares its package, dependency row, and restoration path. It may explicitly declare `ports: []`, `repositories: []`, and `persistence_backend: none`.
 

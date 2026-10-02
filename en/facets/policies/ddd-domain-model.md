@@ -34,7 +34,7 @@ Defines what the declarations under `docs/ddd/` (domain model, aggregate mapping
 
 | Criterion | Judgment |
 |-----------|----------|
-| A package the change places code in, its dependencies, ports, repositories, or restoration paths are not declared | REJECT. An aggregate-only context with `persistence_backend: none` may explicitly declare empty `ports` and `repositories`; dependency rows and restoration paths remain required |
+| A package the change places code in, its dependencies, ports, repositories, or restoration paths are not declared | REJECT. An aggregate-only context with `persistence_backend: none` may explicitly declare empty `ports` and `repositories`; dependency rows and restoration paths remain required. A shared package outside the context, such as the language extensions, has no `packages` row; it appears only in the `depends_on` of the packages that use it |
 | A port is not classified as `repository`, `external-client`, or `es-infrastructure` | REJECT |
 
 ## Order of Declarations and Code

@@ -10,7 +10,7 @@ The project settings choose one representation for every aggregate, Entity, Doma
 | The team prefers plain types and functions | `companion`: a `type` literal plus a `const` object of the same name; the factory's closure holds the state |
 | Aggregate execution model or persistence differs between aggregates | Irrelevant to this choice; the representation is project-wide |
 
-In the examples below the customer is the Domain Primitive `CustomerId`, and the lines are the first-class collection `InvoiceLines`. The invoice ID, the command ID, and the amounts stay bare `string` and `number` only to keep the examples short; real code wraps them the same way.
+In the examples below the customer is the Domain Primitive `CustomerId`, the line amounts are the Domain Primitive `Money`, and the lines are the first-class collection `InvoiceLines`. The invoice ID and the command ID stay bare `string` only to keep the examples short; real code wraps them the same way.
 
 `private`, `protected`, and `readonly` are erased at run time; a `#` field and a closure are private at run time. A brand stops an object of the same shape from being assigned; it does not prove that a factory built the value.
 
@@ -21,7 +21,7 @@ In the examples below the customer is the Domain Primitive `CustomerId`, and the
 ```ts
 import type { Result } from "@acme/language-extensions";
 import type { CustomerId } from "./customer-id.ts";
-import type { InvoiceLine } from "./invoice/line.ts";
+import type { InvoiceLine, Money } from "./invoice/line.ts";
 import type { InvoiceLines } from "./invoice/lines.ts";
 
 export type OpenInvoiceError = "negative-total";
@@ -58,7 +58,7 @@ export class Invoice {
   }
 
   static open(id: string, customer: CustomerId, lines: InvoiceLines): Result<Invoice, OpenInvoiceError> {
-    if (lines.total() < 0) return { ok: false, error: "negative-total" };
+    if (lines.total().isNegative()) return { ok: false, error: "negative-total" };
     return { ok: true, value: new Invoice(id, customer, lines, false, undefined) };
   }
 
@@ -69,7 +69,7 @@ export class Invoice {
     issued: boolean,
     lastAddLineCommandId: string | undefined,
   ): Invoice {
-    if ((issued && lines.isEmpty()) || lines.total() < 0) throw new Error("corrupt invoice state");
+    if ((issued && lines.isEmpty()) || lines.total().isNegative()) throw new Error("corrupt invoice state");
     return new Invoice(id, customer, lines, issued, lastAddLineCommandId);
   }
 
@@ -77,7 +77,7 @@ export class Invoice {
     if (commandId === this.#lastAddLineCommandId) return { ok: true, value: { kind: "duplicate", invoice: this } };
     if (this.#issued) return { ok: false, error: "already-issued" };
     const lines: InvoiceLines = this.#lines.add(line);
-    if (lines.total() < 0) return { ok: false, error: "negative-total" };
+    if (lines.total().isNegative()) return { ok: false, error: "negative-total" };
     const invoice: Invoice = new Invoice(this.#id, this.#customer, lines, false, commandId);
     const event: InvoiceLineAdded = { invoiceId: this.#id, commandId, line };
     return { ok: true, value: { kind: "applied", invoice, event } };
@@ -95,7 +95,7 @@ export class Invoice {
     return this.#customer.equals(customer);
   }
 
-  total(): number {
+  total(): Money {
     return this.#lines.total();
   }
 
@@ -112,7 +112,7 @@ The factory that takes the whole state (`restore`) is the full constructor: it v
 ```ts
 import type { Result } from "@acme/language-extensions";
 import type { CustomerId } from "./customer-id.ts";
-import type { InvoiceLine } from "./invoice/line.ts";
+import type { InvoiceLine, Money } from "./invoice/line.ts";
 import type { InvoiceLines } from "./invoice/lines.ts";
 
 export type OpenInvoiceError = "negative-total";
@@ -134,13 +134,13 @@ export type Invoice = {
   addLine(commandId: string, line: InvoiceLine): Result<AddInvoiceLineOutcome, AddInvoiceLineError>;
   issue(): Result<IssueInvoiceOutcome, IssueInvoiceError>;
   isBilledTo(customer: CustomerId): boolean;
-  total(): number;
+  total(): Money;
   lines(): readonly InvoiceLine[];
 };
 
 export const Invoice = {
   open(id: string, customer: CustomerId, lines: InvoiceLines): Result<Invoice, OpenInvoiceError> {
-    if (lines.total() < 0) return { ok: false, error: "negative-total" };
+    if (lines.total().isNegative()) return { ok: false, error: "negative-total" };
     return { ok: true, value: Invoice.restore(id, customer, lines, false, undefined) };
   },
   restore(
@@ -150,7 +150,7 @@ export const Invoice = {
     issued: boolean,
     lastAddLineCommandId: string | undefined,
   ): Invoice {
-    if ((issued && lines.isEmpty()) || lines.total() < 0) throw new Error("corrupt invoice state");
+    if ((issued && lines.isEmpty()) || lines.total().isNegative()) throw new Error("corrupt invoice state");
     const state = { id, customer, lines, issued, lastAddLineCommandId };
     const instance: Invoice = {
       [brand]: true,
@@ -158,7 +158,7 @@ export const Invoice = {
         if (commandId === state.lastAddLineCommandId) return { ok: true, value: { kind: "duplicate", invoice: instance } };
         if (state.issued) return { ok: false, error: "already-issued" };
         const next: InvoiceLines = state.lines.add(line);
-        if (next.total() < 0) return { ok: false, error: "negative-total" };
+        if (next.total().isNegative()) return { ok: false, error: "negative-total" };
         const invoice: Invoice = Invoice.restore(state.id, state.customer, next, false, commandId);
         const event: InvoiceLineAdded = { invoiceId: state.id, commandId, line };
         return { ok: true, value: { kind: "applied", invoice, event } };
@@ -173,7 +173,7 @@ export const Invoice = {
       isBilledTo(customer: CustomerId): boolean {
         return state.customer.equals(customer);
       },
-      total(): number {
+      total(): Money {
         return state.lines.total();
       },
       lines(): readonly InvoiceLine[] {
@@ -214,11 +214,56 @@ export class CustomerId {
 
 A primitive without a rule declares `unconstrained` with a rationale in the model and is built by an `of` that checks nothing.
 
+`Money` is such a primitive. The model declares individual line amounts `unconstrained` with a rationale: a negative line can be balanced by another line, while the aggregate keeps the total non-negative. `add`, which adds two `Money` values, reads the other value's `#value` inside the same class. A `#` field is readable from other instances of the same class, so no getter takes the value out to add it outside the class. `InvoiceLine` does not expose its amount; it returns the `Money` it gets by adding its amount to the total it receives (`addTo`). The total is passed around as `Money` too, and whether it is negative is asked of it (`isNegative`). In the companion representation `add` asks the other value to add this one's value (`other.plus(state.value)`), the same shape as `equals` asking the other value to match.
+
+```ts
+export class Money {
+  readonly #value: number;
+
+  private constructor(value: number) {
+    this.#value = value;
+  }
+
+  static of(value: number): Money {
+    return new Money(value);
+  }
+
+  static zero(): Money {
+    return new Money(0);
+  }
+
+  add(other: Money): Money {
+    return new Money(this.#value + other.#value);
+  }
+
+  isNegative(): boolean {
+    return this.#value < 0;
+  }
+}
+
+export class InvoiceLine {
+  readonly #amount: Money;
+
+  private constructor(amount: Money) {
+    this.#amount = amount;
+  }
+
+  static of(amount: Money): InvoiceLine {
+    return new InvoiceLine(amount);
+  }
+
+  addTo(total: Money): Money {
+    return total.add(this.#amount);
+  }
+}
+```
+
 ## First-Class Collections
 
 A domain type that holds a collection beside other state wraps it in a first-class collection: a type whose whole state is the collection, which owns the operations and decisions on it. `InvoiceLines` returns a new instance with a line added and totals the lines; the aggregate never touches the array.
 
 ```ts
+import { Money } from "./line.ts";
 import type { InvoiceLine } from "./line.ts";
 
 export class InvoiceLines {
@@ -236,8 +281,8 @@ export class InvoiceLines {
     return new InvoiceLines([...this.#items, line]);
   }
 
-  total(): number {
-    return this.#items.reduce((sum: number, line: InvoiceLine) => line.addTo(sum), 0);
+  total(): Money {
+    return this.#items.reduce((sum: Money, line: InvoiceLine) => line.addTo(sum), Money.zero());
   }
 
   isEmpty(): boolean {
@@ -292,7 +337,7 @@ export type {
   OpenInvoiceError,
 } from "./invoice.ts";
 export { Invoice } from "./invoice.ts";
-export { InvoiceLine } from "./invoice/line.ts";
+export { InvoiceLine, Money } from "./invoice/line.ts";
 export { InvoiceLines } from "./invoice/lines.ts";
 ```
 
@@ -365,7 +410,7 @@ export class IssueInvoiceUseCase {
 The adapter implements the port, may prefix its name with the storage medium, and restores the aggregate through `restore`, the customer through `parse`, and the lines through `of`.
 
 ```ts
-import { CustomerId, Invoice, InvoiceLine, InvoiceLines } from "@acme/billing-domain";
+import { CustomerId, Invoice, InvoiceLine, InvoiceLines, Money } from "@acme/billing-domain";
 import type { ParseCustomerIdError } from "@acme/billing-domain";
 import type { InvoiceNotFound, InvoiceRepository } from "@acme/billing-use-case";
 import type { Result } from "@acme/language-extensions";
@@ -393,7 +438,7 @@ export class InMemoryInvoiceRepository implements InvoiceRepository {
     if (record === undefined) return { ok: false, error: "invoice-not-found" };
     const customer: Result<CustomerId, ParseCustomerIdError> = CustomerId.parse(record.customer);
     if (!customer.ok) throw new Error("corrupt invoice record");
-    const lines: InvoiceLines = InvoiceLines.of(record.amounts.map((amount: number) => InvoiceLine.of(amount)));
+    const lines: InvoiceLines = InvoiceLines.of(record.amounts.map((amount: number) => InvoiceLine.of(Money.of(amount))));
     const invoice: Invoice = Invoice.restore(invoiceId, customer.value, lines, record.issued, record.lastAddLineCommandId);
     return { ok: true, value: invoice };
   }
