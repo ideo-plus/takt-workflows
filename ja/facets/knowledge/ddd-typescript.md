@@ -10,7 +10,7 @@
 | チームが素の型と関数を好む | `companion`: `type` リテラルと同名の `const` オブジェクト。ファクトリのクロージャが状態を持つ |
 | 集約ごとに実行モデルや永続化が違う | この選択には関係しない。表現はプロジェクト全体で 1 つ |
 
-以下の例では、顧客を Domain Primitive `CustomerId`、明細をファーストクラスコレクション `InvoiceLines` で持つ。請求書 ID、コマンド ID、金額は例を短く保つために裸の `string` と `number` のままにしている。実際のコードでは同じ作り方で包む。
+以下の例では、顧客を Domain Primitive `CustomerId`、明細金額を Domain Primitive `Money`、明細をファーストクラスコレクション `InvoiceLines` で持つ。請求書 ID とコマンド ID は例を短く保つために裸の `string` のままにしている。実際のコードでは同じ作り方で包む。
 
 `private`、`protected`、`readonly` は実行時に消える。`#` フィールドとクロージャは実行時にも非公開である。ブランドは同じ形のオブジェクトの代入を防ぐが、ファクトリが組み立てたことの証明にはならない。
 
@@ -21,7 +21,7 @@
 ```ts
 import type { Result } from "@acme/language-extensions";
 import type { CustomerId } from "./customer-id.ts";
-import type { InvoiceLine } from "./invoice/line.ts";
+import type { InvoiceLine, Money } from "./invoice/line.ts";
 import type { InvoiceLines } from "./invoice/lines.ts";
 
 export type OpenInvoiceError = "negative-total";
@@ -58,7 +58,7 @@ export class Invoice {
   }
 
   static open(id: string, customer: CustomerId, lines: InvoiceLines): Result<Invoice, OpenInvoiceError> {
-    if (lines.total() < 0) return { ok: false, error: "negative-total" };
+    if (lines.total().isNegative()) return { ok: false, error: "negative-total" };
     return { ok: true, value: new Invoice(id, customer, lines, false, undefined) };
   }
 
@@ -69,7 +69,7 @@ export class Invoice {
     issued: boolean,
     lastAddLineCommandId: string | undefined,
   ): Invoice {
-    if ((issued && lines.isEmpty()) || lines.total() < 0) throw new Error("corrupt invoice state");
+    if ((issued && lines.isEmpty()) || lines.total().isNegative()) throw new Error("corrupt invoice state");
     return new Invoice(id, customer, lines, issued, lastAddLineCommandId);
   }
 
@@ -77,7 +77,7 @@ export class Invoice {
     if (commandId === this.#lastAddLineCommandId) return { ok: true, value: { kind: "duplicate", invoice: this } };
     if (this.#issued) return { ok: false, error: "already-issued" };
     const lines: InvoiceLines = this.#lines.add(line);
-    if (lines.total() < 0) return { ok: false, error: "negative-total" };
+    if (lines.total().isNegative()) return { ok: false, error: "negative-total" };
     const invoice: Invoice = new Invoice(this.#id, this.#customer, lines, false, commandId);
     const event: InvoiceLineAdded = { invoiceId: this.#id, commandId, line };
     return { ok: true, value: { kind: "applied", invoice, event } };
@@ -95,7 +95,7 @@ export class Invoice {
     return this.#customer.equals(customer);
   }
 
-  total(): number {
+  total(): Money {
     return this.#lines.total();
   }
 
@@ -112,7 +112,7 @@ export class Invoice {
 ```ts
 import type { Result } from "@acme/language-extensions";
 import type { CustomerId } from "./customer-id.ts";
-import type { InvoiceLine } from "./invoice/line.ts";
+import type { InvoiceLine, Money } from "./invoice/line.ts";
 import type { InvoiceLines } from "./invoice/lines.ts";
 
 export type OpenInvoiceError = "negative-total";
@@ -134,13 +134,13 @@ export type Invoice = {
   addLine(commandId: string, line: InvoiceLine): Result<AddInvoiceLineOutcome, AddInvoiceLineError>;
   issue(): Result<IssueInvoiceOutcome, IssueInvoiceError>;
   isBilledTo(customer: CustomerId): boolean;
-  total(): number;
+  total(): Money;
   lines(): readonly InvoiceLine[];
 };
 
 export const Invoice = {
   open(id: string, customer: CustomerId, lines: InvoiceLines): Result<Invoice, OpenInvoiceError> {
-    if (lines.total() < 0) return { ok: false, error: "negative-total" };
+    if (lines.total().isNegative()) return { ok: false, error: "negative-total" };
     return { ok: true, value: Invoice.restore(id, customer, lines, false, undefined) };
   },
   restore(
@@ -150,7 +150,7 @@ export const Invoice = {
     issued: boolean,
     lastAddLineCommandId: string | undefined,
   ): Invoice {
-    if ((issued && lines.isEmpty()) || lines.total() < 0) throw new Error("corrupt invoice state");
+    if ((issued && lines.isEmpty()) || lines.total().isNegative()) throw new Error("corrupt invoice state");
     const state = { id, customer, lines, issued, lastAddLineCommandId };
     const instance: Invoice = {
       [brand]: true,
@@ -158,7 +158,7 @@ export const Invoice = {
         if (commandId === state.lastAddLineCommandId) return { ok: true, value: { kind: "duplicate", invoice: instance } };
         if (state.issued) return { ok: false, error: "already-issued" };
         const next: InvoiceLines = state.lines.add(line);
-        if (next.total() < 0) return { ok: false, error: "negative-total" };
+        if (next.total().isNegative()) return { ok: false, error: "negative-total" };
         const invoice: Invoice = Invoice.restore(state.id, state.customer, next, false, commandId);
         const event: InvoiceLineAdded = { invoiceId: state.id, commandId, line };
         return { ok: true, value: { kind: "applied", invoice, event } };
@@ -173,7 +173,7 @@ export const Invoice = {
       isBilledTo(customer: CustomerId): boolean {
         return state.customer.equals(customer);
       },
-      total(): number {
+      total(): Money {
         return state.lines.total();
       },
       lines(): readonly InvoiceLine[] {
@@ -214,11 +214,56 @@ export class CustomerId {
 
 規則のない Primitive は、モデルで `unconstrained` と理由を宣言し、何も確かめない `of` で組み立てる。
 
+`Money` はその例である。モデルは個々の明細金額を理由付きの `unconstrained` として宣言する。負の明細を別の明細で相殺できる一方、集約が合計の非負を守るためである。2 つの `Money` を足す `add` は、相手の `#value` を同じクラスの中で読む。`#` フィールドは同じクラスのほかのインスタンスからも読めるので、getter で値を取り出してクラスの外で足すことはない。`InvoiceLine` は金額を公開せず、受け取った合計に自分の金額を足した `Money` を返す（`addTo`）。合計も `Money` のまま受け渡し、負かどうかは `isNegative` に尋ねる。companion 表現では、`add` は相手に自分の値を足すよう頼む（`other.plus(state.value)`）。`equals` が相手に照合を頼むのと同じ形である。
+
+```ts
+export class Money {
+  readonly #value: number;
+
+  private constructor(value: number) {
+    this.#value = value;
+  }
+
+  static of(value: number): Money {
+    return new Money(value);
+  }
+
+  static zero(): Money {
+    return new Money(0);
+  }
+
+  add(other: Money): Money {
+    return new Money(this.#value + other.#value);
+  }
+
+  isNegative(): boolean {
+    return this.#value < 0;
+  }
+}
+
+export class InvoiceLine {
+  readonly #amount: Money;
+
+  private constructor(amount: Money) {
+    this.#amount = amount;
+  }
+
+  static of(amount: Money): InvoiceLine {
+    return new InvoiceLine(amount);
+  }
+
+  addTo(total: Money): Money {
+    return total.add(this.#amount);
+  }
+}
+```
+
 ## ファーストクラスコレクション
 
 ほかの状態と並べてコレクションを持つドメインの型は、それをファーストクラスコレクションで包む。状態がそのコレクションだけの型で、コレクションへの操作と判断を持つ。`InvoiceLines` は明細を加えた新しいインスタンスを返し、合計を出す。集約は配列に触れない。
 
 ```ts
+import { Money } from "./line.ts";
 import type { InvoiceLine } from "./line.ts";
 
 export class InvoiceLines {
@@ -236,8 +281,8 @@ export class InvoiceLines {
     return new InvoiceLines([...this.#items, line]);
   }
 
-  total(): number {
-    return this.#items.reduce((sum: number, line: InvoiceLine) => line.addTo(sum), 0);
+  total(): Money {
+    return this.#items.reduce((sum: Money, line: InvoiceLine) => line.addTo(sum), Money.zero());
   }
 
   isEmpty(): boolean {
@@ -292,7 +337,7 @@ export type {
   OpenInvoiceError,
 } from "./invoice.ts";
 export { Invoice } from "./invoice.ts";
-export { InvoiceLine } from "./invoice/line.ts";
+export { InvoiceLine, Money } from "./invoice/line.ts";
 export { InvoiceLines } from "./invoice/lines.ts";
 ```
 
@@ -365,7 +410,7 @@ export class IssueInvoiceUseCase {
 アダプタはポートを実装し、名前に保存媒体の接頭辞を付けてよい。集約は `restore`、顧客は `parse`、明細のコレクションは `of` で組み立て直す。
 
 ```ts
-import { CustomerId, Invoice, InvoiceLine, InvoiceLines } from "@acme/billing-domain";
+import { CustomerId, Invoice, InvoiceLine, InvoiceLines, Money } from "@acme/billing-domain";
 import type { ParseCustomerIdError } from "@acme/billing-domain";
 import type { InvoiceNotFound, InvoiceRepository } from "@acme/billing-use-case";
 import type { Result } from "@acme/language-extensions";
@@ -393,7 +438,7 @@ export class InMemoryInvoiceRepository implements InvoiceRepository {
     if (record === undefined) return { ok: false, error: "invoice-not-found" };
     const customer: Result<CustomerId, ParseCustomerIdError> = CustomerId.parse(record.customer);
     if (!customer.ok) throw new Error("corrupt invoice record");
-    const lines: InvoiceLines = InvoiceLines.of(record.amounts.map((amount: number) => InvoiceLine.of(amount)));
+    const lines: InvoiceLines = InvoiceLines.of(record.amounts.map((amount: number) => InvoiceLine.of(Money.of(amount))));
     const invoice: Invoice = Invoice.restore(invoiceId, customer.value, lines, record.issued, record.lastAddLineCommandId);
     return { ok: true, value: invoice };
   }

@@ -38,37 +38,92 @@ export const RESULT_SOURCE = `export type Result<T, E> =
 const RESULT_INDEX = `export type { Result } from "./result.ts";
 `;
 
-export const CLASS_LINE = `export class InvoiceLine {
-  readonly #amount: number;
+export const CLASS_LINE = `export class Money {
+  readonly #value: number;
 
-  private constructor(amount: number) {
+  private constructor(value: number) {
+    this.#value = value;
+  }
+
+  static of(value: number): Money {
+    return new Money(value);
+  }
+
+  static zero(): Money {
+    return new Money(0);
+  }
+
+  add(other: Money): Money {
+    return new Money(this.#value + other.#value);
+  }
+
+  isNegative(): boolean {
+    return this.#value < 0;
+  }
+}
+
+export class InvoiceLine {
+  readonly #amount: Money;
+
+  private constructor(amount: Money) {
     this.#amount = amount;
   }
 
-  static of(amount: number): InvoiceLine {
+  static of(amount: Money): InvoiceLine {
     return new InvoiceLine(amount);
   }
 
-  addTo(total: number): number {
-    return total + this.#amount;
+  addTo(total: Money): Money {
+    return total.add(this.#amount);
   }
 }
 `;
 
-const COMPANION_LINE = `const brand: unique symbol = Symbol("InvoiceLine");
+const COMPANION_LINE = `const moneyBrand: unique symbol = Symbol("Money");
+
+export type Money = {
+  readonly [moneyBrand]: true;
+  add(other: Money): Money;
+  plus(value: number): Money;
+  isNegative(): boolean;
+};
+
+export const Money = {
+  of(value: number): Money {
+    const state = { value };
+    const instance: Money = {
+      [moneyBrand]: true,
+      add(other: Money): Money {
+        return other.plus(state.value);
+      },
+      plus(value: number): Money {
+        return Money.of(state.value + value);
+      },
+      isNegative(): boolean {
+        return state.value < 0;
+      },
+    };
+    return instance;
+  },
+  zero(): Money {
+    return Money.of(0);
+  },
+};
+
+const lineBrand: unique symbol = Symbol("InvoiceLine");
 
 export type InvoiceLine = {
-  readonly [brand]: true;
-  addTo(total: number): number;
+  readonly [lineBrand]: true;
+  addTo(total: Money): Money;
 };
 
 export const InvoiceLine = {
-  of(amount: number): InvoiceLine {
+  of(amount: Money): InvoiceLine {
     const state = { amount };
     const instance: InvoiceLine = {
-      [brand]: true,
-      addTo(total: number): number {
-        return total + state.amount;
+      [lineBrand]: true,
+      addTo(total: Money): Money {
+        return total.add(state.amount);
       },
     };
     return instance;
@@ -128,7 +183,8 @@ export const CustomerId = {
 };
 `;
 
-export const CLASS_LINES = `import type { InvoiceLine } from "./line.ts";
+export const CLASS_LINES = `import { Money } from "./line.ts";
+import type { InvoiceLine } from "./line.ts";
 
 export class InvoiceLines {
   readonly #items: readonly InvoiceLine[];
@@ -145,8 +201,8 @@ export class InvoiceLines {
     return new InvoiceLines([...this.#items, line]);
   }
 
-  total(): number {
-    return this.#items.reduce((sum: number, line: InvoiceLine) => line.addTo(sum), 0);
+  total(): Money {
+    return this.#items.reduce((sum: Money, line: InvoiceLine) => line.addTo(sum), Money.zero());
   }
 
   isEmpty(): boolean {
@@ -159,14 +215,15 @@ export class InvoiceLines {
 }
 `;
 
-const COMPANION_LINES = `import type { InvoiceLine } from "./line.ts";
+const COMPANION_LINES = `import { Money } from "./line.ts";
+import type { InvoiceLine } from "./line.ts";
 
 const brand: unique symbol = Symbol("InvoiceLines");
 
 export type InvoiceLines = {
   readonly [brand]: true;
   add(line: InvoiceLine): InvoiceLines;
-  total(): number;
+  total(): Money;
   isEmpty(): boolean;
   toArray(): readonly InvoiceLine[];
 };
@@ -179,8 +236,8 @@ export const InvoiceLines = {
       add(line: InvoiceLine): InvoiceLines {
         return InvoiceLines.of([...kept, line]);
       },
-      total(): number {
-        return kept.reduce((sum: number, line: InvoiceLine) => line.addTo(sum), 0);
+      total(): Money {
+        return kept.reduce((sum: Money, line: InvoiceLine) => line.addTo(sum), Money.zero());
       },
       isEmpty(): boolean {
         return kept.length === 0;
@@ -197,7 +254,7 @@ export const InvoiceLines = {
 function header(specifiers: Specifiers): string {
   return `import type { Result } from "${RESULT_NAME}";
 import type { CustomerId } from "${specifiers.customer}";
-import type { InvoiceLine } from "${specifiers.line}";
+import type { InvoiceLine, Money } from "${specifiers.line}";
 import type { InvoiceLines } from "${specifiers.lines}";
 
 export type OpenInvoiceError = "negative-total";
@@ -254,7 +311,7 @@ export class Invoice {
   }
 
   static open(id: string, customer: CustomerId, lines: InvoiceLines): Result<Invoice, OpenInvoiceError> {
-    if (lines.total() < 0) return { ok: false, error: "negative-total" };
+    if (lines.total().isNegative()) return { ok: false, error: "negative-total" };
     return { ok: true, value: new Invoice(id, customer, lines, false, undefined) };
   }
 
@@ -265,7 +322,7 @@ export class Invoice {
     issued: boolean,
     lastAddLineCommandId: string | undefined,
   ): Invoice {
-    if ((issued && lines.isEmpty()) || lines.total() < 0) throw new Error("corrupt invoice state");
+    if ((issued && lines.isEmpty()) || lines.total().isNegative()) throw new Error("corrupt invoice state");
     return new Invoice(id, customer, lines, issued, lastAddLineCommandId);
   }
 
@@ -273,7 +330,7 @@ export class Invoice {
     if (commandId === this.#lastAddLineCommandId) return { ok: true, value: { kind: "duplicate", invoice: this } };
     if (this.#issued) return { ok: false, error: "already-issued" };
     const lines: InvoiceLines = this.#lines.add(line);
-    if (lines.total() < 0) return { ok: false, error: "negative-total" };
+    if (lines.total().isNegative()) return { ok: false, error: "negative-total" };
     const invoice: Invoice = new Invoice(this.#id, this.#customer, lines, false, commandId);
     const event: InvoiceLineAdded = { invoiceId: this.#id, commandId, line };
     return { ok: true, value: { kind: "applied", invoice, event } };
@@ -291,7 +348,7 @@ export class Invoice {
     return this.#customer.equals(customer);
   }
 
-  total(): number {
+  total(): Money {
     return this.#lines.total();
   }
 
@@ -311,13 +368,13 @@ export type Invoice = {
   addLine(commandId: string, line: InvoiceLine): Result<AddInvoiceLineOutcome, AddInvoiceLineError>;
   issue(): Result<IssueInvoiceOutcome, IssueInvoiceError>;
   isBilledTo(customer: CustomerId): boolean;
-  total(): number;
+  total(): Money;
   lines(): readonly InvoiceLine[];
 };
 
 export const Invoice = {
   open(id: string, customer: CustomerId, lines: InvoiceLines): Result<Invoice, OpenInvoiceError> {
-    if (lines.total() < 0) return { ok: false, error: "negative-total" };
+    if (lines.total().isNegative()) return { ok: false, error: "negative-total" };
     return { ok: true, value: Invoice.restore(id, customer, lines, false, undefined) };
   },
   restore(
@@ -327,7 +384,7 @@ export const Invoice = {
     issued: boolean,
     lastAddLineCommandId: string | undefined,
   ): Invoice {
-    if ((issued && lines.isEmpty()) || lines.total() < 0) throw new Error("corrupt invoice state");
+    if ((issued && lines.isEmpty()) || lines.total().isNegative()) throw new Error("corrupt invoice state");
     const state = { id, customer, lines, issued, lastAddLineCommandId };
     const instance: Invoice = {
       [brand]: true,
@@ -335,7 +392,7 @@ export const Invoice = {
         if (commandId === state.lastAddLineCommandId) return { ok: true, value: { kind: "duplicate", invoice: instance } };
         if (state.issued) return { ok: false, error: "already-issued" };
         const next: InvoiceLines = state.lines.add(line);
-        if (next.total() < 0) return { ok: false, error: "negative-total" };
+        if (next.total().isNegative()) return { ok: false, error: "negative-total" };
         const invoice: Invoice = Invoice.restore(state.id, state.customer, next, false, commandId);
         const event: InvoiceLineAdded = { invoiceId: state.id, commandId, line };
         return { ok: true, value: { kind: "applied", invoice, event } };
@@ -350,7 +407,7 @@ export const Invoice = {
       isBilledTo(customer: CustomerId): boolean {
         return state.customer.equals(customer);
       },
-      total(): number {
+      total(): Money {
         return state.lines.total();
       },
       lines(): readonly InvoiceLine[] {
@@ -376,7 +433,7 @@ export type {
   OpenInvoiceError,
 } from "${parentSpecifier}";
 export { Invoice } from "${parentSpecifier}";
-export { InvoiceLine } from "./invoice/line.ts";
+export { InvoiceLine, Money } from "./invoice/line.ts";
 export { InvoiceLines } from "./invoice/lines.ts";
 `;
 }
@@ -423,7 +480,7 @@ export type { IssueInvoiceFailure } from "./issue-invoice.ts";
 export { IssueInvoiceUseCase } from "./issue-invoice.ts";
 `;
 
-export const IN_MEMORY_INVOICE_REPOSITORY = `import { CustomerId, Invoice, InvoiceLine, InvoiceLines } from "${DOMAIN_NAME}";
+export const IN_MEMORY_INVOICE_REPOSITORY = `import { CustomerId, Invoice, InvoiceLine, InvoiceLines, Money } from "${DOMAIN_NAME}";
 import type { ParseCustomerIdError } from "${DOMAIN_NAME}";
 import type { InvoiceNotFound, InvoiceRepository } from "${USE_CASE_NAME}";
 import type { Result } from "${RESULT_NAME}";
@@ -451,7 +508,7 @@ export class InMemoryInvoiceRepository implements InvoiceRepository {
     if (record === undefined) return { ok: false, error: "invoice-not-found" };
     const customer: Result<CustomerId, ParseCustomerIdError> = CustomerId.parse(record.customer);
     if (!customer.ok) throw new Error("corrupt invoice record");
-    const lines: InvoiceLines = InvoiceLines.of(record.amounts.map((amount: number) => InvoiceLine.of(amount)));
+    const lines: InvoiceLines = InvoiceLines.of(record.amounts.map((amount: number) => InvoiceLine.of(Money.of(amount))));
     const invoice: Invoice = Invoice.restore(invoiceId, customer.value, lines, record.issued, record.lastAddLineCommandId);
     return { ok: true, value: invoice };
   }
@@ -480,6 +537,7 @@ export const DOMAIN_MODEL = `bounded_contexts:
           - { element_id: entity.invoice, kind: entity, name: Invoice, aggregate: aggregate.invoice }
           - { element_id: vo.invoice-line, kind: value-object, name: InvoiceLine, aggregate: aggregate.invoice }
           - { element_id: primitive.customer-id, kind: domain-primitive, name: CustomerId, aggregate: aggregate.invoice, attributes: [{ name: value, type: string, required: true }] }
+          - { element_id: primitive.money, kind: domain-primitive, name: Money, aggregate: aggregate.invoice, unconstrained: "individual line amounts may be positive, zero, or negative", attributes: [{ name: value, type: decimal, required: true }] }
         invariants:
           - { element_id: invariant.invoice.customer-id-format, name: CustomerIdFormat, aggregate: aggregate.invoice, element: primitive.customer-id, statement: a customer ID is C followed by six digits }
           - { element_id: invariant.invoice.total-not-negative, name: TotalNotNegative, aggregate: aggregate.invoice, statement: the total of the lines is never negative }
@@ -562,7 +620,7 @@ export const AGGREGATE_MAPPING = [
   "domain_packages:",
   `  - { term: Billing, model_refs: [bc.billing], rationale: owns the billing business, code: ${location([])} }`,
   `  - { term: Invoice, model_refs: [aggregate.invoice], rationale: opens and issues invoices, code: ${location(["invoice"])} }`,
-  `  - { term: Invoice line, model_refs: [vo.invoice-line], rationale: the amounts an invoice adds up, code: ${location(["invoice", "line"])} }`,
+  `  - { term: Invoice line, model_refs: [vo.invoice-line, primitive.money], rationale: the amounts an invoice adds up, code: ${location(["invoice", "line"])} }`,
   `  - { term: Invoice lines, model_refs: [vo.invoice-line], rationale: the lines of one invoice and their total, code: ${location(["invoice", "lines"])} }`,
   `  - { term: Customer ID, model_refs: [primitive.customer-id], rationale: identifies the customer an invoice bills, code: ${location(["customer-id"])} }`,
   "",
@@ -572,7 +630,11 @@ function identity(name: string): string {
   return `{ language: typescript, package: "${name}" }`;
 }
 
-/** The layer declaration: the four packages, their dependencies, the port and the restoration path. */
+/**
+ * The layer declaration: the context's three packages, their direct dependencies, the port and the
+ * restoration path. The language-extensions package belongs to no context and stands on no CQRS
+ * side, so it has no `packages` row and appears only as a `depends_on` target.
+ */
 export const LAYER_STRUCTURE = [
   "model_ref: domain-model.yaml",
   "layer_structures:",
@@ -583,9 +645,9 @@ export const LAYER_STRUCTURE = [
   `      - { role: command, code: ${identity(USE_CASE_NAME)} }`,
   `      - { role: command, code: ${identity(INTERFACE_ADAPTER_NAME)} }`,
   "    dependencies:",
-  `      - { code: ${identity(DOMAIN_NAME)}, depends_on: [] }`,
-  `      - { code: ${identity(USE_CASE_NAME)}, depends_on: [${identity(DOMAIN_NAME)}] }`,
-  `      - { code: ${identity(INTERFACE_ADAPTER_NAME)}, depends_on: [${identity(DOMAIN_NAME)}, ${identity(USE_CASE_NAME)}] }`,
+  `      - { code: ${identity(DOMAIN_NAME)}, depends_on: [${identity(RESULT_NAME)}] }`,
+  `      - { code: ${identity(USE_CASE_NAME)}, depends_on: [${identity(DOMAIN_NAME)}, ${identity(RESULT_NAME)}] }`,
+  `      - { code: ${identity(INTERFACE_ADAPTER_NAME)}, depends_on: [${identity(DOMAIN_NAME)}, ${identity(USE_CASE_NAME)}, ${identity(RESULT_NAME)}] }`,
   "    ports:",
   "      - { name: InvoiceRepository, kind: repository, verbs: [findById, store] }",
   "    repositories:",

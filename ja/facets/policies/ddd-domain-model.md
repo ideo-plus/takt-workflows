@@ -34,7 +34,7 @@
 
 | 基準 | 判定 |
 |------|------|
-| 変更がコードを置くパッケージ、その依存、ポート、リポジトリ、復元経路のいずれかが宣言されていない | REJECT。ただし `persistence_backend: none` の集約だけのコンテキストでは、`ports` と `repositories` の空配列を明示できる。依存行と復元経路は引き続き必須とする |
+| 変更がコードを置くパッケージ、その依存、ポート、リポジトリ、復元経路のいずれかが宣言されていない | REJECT。ただし `persistence_backend: none` の集約だけのコンテキストでは、`ports` と `repositories` の空配列を明示できる。依存行と復元経路は引き続き必須とする。言語拡張のようにコンテキストの外にある共有パッケージは `packages` に行を持たず、それを使うパッケージの `depends_on` にだけ書く |
 | ポートが `repository`、`external-client`、`es-infrastructure` のいずれにも分類されていない | REJECT |
 
 ## 宣言とコードの順序

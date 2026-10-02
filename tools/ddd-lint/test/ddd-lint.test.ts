@@ -652,6 +652,7 @@ describe("knowledge examples are the samples", () => {
       expect(examples).toContain(companionSample[parentModuleFile("named-file")]);
       for (const path of [
         "packages/command/billing-domain/src/customer-id.ts",
+        "packages/command/billing-domain/src/invoice/line.ts",
         "packages/command/billing-domain/src/invoice/lines.ts",
         "packages/infrastructure/language-extensions/src/result.ts",
         "packages/command/billing-use-case/src/invoice-repository.ts",

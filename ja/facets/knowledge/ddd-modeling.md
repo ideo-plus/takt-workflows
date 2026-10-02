@@ -42,6 +42,7 @@ bounded_contexts:
           - { element_id: entity.invoice, kind: entity, name: Invoice, aggregate: aggregate.invoice }
           - { element_id: vo.invoice-line, kind: value-object, name: InvoiceLine, aggregate: aggregate.invoice }
           - { element_id: primitive.customer-id, kind: domain-primitive, name: CustomerId, aggregate: aggregate.invoice, attributes: [{ name: value, type: string, required: true }] }
+          - { element_id: primitive.money, kind: domain-primitive, name: Money, aggregate: aggregate.invoice, unconstrained: "値引きの明細があるので、個々の明細金額は正にも 0 にも負にもなる", attributes: [{ name: value, type: decimal, required: true }] }
         invariants:
           - { element_id: invariant.invoice.customer-id-format, name: CustomerIdFormat, aggregate: aggregate.invoice, element: primitive.customer-id, statement: 顧客 ID は C に続く 6 桁の数字である }
           - { element_id: invariant.invoice.total-not-negative, name: TotalNotNegative, aggregate: aggregate.invoice, statement: 明細の合計は負にならない }
@@ -91,7 +92,7 @@ lineage: []
 
 要素 ID は小文字のケバブケースで `<kind>.<segments>` と書く。`bc`、`aggregate`、`entity`、`vo`、`primitive`、`pm` は区切り 1 つ、`invariant`、`command`、`event`、`transition`、`factory` は集約と名前の 2 つ、`error` は集約、操作、名前の 3 つをとる。`lineage` の項目（`lineage-0001`、関係は `renamed`、`split`、`merged`、`deprecated`）が ID の変化を記録する。
 
-Domain Primitive（`kind: domain-primitive`）は属性を 1 つだけ包み、値の規則を宣言する。規則があれば、`element` でその Primitive を指す不変条件と、それを `target_element` に取って規則違反をエラーとして返すファクトリ規則の両方を書く（上の `primitive.customer-id`、`invariant.invoice.customer-id-format`、`factory.invoice.parse-customer-id`）。規則がなければ、要素に `unconstrained` と理由を書く（`unconstrained: 値引きの明細があるので、どの整数も金額になる`）。どちらも書かないこと、両方を書くことはしない。`collection: true` の属性は、コードではファーストクラスコレクションの型で持つ。
+Domain Primitive（`kind: domain-primitive`）は属性を 1 つだけ包み、値の規則を宣言する。規則があれば、`element` でその Primitive を指す不変条件と、それを `target_element` に取って規則違反をエラーとして返すファクトリ規則の両方を書く（上の `primitive.customer-id`、`invariant.invoice.customer-id-format`、`factory.invoice.parse-customer-id`）。規則がなければ、要素に `unconstrained` と理由を書く（上の `primitive.money`）。どちらも書かないこと、両方を書くことはしない。`collection: true` の属性は、コードではファーストクラスコレクションの型で持つ。
 
 ### 集約写像
 
@@ -125,7 +126,7 @@ aggregate_mappings:
 domain_packages:
   - { term: 請求, model_refs: [bc.billing], rationale: 請求の業務全体を持つ, code: { language: typescript, package: "@acme/billing-domain", module: [] } }
   - { term: 請求書, model_refs: [aggregate.invoice], rationale: 請求書を作成し発行する, code: { language: typescript, package: "@acme/billing-domain", module: [invoice] } }
-  - { term: 請求書明細, model_refs: [vo.invoice-line], rationale: 請求書が合計する金額, code: { language: typescript, package: "@acme/billing-domain", module: [invoice, line] } }
+  - { term: 請求書明細, model_refs: [vo.invoice-line, primitive.money], rationale: 請求書が合計する金額, code: { language: typescript, package: "@acme/billing-domain", module: [invoice, line] } }
   - { term: 請求書明細の並び, model_refs: [vo.invoice-line], rationale: 1 通の請求書の明細とその合計, code: { language: typescript, package: "@acme/billing-domain", module: [invoice, lines] } }
   - { term: 顧客 ID, model_refs: [primitive.customer-id], rationale: 請求書の請求先の顧客を識別する, code: { language: typescript, package: "@acme/billing-domain", module: [customer-id] } }
 ```
@@ -144,9 +145,9 @@ layer_structures:
       - { role: command, code: { language: typescript, package: "@acme/billing-use-case" } }
       - { role: command, code: { language: typescript, package: "@acme/billing-interface-adapter" } }
     dependencies:
-      - { code: { language: typescript, package: "@acme/billing-domain" }, depends_on: [] }
-      - { code: { language: typescript, package: "@acme/billing-use-case" }, depends_on: [{ language: typescript, package: "@acme/billing-domain" }] }
-      - { code: { language: typescript, package: "@acme/billing-interface-adapter" }, depends_on: [{ language: typescript, package: "@acme/billing-domain" }, { language: typescript, package: "@acme/billing-use-case" }] }
+      - { code: { language: typescript, package: "@acme/billing-domain" }, depends_on: [{ language: typescript, package: "@acme/language-extensions" }] }
+      - { code: { language: typescript, package: "@acme/billing-use-case" }, depends_on: [{ language: typescript, package: "@acme/billing-domain" }, { language: typescript, package: "@acme/language-extensions" }] }
+      - { code: { language: typescript, package: "@acme/billing-interface-adapter" }, depends_on: [{ language: typescript, package: "@acme/billing-domain" }, { language: typescript, package: "@acme/billing-use-case" }, { language: typescript, package: "@acme/language-extensions" }] }
     ports:
       - { name: InvoiceRepository, kind: repository, verbs: [findById, store] }
     repositories:
@@ -155,6 +156,8 @@ layer_structures:
       - { aggregate_ref: aggregate.invoice, via: full-constructor }
     persistence_backend: in-memory
 ```
+
+`packages` はコンテキスト自身のパッケージを CQRS の側（`role`）とともに並べる。言語拡張（`@acme/language-extensions`）のようにコンテキストの外にある共有パッケージは、どの側にも立たないので `packages` に行を持たず、それを使うパッケージの `depends_on` にだけ書く。依存行には、そのパッケージの `package.json` や `Cargo.toml` が直接依存するパッケージをすべて書く。
 
 永続化を持たない集約だけのコンテキストでも、パッケージ、依存行、復元経路は宣言する。`ports: []`、`repositories: []`、`persistence_backend: none` は明示的に記述できる。
 
