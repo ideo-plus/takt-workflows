@@ -10,7 +10,7 @@
 | チームが素の型と関数を好む | `companion`: `type` リテラルと同名の `const` オブジェクト。ファクトリのクロージャが状態を持つ |
 | 集約ごとに実行モデルや永続化が違う | この選択には関係しない。表現はプロジェクト全体で 1 つ |
 
-以下の例では、顧客を Domain Primitive `CustomerId`、明細金額を Domain Primitive `Money`、明細をファーストクラスコレクション `InvoiceLines` で持つ。請求書 ID とコマンド ID は例を短く保つために裸の `string` のままにしている。実際のコードでは同じ作り方で包む。
+以下の例では、顧客を Domain Primitive `CustomerId`、明細金額を Domain Primitive `Money`、明細をファーストクラスコレクション `InvoiceLines` で持つ。請求書 ID とコマンド ID は例を短く保つために裸の `string` のままにしている。実際のコードでは同じ作り方で包み、請求書だけに属する型として請求書のモジュールの下に置く（`invoice/invoice-id.ts`、`invoice/command-id.ts`）。モジュールのまとめ方はモデリング知識の「モジュール」にある。
 
 `private`、`protected`、`readonly` は実行時に消える。`#` フィールドとクロージャは実行時にも非公開である。ブランドは同じ形のオブジェクトの代入を防ぐが、ファクトリが組み立てたことの証明にはならない。
 
@@ -21,8 +21,9 @@
 ```ts
 import type { Result } from "@acme/language-extensions";
 import type { CustomerId } from "./customer-id.ts";
-import type { InvoiceLine, Money } from "./invoice/line.ts";
+import type { InvoiceLine } from "./invoice/line.ts";
 import type { InvoiceLines } from "./invoice/lines.ts";
+import type { Money } from "./money.ts";
 
 export type OpenInvoiceError = "negative-total";
 export type AddInvoiceLineError = "already-issued" | "negative-total";
@@ -112,8 +113,9 @@ export class Invoice {
 ```ts
 import type { Result } from "@acme/language-extensions";
 import type { CustomerId } from "./customer-id.ts";
-import type { InvoiceLine, Money } from "./invoice/line.ts";
+import type { InvoiceLine } from "./invoice/line.ts";
 import type { InvoiceLines } from "./invoice/lines.ts";
+import type { Money } from "./money.ts";
 
 export type OpenInvoiceError = "negative-total";
 export type AddInvoiceLineError = "already-issued" | "negative-total";
@@ -214,7 +216,7 @@ export class CustomerId {
 
 規則のない Primitive は、モデルで `unconstrained` と理由を宣言し、何も確かめない `of` で組み立てる。
 
-`Money` はその例である。モデルは個々の明細金額を理由付きの `unconstrained` として宣言する。負の明細を別の明細で相殺できる一方、集約が合計の非負を守るためである。2 つの `Money` を足す `add` は、相手の `#value` を同じクラスの中で読む。`#` フィールドは同じクラスのほかのインスタンスからも読めるので、getter で値を取り出してクラスの外で足すことはない。`InvoiceLine` は金額を公開せず、受け取った合計に自分の金額を足した `Money` を返す（`addTo`）。合計も `Money` のまま受け渡し、負かどうかは `isNegative` に尋ねる。companion 表現では、`add` は相手に自分の値を足すよう頼む（`other.plus(state.value)`）。`equals` が相手に照合を頼むのと同じ形である。
+`Money` はその例であり、明細の金額と請求書の合計を表す値として自分のモジュール `money` に置く。モデルは個々の明細金額を理由付きの `unconstrained` として宣言する。負の明細を別の明細で相殺できる一方、集約が合計の非負を守るためである。2 つの `Money` を足す `add` は、相手の `#value` を同じクラスの中で読む。`#` フィールドは同じクラスのほかのインスタンスからも読めるので、getter で値を取り出してクラスの外で足すことはない。`InvoiceLine` は金額を公開せず、受け取った合計に自分の金額を足した `Money` を返す（`addTo`）。合計も `Money` のまま受け渡し、負かどうかは `isNegative` に尋ねる。companion 表現では、`add` は相手に自分の値を足すよう頼む（`other.plus(state.value)`）。`equals` が相手に照合を頼むのと同じ形である。
 
 ```ts
 export class Money {
@@ -240,6 +242,10 @@ export class Money {
     return this.#value < 0;
   }
 }
+```
+
+```ts
+import type { Money } from "../money.ts";
 
 export class InvoiceLine {
   readonly #amount: Money;
@@ -263,7 +269,7 @@ export class InvoiceLine {
 ほかの状態と並べてコレクションを持つドメインの型は、それをファーストクラスコレクションで包む。状態がそのコレクションだけの型で、コレクションへの操作と判断を持つ。`InvoiceLines` は明細を加えた新しいインスタンスを返し、合計を出す。集約は配列に触れない。
 
 ```ts
-import { Money } from "./line.ts";
+import { Money } from "../money.ts";
 import type { InvoiceLine } from "./line.ts";
 
 export class InvoiceLines {
@@ -337,8 +343,9 @@ export type {
   OpenInvoiceError,
 } from "./invoice.ts";
 export { Invoice } from "./invoice.ts";
-export { InvoiceLine, Money } from "./invoice/line.ts";
+export { InvoiceLine } from "./invoice/line.ts";
 export { InvoiceLines } from "./invoice/lines.ts";
+export { Money } from "./money.ts";
 ```
 
 `index-file` では次のとおり。
@@ -358,9 +365,10 @@ export type {
 export { Invoice } from "./invoice/index.ts";
 export { InvoiceLine } from "./invoice/line.ts";
 export { InvoiceLines } from "./invoice/lines.ts";
+export { Money } from "./money.ts";
 ```
 
-モジュールのパスは集約写像の `module` の区切りに対応する。`src/index.ts` は `[]`、`src/invoice.ts` と `src/invoice/index.ts` は `[invoice]`、`src/invoice/line.ts` は `[invoice, line]`、`src/invoice/lines.ts` は `[invoice, lines]` である。
+モジュールのパスは集約写像の `module` の区切りに対応する。`src/index.ts` は `[]`、`src/invoice.ts` と `src/invoice/index.ts` は `[invoice]`、`src/invoice/line.ts` は `[invoice, line]`、`src/invoice/lines.ts` は `[invoice, lines]`、`src/money.ts` は `[money]` である。
 
 ## ユースケースとインターフェイスアダプタ
 

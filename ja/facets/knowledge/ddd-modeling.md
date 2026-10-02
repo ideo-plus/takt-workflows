@@ -126,9 +126,10 @@ aggregate_mappings:
 domain_packages:
   - { term: 請求, model_refs: [bc.billing], rationale: 請求の業務全体を持つ, code: { language: typescript, package: "@acme/billing-domain", module: [] } }
   - { term: 請求書, model_refs: [aggregate.invoice], rationale: 請求書を作成し発行する, code: { language: typescript, package: "@acme/billing-domain", module: [invoice] } }
-  - { term: 請求書明細, model_refs: [vo.invoice-line, primitive.money], rationale: 請求書が合計する金額, code: { language: typescript, package: "@acme/billing-domain", module: [invoice, line] } }
+  - { term: 請求書明細, model_refs: [vo.invoice-line], rationale: 請求書が合計する 1 件の金額, code: { language: typescript, package: "@acme/billing-domain", module: [invoice, line] } }
   - { term: 請求書明細の並び, model_refs: [vo.invoice-line], rationale: 1 通の請求書の明細とその合計, code: { language: typescript, package: "@acme/billing-domain", module: [invoice, lines] } }
   - { term: 顧客 ID, model_refs: [primitive.customer-id], rationale: 請求書の請求先の顧客を識別する, code: { language: typescript, package: "@acme/billing-domain", module: [customer-id] } }
+  - { term: 金額, model_refs: [primitive.money], rationale: 明細の金額と請求書の合計を表す, code: { language: typescript, package: "@acme/billing-domain", module: [money] } }
 ```
 
 `model_ref` は `docs/ddd` からの相対パスで書く。`success_type` はコマンドが成功時に返すものの型名である。TypeScript では新しいインスタンスとイベントを持つ成功値の型、Rust ではイベント、再送されたコマンドを認識するコマンドでは成功値の enum になる。ファクトリ規則の成功値は集約の型である。`module` はパッケージのルートより下の区切りを並べたもので、ルートは `[]` になる。ルートから下のすべての階層を宣言する。TypeScript では case の文字列がリテラルの union のメンバー（`already-issued`）になり、Rust では enum のバリアント（`AlreadyIssued`）になる。
@@ -172,6 +173,33 @@ layer_structures:
 | フローが集約をまたぐ | Process Manager の候補。ステップと補償をモデルに記録する |
 | 操作が状態を変えない | `state_effect: none` とする。これは有効な宣言である |
 | 用語がコードにだけあり、業務の語彙にない | パッケージの名前にする前に意味を確かめる |
+
+## モジュール
+
+ドメイン層のパッケージは、エヴァンスのいうモジュールに分ける。モジュールはモデルの一部であり、コードを種類で入れておく技術の入れ物ではない。凝集した概念を 1 つのモジュールにまとめ、モジュール同士の依存を少なくする。名前はユビキタス言語から付け（集約写像の `domain_packages` に業務用語として宣言する）、モジュールの並びを見ればドメインの構成が読み取れるようにする。モデルが変われば、モジュールも組み替える。
+
+| 型 | 置き場所 |
+|----|----------|
+| 1 つの概念に属する型（集約ルート、その識別子、明細のような値オブジェクト、集約が記憶するコマンド ID） | その概念のモジュールの下（`invoice/`） |
+| 複数の概念が使う値（金額） | 責務の名前のモジュール（`money`） |
+| ほかの集約を指す ID（顧客 ID） | 指す先の概念のモジュール（`customer-id`） |
+
+概念が少ないうちは、パッケージのルートに数個のモジュールが並ぶだけでよい。ID を包んだときの形は次のとおり（TypeScript、`named-file`）。
+
+```text
+packages/command/billing-domain/src/
+  index.ts
+  invoice.ts          # 請求書: 集約ルート、エラー、イベント
+  invoice/
+    invoice-id.ts     # 請求書を識別する
+    command-id.ts     # 請求書が記憶する明細追加のコマンド ID
+    line.ts           # 明細
+    lines.ts          # 明細の並び
+  customer-id.ts      # 請求先の顧客を識別する
+  money.ts            # 明細の金額と請求書の合計
+```
+
+概念が増えてルートの並びから構成が読み取れなくなったら、凝集する概念をモジュールにまとめ直す。たとえば顧客の与信を扱うようになれば、顧客 ID は与信枠と一緒に `customer` モジュールへ移り、入金を扱うようになれば `payment` モジュールができる。`ids`、`primitives`、`value-objects` のように型の種類でまとめたモジュールは作らない。Rust でも同じで、`file` 配置なら `invoice.rs` と `invoice/invoice_id.rs` のようになる。
 
 ## 集約ごとの二軸
 

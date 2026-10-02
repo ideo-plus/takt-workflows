@@ -122,18 +122,18 @@ describe("Rust sample domain model generation", () => {
 
 describe("Rust sample aggregate mapping", () => {
   for (const sample of rustSamples())
-    test(`${sample.layout} maps Money to the Invoice line code location`, () => {
+    test(`${sample.layout} maps Money to a module of its own`, () => {
       const dir = writeProject(sample.files, "ddd-rust-mapping-");
       try {
         const loaded = loadAggregateMapping(join(dir, "docs/ddd/aggregate-mapping.yaml"));
         expect(loaded.ok).toBe(true);
         if (!loaded.ok) return;
-        const invoiceLine = loaded.mapping.domain_packages.find((entry) => entry.term === "Invoice line");
-        expect(invoiceLine?.model_refs).toEqual(["vo.invoice-line", "primitive.money"]);
-        expect(invoiceLine?.code).toEqual({
+        const money = loaded.mapping.domain_packages.find((entry) => entry.term === "Money");
+        expect(money?.model_refs).toEqual(["primitive.money"]);
+        expect(money?.code).toEqual({
           language: "rust",
           package: "billing-domain",
-          module: ["invoice", "line"],
+          module: ["money"],
         });
       } finally {
         rmSync(dir, { recursive: true, force: true });
@@ -337,11 +337,11 @@ impl ObservesTotal for InvoiceLine {
   });
 
   test("a typed mutable receiver is treated as self rather than an external argument", () => {
-    const line = "packages/command/billing-domain/src/invoice/line.rs";
+    const money = "packages/command/billing-domain/src/money.rs";
     const result = lint(sample.files, (files) =>
       replace(
         files,
-        line,
+        money,
         "pub fn add(&mut self, rhs: &Money) {",
         "pub fn add(self: &mut Self, rhs: &Money) {",
       ),
@@ -350,11 +350,11 @@ impl ObservesTotal for InvoiceLine {
   });
 
   test("a typed mutable receiver does not exempt another external mutable argument", () => {
-    const line = "packages/command/billing-domain/src/invoice/line.rs";
+    const money = "packages/command/billing-domain/src/money.rs";
     const result = lint(sample.files, (files) =>
       replace(
         files,
-        line,
+        money,
         "pub fn add(&mut self, rhs: &Money) {",
         "pub fn add(self: &mut Self, rhs: &mut Money) {",
       ),
@@ -650,10 +650,12 @@ describe("knowledge examples are the samples", () => {
       const companionSample = typeScriptSample("companion", "named-file").files;
       expect(examples).toContain(classSample[parentModuleFile("named-file")]);
       expect(examples).toContain(companionSample[parentModuleFile("named-file")]);
+      expect(examples).toContain(typeScriptSample("class", "index-file").files["packages/command/billing-domain/src/index.ts"]);
       for (const path of [
         "packages/command/billing-domain/src/customer-id.ts",
         "packages/command/billing-domain/src/invoice/line.ts",
         "packages/command/billing-domain/src/invoice/lines.ts",
+        "packages/command/billing-domain/src/money.ts",
         "packages/infrastructure/language-extensions/src/result.ts",
         "packages/command/billing-use-case/src/invoice-repository.ts",
         "packages/command/billing-use-case/src/issue-invoice.ts",
@@ -665,7 +667,7 @@ describe("knowledge examples are the samples", () => {
       const examples = blocks(`${lang}/facets/knowledge/ddd-rust.md`);
       const files = rustSample("file").files;
       expect(examples).toContain(files[rustParentModuleFile("file")]);
-      for (const path of ["customer_id.rs", "invoice/line.rs", "invoice/lines.rs"])
+      for (const path of ["customer_id.rs", "invoice/line.rs", "invoice/lines.rs", "money.rs"])
         expect(examples).toContain(files[`packages/command/billing-domain/src/${path}`]);
     });
     test(`${lang} ddd-modeling: the model file examples fit the TypeScript sample`, () => {

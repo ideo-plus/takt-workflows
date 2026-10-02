@@ -29,6 +29,7 @@ export function rustParentModuleFile(layout: RustLayout): string {
 
 const DOMAIN_LIB = `pub mod customer_id;
 pub mod invoice;
+pub mod money;
 `;
 
 export const RUST_CUSTOMER_ID = `#[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -50,7 +51,7 @@ impl CustomerId {
 }
 `;
 
-export const RUST_INVOICE_LINE = `#[derive(Debug, Clone, PartialEq, Eq)]
+export const RUST_MONEY = `#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Money(i64);
 
 impl Money {
@@ -70,6 +71,9 @@ impl Money {
         self.0 < 0
     }
 }
+`;
+
+export const RUST_INVOICE_LINE = `use crate::money::Money;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InvoiceLine {
@@ -87,7 +91,8 @@ impl InvoiceLine {
 }
 `;
 
-export const RUST_INVOICE_LINES = `use super::line::{InvoiceLine, Money};
+export const RUST_INVOICE_LINES = `use super::line::InvoiceLine;
+use crate::money::Money;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InvoiceLines(Vec<InvoiceLine>);
@@ -122,9 +127,10 @@ impl InvoiceLines {
 export const RUST_INVOICE = `pub mod line;
 pub mod lines;
 
-use self::line::{InvoiceLine, Money};
+use self::line::InvoiceLine;
 use self::lines::InvoiceLines;
 use crate::customer_id::CustomerId;
+use crate::money::Money;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OpenInvoiceError {
@@ -327,9 +333,10 @@ export const RUST_IN_MEMORY_INVOICE_REPOSITORY = `use std::cell::RefCell;
 use std::collections::HashMap;
 
 use billing_domain::customer_id::CustomerId;
-use billing_domain::invoice::line::{InvoiceLine, Money};
+use billing_domain::invoice::line::InvoiceLine;
 use billing_domain::invoice::lines::InvoiceLines;
 use billing_domain::invoice::Invoice;
+use billing_domain::money::Money;
 use billing_use_case::invoice_repository::{InvoiceNotFound, InvoiceRepository};
 
 pub struct InvoiceRecord {
@@ -420,9 +427,10 @@ export const RUST_AGGREGATE_MAPPING = [
   "domain_packages:",
   `  - { term: Billing, model_refs: [bc.billing], rationale: owns the billing business, code: ${location([])} }`,
   `  - { term: Invoice, model_refs: [aggregate.invoice], rationale: opens and issues invoices, code: ${location(["invoice"])} }`,
-  `  - { term: Invoice line, model_refs: [vo.invoice-line, primitive.money], rationale: the amounts an invoice adds up, code: ${location(["invoice", "line"])} }`,
+  `  - { term: Invoice line, model_refs: [vo.invoice-line], rationale: one amount an invoice adds up, code: ${location(["invoice", "line"])} }`,
   `  - { term: Invoice lines, model_refs: [vo.invoice-line], rationale: the lines of one invoice and their total, code: ${location(["invoice", "lines"])} }`,
   `  - { term: Customer ID, model_refs: [primitive.customer-id], rationale: identifies the customer an invoice bills, code: ${location(["customer_id"])} }`,
+  `  - { term: Money, model_refs: [primitive.money], rationale: the amount of a line and the total of an invoice, code: ${location(["money"])} }`,
   "",
 ].join("\n");
 
@@ -472,6 +480,7 @@ export function rustSample(layout: RustLayout): RustSample {
     [rustParentModuleFile(layout)]: RUST_INVOICE,
     [`${DOMAIN_DIR}/src/invoice/line.rs`]: RUST_INVOICE_LINE,
     [`${DOMAIN_DIR}/src/invoice/lines.rs`]: RUST_INVOICE_LINES,
+    [`${DOMAIN_DIR}/src/money.rs`]: RUST_MONEY,
     [`${USE_CASE_DIR}/Cargo.toml`]: crateManifest(USE_CASE_CRATE, [DOMAIN_CRATE]),
     [`${USE_CASE_DIR}/src/lib.rs`]: USE_CASE_LIB,
     [`${USE_CASE_DIR}/src/invoice_repository.rs`]: RUST_INVOICE_REPOSITORY_PORT,

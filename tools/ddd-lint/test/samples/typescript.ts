@@ -38,7 +38,7 @@ export const RESULT_SOURCE = `export type Result<T, E> =
 const RESULT_INDEX = `export type { Result } from "./result.ts";
 `;
 
-export const CLASS_LINE = `export class Money {
+export const CLASS_MONEY = `export class Money {
   readonly #value: number;
 
   private constructor(value: number) {
@@ -61,6 +61,9 @@ export const CLASS_LINE = `export class Money {
     return this.#value < 0;
   }
 }
+`;
+
+export const CLASS_LINE = `import type { Money } from "../money.ts";
 
 export class InvoiceLine {
   readonly #amount: Money;
@@ -79,10 +82,10 @@ export class InvoiceLine {
 }
 `;
 
-const COMPANION_LINE = `const moneyBrand: unique symbol = Symbol("Money");
+const COMPANION_MONEY = `const brand: unique symbol = Symbol("Money");
 
 export type Money = {
-  readonly [moneyBrand]: true;
+  readonly [brand]: true;
   add(other: Money): Money;
   plus(value: number): Money;
   isNegative(): boolean;
@@ -92,7 +95,7 @@ export const Money = {
   of(value: number): Money {
     const state = { value };
     const instance: Money = {
-      [moneyBrand]: true,
+      [brand]: true,
       add(other: Money): Money {
         return other.plus(state.value);
       },
@@ -109,11 +112,14 @@ export const Money = {
     return Money.of(0);
   },
 };
+`;
 
-const lineBrand: unique symbol = Symbol("InvoiceLine");
+const COMPANION_LINE = `import type { Money } from "../money.ts";
+
+const brand: unique symbol = Symbol("InvoiceLine");
 
 export type InvoiceLine = {
-  readonly [lineBrand]: true;
+  readonly [brand]: true;
   addTo(total: Money): Money;
 };
 
@@ -121,7 +127,7 @@ export const InvoiceLine = {
   of(amount: Money): InvoiceLine {
     const state = { amount };
     const instance: InvoiceLine = {
-      [lineBrand]: true,
+      [brand]: true,
       addTo(total: Money): Money {
         return total.add(state.amount);
       },
@@ -183,7 +189,7 @@ export const CustomerId = {
 };
 `;
 
-export const CLASS_LINES = `import { Money } from "./line.ts";
+export const CLASS_LINES = `import { Money } from "../money.ts";
 import type { InvoiceLine } from "./line.ts";
 
 export class InvoiceLines {
@@ -215,7 +221,7 @@ export class InvoiceLines {
 }
 `;
 
-const COMPANION_LINES = `import { Money } from "./line.ts";
+const COMPANION_LINES = `import { Money } from "../money.ts";
 import type { InvoiceLine } from "./line.ts";
 
 const brand: unique symbol = Symbol("InvoiceLines");
@@ -254,8 +260,9 @@ export const InvoiceLines = {
 function header(specifiers: Specifiers): string {
   return `import type { Result } from "${RESULT_NAME}";
 import type { CustomerId } from "${specifiers.customer}";
-import type { InvoiceLine, Money } from "${specifiers.line}";
+import type { InvoiceLine } from "${specifiers.line}";
 import type { InvoiceLines } from "${specifiers.lines}";
+import type { Money } from "${specifiers.money}";
 
 export type OpenInvoiceError = "negative-total";
 export type AddInvoiceLineError = "already-issued" | "negative-total";
@@ -276,6 +283,7 @@ export interface Specifiers {
   readonly customer: string;
   readonly line: string;
   readonly lines: string;
+  readonly money: string;
 }
 
 export function specifiersFor(layout: Layout): Specifiers {
@@ -284,6 +292,7 @@ export function specifiersFor(layout: Layout): Specifiers {
     customer: named ? "./customer-id.ts" : "../customer-id.ts",
     line: named ? "./invoice/line.ts" : "./line.ts",
     lines: named ? "./invoice/lines.ts" : "./lines.ts",
+    money: named ? "./money.ts" : "../money.ts",
   };
 }
 
@@ -433,8 +442,9 @@ export type {
   OpenInvoiceError,
 } from "${parentSpecifier}";
 export { Invoice } from "${parentSpecifier}";
-export { InvoiceLine, Money } from "./invoice/line.ts";
+export { InvoiceLine } from "./invoice/line.ts";
 export { InvoiceLines } from "./invoice/lines.ts";
+export { Money } from "./money.ts";
 `;
 }
 
@@ -620,9 +630,10 @@ export const AGGREGATE_MAPPING = [
   "domain_packages:",
   `  - { term: Billing, model_refs: [bc.billing], rationale: owns the billing business, code: ${location([])} }`,
   `  - { term: Invoice, model_refs: [aggregate.invoice], rationale: opens and issues invoices, code: ${location(["invoice"])} }`,
-  `  - { term: Invoice line, model_refs: [vo.invoice-line, primitive.money], rationale: the amounts an invoice adds up, code: ${location(["invoice", "line"])} }`,
+  `  - { term: Invoice line, model_refs: [vo.invoice-line], rationale: one amount an invoice adds up, code: ${location(["invoice", "line"])} }`,
   `  - { term: Invoice lines, model_refs: [vo.invoice-line], rationale: the lines of one invoice and their total, code: ${location(["invoice", "lines"])} }`,
   `  - { term: Customer ID, model_refs: [primitive.customer-id], rationale: identifies the customer an invoice bills, code: ${location(["customer-id"])} }`,
+  `  - { term: Money, model_refs: [primitive.money], rationale: the amount of a line and the total of an invoice, code: ${location(["money"])} }`,
   "",
 ].join("\n");
 
@@ -716,6 +727,7 @@ export function typeScriptSample(representation: Representation, layout: Layout)
     [`${DOMAIN_DIR}/src/invoice/lines.ts`]: representation === "class" ? CLASS_LINES : COMPANION_LINES,
     [`${DOMAIN_DIR}/src/customer-id.ts`]: representation === "class" ? CLASS_CUSTOMER_ID : COMPANION_CUSTOMER_ID,
     [`${DOMAIN_DIR}/src/invoice/line.ts`]: representation === "class" ? CLASS_LINE : COMPANION_LINE,
+    [`${DOMAIN_DIR}/src/money.ts`]: representation === "class" ? CLASS_MONEY : COMPANION_MONEY,
     [`${USE_CASE_DIR}/package.json`]: packageManifest(USE_CASE_NAME, { [DOMAIN_NAME]: "0.1.0", [RESULT_NAME]: "0.1.0" }),
     [`${USE_CASE_DIR}/tsconfig.json`]: PACKAGE_TSCONFIG,
     [`${USE_CASE_DIR}/src/index.ts`]: USE_CASE_INDEX,

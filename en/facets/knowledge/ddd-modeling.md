@@ -126,9 +126,10 @@ aggregate_mappings:
 domain_packages:
   - { term: Billing, model_refs: [bc.billing], rationale: owns the billing business, code: { language: typescript, package: "@acme/billing-domain", module: [] } }
   - { term: Invoice, model_refs: [aggregate.invoice], rationale: opens and issues invoices, code: { language: typescript, package: "@acme/billing-domain", module: [invoice] } }
-  - { term: Invoice line, model_refs: [vo.invoice-line, primitive.money], rationale: the amounts an invoice adds up, code: { language: typescript, package: "@acme/billing-domain", module: [invoice, line] } }
+  - { term: Invoice line, model_refs: [vo.invoice-line], rationale: one amount an invoice adds up, code: { language: typescript, package: "@acme/billing-domain", module: [invoice, line] } }
   - { term: Invoice lines, model_refs: [vo.invoice-line], rationale: the lines of one invoice and their total, code: { language: typescript, package: "@acme/billing-domain", module: [invoice, lines] } }
   - { term: Customer ID, model_refs: [primitive.customer-id], rationale: identifies the customer an invoice bills, code: { language: typescript, package: "@acme/billing-domain", module: [customer-id] } }
+  - { term: Money, model_refs: [primitive.money], rationale: the amount of a line and the total of an invoice, code: { language: typescript, package: "@acme/billing-domain", module: [money] } }
 ```
 
 `model_ref` is relative to `docs/ddd`. `success_type` names what a command returns on success: in TypeScript the outcome type holding the new instance and the event, in Rust the event, or an outcome enum when the command recognizes resent commands. A factory rule's success is the aggregate type. `module` lists the segments below the package root, so the root is `[]`. Every level from the root down is declared. In TypeScript the case strings are the literal union members (`already-issued`); in Rust they are enum variants (`AlreadyIssued`).
@@ -172,6 +173,33 @@ The model is derived from behavior, not from data tables: stories give past-tens
 | A flow crosses aggregates | Process Manager candidate; the steps and compensations are recorded in the model |
 | An operation never changes state | `state_effect: none`, which is a valid declaration |
 | A term exists only in code, not in the business vocabulary | Clarify it before naming a package after it |
+
+## Modules
+
+Divide a domain package into Modules in Evans's sense. A Module is part of the model, not a technical bucket that holds code by kind. Put cohesive concepts in one Module and keep the dependencies between Modules few. Name a Module from the ubiquitous language (declared as a business term in `domain_packages` of the aggregate mapping), so the list of Modules tells how the domain is organized. When the model changes, regroup the Modules too.
+
+| Type | Where it goes |
+|------|---------------|
+| A type that belongs to one concept (the aggregate root, its identifier, a value object such as a line, a command ID the aggregate remembers) | Under that concept's Module (`invoice/`) |
+| A value several concepts use (an amount) | A Module named by its responsibility (`money`) |
+| An ID that refers to another aggregate (a customer ID) | The Module of the concept it refers to (`customer-id`) |
+
+While the concepts are few, a handful of Modules at the package root is enough. With the IDs wrapped, it looks like this (TypeScript, `named-file`):
+
+```text
+packages/command/billing-domain/src/
+  index.ts
+  invoice.ts          # the invoice: aggregate root, errors, events
+  invoice/
+    invoice-id.ts     # identifies the invoice
+    command-id.ts     # the add-line command ID the invoice remembers
+    line.ts           # a line
+    lines.ts          # the lines
+  customer-id.ts      # identifies the customer billed
+  money.ts            # the amount of a line and the total of an invoice
+```
+
+Once the concepts grow and the root no longer shows how the domain is organized, regroup cohesive concepts into Modules. For example, when credit is handled, the customer ID moves with the credit limit into a `customer` Module, and handling payments brings a `payment` Module. Do not make Modules that group types by kind, such as `ids`, `primitives`, or `value-objects`. Rust is the same: under the `file` layout, `invoice.rs` and `invoice/invoice_id.rs`.
 
 ## Two Axes per Aggregate
 

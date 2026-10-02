@@ -10,7 +10,7 @@ The project settings choose one representation for every aggregate, Entity, Doma
 | The team prefers plain types and functions | `companion`: a `type` literal plus a `const` object of the same name; the factory's closure holds the state |
 | Aggregate execution model or persistence differs between aggregates | Irrelevant to this choice; the representation is project-wide |
 
-In the examples below the customer is the Domain Primitive `CustomerId`, the line amounts are the Domain Primitive `Money`, and the lines are the first-class collection `InvoiceLines`. The invoice ID and the command ID stay bare `string` only to keep the examples short; real code wraps them the same way.
+In the examples below the customer is the Domain Primitive `CustomerId`, the line amounts are the Domain Primitive `Money`, and the lines are the first-class collection `InvoiceLines`. The invoice ID and the command ID stay bare `string` only to keep the examples short; real code wraps them the same way and places them under the invoice's module as types that belong to the invoice alone (`invoice/invoice-id.ts`, `invoice/command-id.ts`). How to group modules is in "Modules" of the modeling knowledge.
 
 `private`, `protected`, and `readonly` are erased at run time; a `#` field and a closure are private at run time. A brand stops an object of the same shape from being assigned; it does not prove that a factory built the value.
 
@@ -21,8 +21,9 @@ In the examples below the customer is the Domain Primitive `CustomerId`, the lin
 ```ts
 import type { Result } from "@acme/language-extensions";
 import type { CustomerId } from "./customer-id.ts";
-import type { InvoiceLine, Money } from "./invoice/line.ts";
+import type { InvoiceLine } from "./invoice/line.ts";
 import type { InvoiceLines } from "./invoice/lines.ts";
+import type { Money } from "./money.ts";
 
 export type OpenInvoiceError = "negative-total";
 export type AddInvoiceLineError = "already-issued" | "negative-total";
@@ -112,8 +113,9 @@ The factory that takes the whole state (`restore`) is the full constructor: it v
 ```ts
 import type { Result } from "@acme/language-extensions";
 import type { CustomerId } from "./customer-id.ts";
-import type { InvoiceLine, Money } from "./invoice/line.ts";
+import type { InvoiceLine } from "./invoice/line.ts";
 import type { InvoiceLines } from "./invoice/lines.ts";
+import type { Money } from "./money.ts";
 
 export type OpenInvoiceError = "negative-total";
 export type AddInvoiceLineError = "already-issued" | "negative-total";
@@ -214,7 +216,7 @@ export class CustomerId {
 
 A primitive without a rule declares `unconstrained` with a rationale in the model and is built by an `of` that checks nothing.
 
-`Money` is such a primitive. The model declares individual line amounts `unconstrained` with a rationale: a negative line can be balanced by another line, while the aggregate keeps the total non-negative. `add`, which adds two `Money` values, reads the other value's `#value` inside the same class. A `#` field is readable from other instances of the same class, so no getter takes the value out to add it outside the class. `InvoiceLine` does not expose its amount; it returns the `Money` it gets by adding its amount to the total it receives (`addTo`). The total is passed around as `Money` too, and whether it is negative is asked of it (`isNegative`). In the companion representation `add` asks the other value to add this one's value (`other.plus(state.value)`), the same shape as `equals` asking the other value to match.
+`Money` is such a primitive; it is the amount of a line and the total of an invoice, and it lives in a module of its own, `money`. The model declares individual line amounts `unconstrained` with a rationale: a negative line can be balanced by another line, while the aggregate keeps the total non-negative. `add`, which adds two `Money` values, reads the other value's `#value` inside the same class. A `#` field is readable from other instances of the same class, so no getter takes the value out to add it outside the class. `InvoiceLine` does not expose its amount; it returns the `Money` it gets by adding its amount to the total it receives (`addTo`). The total is passed around as `Money` too, and whether it is negative is asked of it (`isNegative`). In the companion representation `add` asks the other value to add this one's value (`other.plus(state.value)`), the same shape as `equals` asking the other value to match.
 
 ```ts
 export class Money {
@@ -240,6 +242,10 @@ export class Money {
     return this.#value < 0;
   }
 }
+```
+
+```ts
+import type { Money } from "../money.ts";
 
 export class InvoiceLine {
   readonly #amount: Money;
@@ -263,7 +269,7 @@ export class InvoiceLine {
 A domain type that holds a collection beside other state wraps it in a first-class collection: a type whose whole state is the collection, which owns the operations and decisions on it. `InvoiceLines` returns a new instance with a line added and totals the lines; the aggregate never touches the array.
 
 ```ts
-import { Money } from "./line.ts";
+import { Money } from "../money.ts";
 import type { InvoiceLine } from "./line.ts";
 
 export class InvoiceLines {
@@ -337,8 +343,9 @@ export type {
   OpenInvoiceError,
 } from "./invoice.ts";
 export { Invoice } from "./invoice.ts";
-export { InvoiceLine, Money } from "./invoice/line.ts";
+export { InvoiceLine } from "./invoice/line.ts";
 export { InvoiceLines } from "./invoice/lines.ts";
+export { Money } from "./money.ts";
 ```
 
 Under `index-file`:
@@ -358,9 +365,10 @@ export type {
 export { Invoice } from "./invoice/index.ts";
 export { InvoiceLine } from "./invoice/line.ts";
 export { InvoiceLines } from "./invoice/lines.ts";
+export { Money } from "./money.ts";
 ```
 
-Module paths map to the `module` segments of the aggregate mapping: `src/index.ts` is `[]`, `src/invoice.ts` and `src/invoice/index.ts` are `[invoice]`, `src/invoice/line.ts` is `[invoice, line]`, and `src/invoice/lines.ts` is `[invoice, lines]`.
+Module paths map to the `module` segments of the aggregate mapping: `src/index.ts` is `[]`, `src/invoice.ts` and `src/invoice/index.ts` are `[invoice]`, `src/invoice/line.ts` is `[invoice, line]`, `src/invoice/lines.ts` is `[invoice, lines]`, and `src/money.ts` is `[money]`.
 
 ## Use Case and Interface Adapter
 
