@@ -8,9 +8,10 @@ An aggregate keeps private fields, a private constructor that takes the whole st
 pub mod line;
 pub mod lines;
 
-use self::line::{InvoiceLine, Money};
+use self::line::InvoiceLine;
 use self::lines::InvoiceLines;
 use crate::customer_id::CustomerId;
+use crate::money::Money;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OpenInvoiceError {
@@ -162,7 +163,7 @@ impl Invoice {
 }
 ```
 
-`restore` reports a corrupt state with its own type because it is not a business failure. `add_line` remembers the ID of the last add-line command it applied (the model declares `retention: last-one`) and recognizes a resent command before any other check: it returns `AddInvoiceLineOutcome::Duplicate`, changes nothing, and produces no event, so the event is never published twice. It checks the new total before it changes anything. Events are domain types too: their fields are private, they are built by their own `new` inside the aggregate's module, and they offer read-only accessors to the code that publishes them. The customer is the Domain Primitive `CustomerId`, the line amounts are the Domain Primitive `Money`, and the lines are the first-class collection `InvoiceLines`. The invoice ID and the command ID stay `&str` only to keep the example short.
+`restore` reports a corrupt state with its own type because it is not a business failure. `add_line` remembers the ID of the last add-line command it applied (the model declares `retention: last-one`) and recognizes a resent command before any other check: it returns `AddInvoiceLineOutcome::Duplicate`, changes nothing, and produces no event, so the event is never published twice. It checks the new total before it changes anything. Events are domain types too: their fields are private, they are built by their own `new` inside the aggregate's module, and they offer read-only accessors to the code that publishes them. The customer is the Domain Primitive `CustomerId`, the line amounts are the Domain Primitive `Money`, and the lines are the first-class collection `InvoiceLines`. The invoice ID and the command ID stay `&str` only to keep the example short; real code wraps them and places them under the `invoice` module as types that belong to the invoice alone (`invoice/invoice_id.rs`, `invoice/command_id.rs`). How to group modules is in "Modules" of the modeling knowledge.
 
 ## Changing in Place
 
@@ -189,6 +190,10 @@ impl Money {
         self.0 < 0
     }
 }
+```
+
+```rust
+use crate::money::Money;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InvoiceLine {
@@ -206,7 +211,7 @@ impl InvoiceLine {
 }
 ```
 
-`Money` is a Domain Primitive whose model declaration marks individual line amounts `unconstrained` with a rationale: a negative line can be balanced by another line, while the aggregate keeps the total non-negative. `Money::add` changes the receiving `Money` through `&mut self`; `InvoiceLine` supplies the Domain Primitive to an operation without exposing a bare value or a getter. The in-place rule rejects methods that receive an external `&mut` value, but permits ordinary `&self` queries.
+`Money` is a Domain Primitive, the amount of a line and the total of an invoice, in a module of its own, `money` (`src/money.rs`). Its model declaration marks individual line amounts `unconstrained` with a rationale: a negative line can be balanced by another line, while the aggregate keeps the total non-negative. `Money::add` changes the receiving `Money` through `&mut self`; `InvoiceLine` supplies the Domain Primitive to an operation without exposing a bare value or a getter. The in-place rule rejects methods that receive an external `&mut` value, but permits ordinary `&self` queries.
 
 ## Domain Primitives
 
@@ -239,7 +244,8 @@ A primitive without a rule declares `unconstrained` with a rationale in the mode
 A domain type that holds a collection beside other state wraps it in a first-class collection: a type whose whole state is the collection, which owns the operations and decisions on it. `InvoiceLines` adds a line in place and totals the lines; the aggregate never touches the `Vec`.
 
 ```rust
-use super::line::{InvoiceLine, Money};
+use super::line::InvoiceLine;
+use crate::money::Money;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InvoiceLines(Vec<InvoiceLine>);
@@ -351,9 +357,10 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 
 use billing_domain::customer_id::CustomerId;
-use billing_domain::invoice::line::{InvoiceLine, Money};
+use billing_domain::invoice::line::InvoiceLine;
 use billing_domain::invoice::lines::InvoiceLines;
 use billing_domain::invoice::Invoice;
+use billing_domain::money::Money;
 use billing_use_case::invoice_repository::{InvoiceNotFound, InvoiceRepository};
 
 pub struct InvoiceRecord {
