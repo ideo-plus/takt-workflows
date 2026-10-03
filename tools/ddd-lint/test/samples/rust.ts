@@ -296,7 +296,7 @@ pub struct RepositoryError {
 
 pub trait InvoiceRepository {
     fn find_by_id(&self, invoice_id: &str) -> Result<Option<Invoice>, RepositoryError>;
-    fn store(&self, invoice_id: &str, invoice: Invoice) -> Result<(), RepositoryError>;
+    fn store(&mut self, invoice_id: &str, invoice: Invoice) -> Result<(), RepositoryError>;
 }
 `;
 
@@ -315,16 +315,16 @@ pub enum IssueInvoiceFailure {
 }
 
 pub struct IssueInvoiceUseCase<'a, R: InvoiceRepository> {
-    invoice_repository: &'a R,
+    invoice_repository: &'a mut R,
 }
 
 impl<'a, R: InvoiceRepository> IssueInvoiceUseCase<'a, R> {
-    pub fn new(invoice_repository: &'a R) -> Self {
+    pub fn new(invoice_repository: &'a mut R) -> Self {
         IssueInvoiceUseCase { invoice_repository }
     }
 
     /// Issues the invoice, stores it, and hands back the event for the caller to publish.
-    pub fn execute(&self, invoice_id: &str) -> Result<InvoiceIssued, IssueInvoiceFailure> {
+    pub fn execute(&mut self, invoice_id: &str) -> Result<InvoiceIssued, IssueInvoiceFailure> {
         let Some(mut invoice) = self.invoice_repository.find_by_id(invoice_id).map_err(IssueInvoiceFailure::Repository)? else {
             return Err(IssueInvoiceFailure::NotFound(InvoiceNotFound));
         };
@@ -338,8 +338,7 @@ impl<'a, R: InvoiceRepository> IssueInvoiceUseCase<'a, R> {
 const INTERFACE_ADAPTER_LIB = `pub mod in_memory_invoice_repository;
 `;
 
-export const RUST_IN_MEMORY_INVOICE_REPOSITORY = `use std::cell::RefCell;
-use std::collections::HashMap;
+export const RUST_IN_MEMORY_INVOICE_REPOSITORY = `use std::collections::HashMap;
 
 use billing_domain::customer_id::CustomerId;
 use billing_domain::invoice::line::InvoiceLine;
@@ -358,18 +357,18 @@ pub struct InvoiceRecord {
 /// The invoices stored here take precedence over the records they were first read from.
 pub struct InMemoryInvoiceRepository {
     records: HashMap<String, InvoiceRecord>,
-    stored: RefCell<HashMap<String, Invoice>>,
+    stored: HashMap<String, Invoice>,
 }
 
 impl InMemoryInvoiceRepository {
     pub fn new(records: HashMap<String, InvoiceRecord>) -> Self {
-        InMemoryInvoiceRepository { records, stored: RefCell::new(HashMap::new()) }
+        InMemoryInvoiceRepository { records, stored: HashMap::new() }
     }
 }
 
 impl InvoiceRepository for InMemoryInvoiceRepository {
     fn find_by_id(&self, invoice_id: &str) -> Result<Option<Invoice>, RepositoryError> {
-        if let Some(stored) = self.stored.borrow().get(invoice_id) {
+        if let Some(stored) = self.stored.get(invoice_id) {
             return Ok(Some(stored.clone()));
         }
         let Some(record) = self.records.get(invoice_id) else {
@@ -382,8 +381,8 @@ impl InvoiceRepository for InMemoryInvoiceRepository {
         Ok(Some(invoice))
     }
 
-    fn store(&self, invoice_id: &str, invoice: Invoice) -> Result<(), RepositoryError> {
-        self.stored.borrow_mut().insert(invoice_id.to_string(), invoice);
+    fn store(&mut self, invoice_id: &str, invoice: Invoice) -> Result<(), RepositoryError> {
+        self.stored.insert(invoice_id.to_string(), invoice);
         Ok(())
     }
 }

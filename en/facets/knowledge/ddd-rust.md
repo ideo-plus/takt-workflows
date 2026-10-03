@@ -308,7 +308,7 @@ The mapping lists `apply_issued` in `replay_methods` with `event_ref: event.invo
 
 ## Ports, Use Cases, and Adapters
 
-The repository port is a trait named after the aggregate, declared in the use-case crate and never in a domain crate. Loading and storing reach outside the process and can fail, so every method returns `Result` and reports a failure as `RepositoryError`, an infrastructure failure declared beside the port, not a business error. The lookup does not treat a missing invoice as a failure and returns `Ok(None)` (`Result<Option<Invoice>, RepositoryError>`); the store returns `Result<(), RepositoryError>`. A use case holds the port through a generic parameter (static dispatch); a trait object is only for choosing an implementation at run time. The use case turns a missing invoice into its own error (`InvoiceNotFound`), stores the invoice the command changed, returns a failed store instead of dropping it, and returns the event for the caller to publish after persistence.
+The repository port is a trait named after the aggregate, declared in the use-case crate and never in a domain crate. Loading and storing reach outside the process and can fail, so every method returns `Result` and reports a failure as `RepositoryError`, an infrastructure failure declared beside the port, not a business error. The lookup does not treat a missing invoice as a failure and returns `Ok(None)` (`Result<Option<Invoice>, RepositoryError>`); the store changes what is stored, so it takes `&mut self` and returns `Result<(), RepositoryError>`. Taking `&self` and changing the storage through a `RefCell` inside the implementation hides the change behind interior mutability. The one exception is a port shared across threads that needs a lock: then the trait declares `Send + Sync`, the store takes `&self`, and the implementation guards its storage with a `Mutex` or an `RwLock`. A use case holds the port as a `&mut` reference to a generic parameter (static dispatch), and its `execute` takes `&mut self`; a trait object is only for choosing an implementation at run time. The use case turns a missing invoice into its own error (`InvoiceNotFound`), stores the invoice the command changed, returns a failed store instead of dropping it, and returns the event for the caller to publish after persistence.
 
 ```rust
 use billing_domain::invoice::Invoice;
@@ -321,7 +321,7 @@ pub struct RepositoryError {
 
 pub trait InvoiceRepository {
     fn find_by_id(&self, invoice_id: &str) -> Result<Option<Invoice>, RepositoryError>;
-    fn store(&self, invoice_id: &str, invoice: Invoice) -> Result<(), RepositoryError>;
+    fn store(&mut self, invoice_id: &str, invoice: Invoice) -> Result<(), RepositoryError>;
 }
 
 use billing_domain::invoice::{InvoiceIssued, IssueInvoiceError};
@@ -339,16 +339,16 @@ pub enum IssueInvoiceFailure {
 }
 
 pub struct IssueInvoiceUseCase<'a, R: InvoiceRepository> {
-    invoice_repository: &'a R,
+    invoice_repository: &'a mut R,
 }
 
 impl<'a, R: InvoiceRepository> IssueInvoiceUseCase<'a, R> {
-    pub fn new(invoice_repository: &'a R) -> Self {
+    pub fn new(invoice_repository: &'a mut R) -> Self {
         IssueInvoiceUseCase { invoice_repository }
     }
 
     /// Issues the invoice, stores it, and hands back the event for the caller to publish.
-    pub fn execute(&self, invoice_id: &str) -> Result<InvoiceIssued, IssueInvoiceFailure> {
+    pub fn execute(&mut self, invoice_id: &str) -> Result<InvoiceIssued, IssueInvoiceFailure> {
         let Some(mut invoice) = self.invoice_repository.find_by_id(invoice_id).map_err(IssueInvoiceFailure::Repository)? else {
             return Err(IssueInvoiceFailure::NotFound(InvoiceNotFound));
         };
@@ -362,7 +362,6 @@ impl<'a, R: InvoiceRepository> IssueInvoiceUseCase<'a, R> {
 The adapter implements the port, may prefix its name with the storage medium, and restores the aggregate through `restore`, the customer through `parse`, and the lines through `of`. It returns `Ok(None)` when there is no record and reports a failure of the storage as `RepositoryError` (the in-memory implementation never fails).
 
 ```rust
-use std::cell::RefCell;
 use std::collections::HashMap;
 
 use billing_domain::customer_id::CustomerId;
@@ -382,18 +381,18 @@ pub struct InvoiceRecord {
 /// The invoices stored here take precedence over the records they were first read from.
 pub struct InMemoryInvoiceRepository {
     records: HashMap<String, InvoiceRecord>,
-    stored: RefCell<HashMap<String, Invoice>>,
+    stored: HashMap<String, Invoice>,
 }
 
 impl InMemoryInvoiceRepository {
     pub fn new(records: HashMap<String, InvoiceRecord>) -> Self {
-        InMemoryInvoiceRepository { records, stored: RefCell::new(HashMap::new()) }
+        InMemoryInvoiceRepository { records, stored: HashMap::new() }
     }
 }
 
 impl InvoiceRepository for InMemoryInvoiceRepository {
     fn find_by_id(&self, invoice_id: &str) -> Result<Option<Invoice>, RepositoryError> {
-        if let Some(stored) = self.stored.borrow().get(invoice_id) {
+        if let Some(stored) = self.stored.get(invoice_id) {
             return Ok(Some(stored.clone()));
         }
         let Some(record) = self.records.get(invoice_id) else {
@@ -406,8 +405,8 @@ impl InvoiceRepository for InMemoryInvoiceRepository {
         Ok(Some(invoice))
     }
 
-    fn store(&self, invoice_id: &str, invoice: Invoice) -> Result<(), RepositoryError> {
-        self.stored.borrow_mut().insert(invoice_id.to_string(), invoice);
+    fn store(&mut self, invoice_id: &str, invoice: Invoice) -> Result<(), RepositoryError> {
+        self.stored.insert(invoice_id.to_string(), invoice);
         Ok(())
     }
 }

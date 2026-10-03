@@ -433,7 +433,7 @@ impl ObservesTotal for InvoiceLine {
   test("a repository port method that does not return Result is reported", () => {
     const port = "packages/command/billing-use-case/src/invoice_repository.rs";
     const result = lint(sample.files, (files) => {
-      replace(files, port, "    fn store(&self, invoice_id: &str, invoice: Invoice) -> Result<(), RepositoryError>;", "    fn store(&self, invoice_id: &str, invoice: Invoice);");
+      replace(files, port, "    fn store(&mut self, invoice_id: &str, invoice: Invoice) -> Result<(), RepositoryError>;", "    fn store(&mut self, invoice_id: &str, invoice: Invoice);");
       replace(files, port, "    fn find_by_id(&self, invoice_id: &str) -> Result<Option<Invoice>, RepositoryError>;", "    fn find_by_id(&self, invoice_id: &str) -> Option<Invoice>;");
     });
     expect(result.unavailable).toEqual([]);
@@ -441,6 +441,23 @@ impl ObservesTotal for InvoiceLine {
       "rust-use-case: repository port method InvoiceRepository::find_by_id returns Option<Invoice>; return Result<…, RepositoryError> so the use case sees a failed load or store",
       "rust-use-case: repository port method InvoiceRepository::store returns (); return Result<…, RepositoryError> so the use case sees a failed load or store",
     ]);
+  });
+
+  test("a repository port method that stores through &self is reported unless the port is Sync", () => {
+    const port = "packages/command/billing-use-case/src/invoice_repository.rs";
+    const reported = lint(sample.files, (files) =>
+      replace(files, port, "    fn store(&mut self, invoice_id: &str, invoice: Invoice) -> Result<(), RepositoryError>;", "    fn store(&self, invoice_id: &str, invoice: Invoice) -> Result<(), RepositoryError>;\n    fn delete_by_id(&self, invoice_id: &str) -> Result<(), RepositoryError>;"),
+    );
+    expect(reported.unavailable).toEqual([]);
+    expect(reported.findings.filter((entry) => entry.rule_id === "repository-mut-self").map((entry) => `${entry.check}: ${entry.message}`)).toEqual([
+      "rust-use-case: repository port method InvoiceRepository::store changes what is stored but does not take &mut self; take &mut self, or declare the port Send + Sync when it is shared across threads behind a lock",
+      "rust-use-case: repository port method InvoiceRepository::delete_by_id changes what is stored but does not take &mut self; take &mut self, or declare the port Send + Sync when it is shared across threads behind a lock",
+    ]);
+    const shared = lint(sample.files, (files) => {
+      replace(files, port, "    fn store(&mut self, invoice_id: &str, invoice: Invoice) -> Result<(), RepositoryError>;", "    fn store(&self, invoice_id: &str, invoice: Invoice) -> Result<(), RepositoryError>;");
+      replace(files, port, "pub trait InvoiceRepository {", "pub trait InvoiceRepository: Send + Sync {");
+    });
+    expect(shared.findings.filter((entry) => entry.rule_id === "repository-mut-self")).toEqual([]);
   });
 
   test("a repository port method returning a path-qualified Result is kept", () => {

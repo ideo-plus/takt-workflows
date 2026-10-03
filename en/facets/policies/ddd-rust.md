@@ -15,6 +15,7 @@ Defines how the rules of the other DDD policies are judged in Rust code, and the
 | Corrupt state (domain layer) | Restoration may return a dedicated restoration error or panic |
 | Duplicate success (domain layer idempotency) | The success type is an enum with `Applied(event)` and `Duplicate`; a duplicate returns `Duplicate` |
 | Go through a port (layer dependency) | A port is a trait. Static dispatch is the default; use dynamic dispatch only where the implementation is chosen at run time |
+| Repository port writes (interface-adapter layer) | A method that changes what is stored (`store`, `delete_by_id`) takes `&mut self` by default. Taking `&self` while the implementation changes the storage through a `RefCell` or the like hides the change behind interior mutability. Only when the port is shared across threads and needs a lock does the trait declare `Send + Sync`, the method take `&self`, and the implementation guard its storage with a `Mutex` or an `RwLock` |
 
 ## Changing in Place
 
