@@ -22,11 +22,6 @@ export interface DomainElement {
   aggregate: string;
   attributes: ElementAttribute[];
   invariants: string[];
-  /**
-   * A domain-primitive whose every value of the wrapped type is valid states why here. Every other
-   * domain-primitive declares its value rule: an invariant on it and a factory rule that builds it.
-   */
-  unconstrained?: string;
 }
 
 export interface Invariant {

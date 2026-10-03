@@ -1,5 +1,7 @@
 # DDD TypeScript ポリシー
 
+Domain Primitive には `of(value: T): VO` と `parse(value: T): Result<VO, Parse…Error>` を必ず置く。`parse` は入力依存の拒否ガードで不変条件違反を返してから、その入力で初期化する。`of` は同じ入力の `parse` 結果を受け取り、失敗なら契約違反として throw、成功ならその値を返す。class・companion の両表現で、直接初期化はこの検証経路だけに置く。
+
 ほかの DDD ポリシーの規則を TypeScript のコードでどう判定するかと、TypeScript だけの規則（コード表現、イミュータブル、`Result` の置き場所、パッケージ境界、検査できる構文）を定める。読み替えた結果が規則に反すれば、その規則の判定になる。モジュール配置はモジュール配置ポリシーが持つ。
 
 ## 規則の読み替え

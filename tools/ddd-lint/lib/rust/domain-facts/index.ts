@@ -1,5 +1,5 @@
 /**
- * Protocol version 9 of the native extractor: the facts every Rust rule decides on.
+ * Protocol version 10 of the native extractor: the facts every Rust rule decides on.
  *
  * The launch classification is the shared one in `native/launch.ts`; this module owns the protocol
  * identity, the one batch this inspection sends, and the strict conversion of native spellings into
@@ -15,7 +15,7 @@ import { ToolUnavailableError } from "../../project/context.ts";
 import { classifyNativeExtractor, type NativeOutcome, nativeIssue } from "../native/launch.ts";
 import { NATIVE_BIN_DIR, PLATFORM_KEY } from "../native/manifest.ts";
 
-const PROTOCOL = { flag: "--domain-facts-version", version: 9 };
+const PROTOCOL = { flag: "--domain-facts-version", version: 10 };
 /** The unresolved reason the extractor gives an attribute that may replace the item it annotates. */
 const ATTRIBUTE_MACRO_REASON = "attribute-macro";
 /** The extractor refuses a larger request, so an oversized batch is refused before it is sent. */
@@ -91,6 +91,12 @@ export interface MethodFact {
   readonly return_type_text?: string;
   /** Whether the body only hands back a member of `self`. */
   readonly returns_field_only: boolean;
+  readonly visibility: Visibility;
+  readonly span: Span;
+  readonly initialization: {
+    readonly creations: readonly { readonly type_text: string; readonly guarded: boolean; readonly line: number; readonly span: Span }[];
+    readonly parse_delegate?: string;
+  };
   readonly line: number;
 }
 
@@ -336,12 +342,23 @@ function declaredFunction(value: unknown): FunctionFact {
 function method(value: unknown): MethodFact {
   const raw = object(value);
   const returnType = optional(raw.return_type_text);
+  const initialization = object(raw.initialization);
+  const delegate = optional(initialization.parse_delegate);
   return {
     name: nonempty(raw.name),
     receiver: oneOf(raw.receiver, ["none", "self", "ref-self", "mut-self", "other"] as const),
     params: array(raw.params).map(parameter),
     ...(returnType === undefined ? {} : { return_type_text: returnType }),
     returns_field_only: flag(raw.returns_field_only),
+    visibility: oneOf(raw.visibility, ["private", "pub", "pub-crate", "pub-super", "pub-in"] as const),
+    span: span(raw.span),
+    initialization: {
+      creations: array(initialization.creations).map((entry) => {
+        const creation = object(entry);
+        return { type_text: nonempty(creation.type_text), guarded: flag(creation.guarded), line: line(creation.line), span: span(creation.span) };
+      }),
+      ...(delegate === undefined ? {} : { parse_delegate: delegate }),
+    },
     line: line(raw.line),
   };
 }

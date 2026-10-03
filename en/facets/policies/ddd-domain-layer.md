@@ -58,6 +58,8 @@ Business failures are part of the operation's contract. Generic guidance to thro
 | Criterion | Judgment |
 |-----------|----------|
 | A command or factory reports an expected business failure by throwing | REJECT. Return a Result with the operation's own error type |
+| A Domain Primitive's of validates the unchanged input through parse and throws or panics on its failure | OK. Invalid input to of violates the caller contract; validation is never skipped |
+| A Domain Primitive lacks of or parse, initializes before checking its invariants, or initializes a different value from the one checked | REJECT. Provide both APIs. of returns the unchanged input's checked parse result; direct initialization belongs only after parse rejects invalid input |
 | The error type of an operation contains cases of another operation, or is widened to a string, `any`, `unknown`, or a catch-all variant | REJECT |
 | One error type is shared by several operations | REJECT |
 | Unexpected runtime failures and corrupt state are thrown or panicked | OK. They are not business failures |
@@ -66,7 +68,7 @@ Business failures are part of the operation's contract. Generic guidance to thro
 
 | Criterion | Judgment |
 |-----------|----------|
-| A primitive with business meaning (an amount, an identifier, a quantity) is passed as a bare primitive across domain boundaries | REJECT. Wrap it in a Domain Primitive |
+| A value with domain invariants narrower than its backing type (an amount, an identifier, a quantity) is passed as a bare primitive across domain boundaries | REJECT. Wrap it in a Domain Primitive with those invariants. Do not introduce a DP when the backing type alone expresses its valid domain |
 | A value object has identity-based equality, or an Entity has value-based equality | REJECT |
 | A factory that builds a Domain Primitive from an outside value accepts it without checking the declared value rule | REJECT. Return a value that breaks the rule as that factory's error in a Result |
 | A domain type holds a collection (an array, `Set`, `Map`, `Vec`, `HashSet`, `HashMap`, and so on) bare beside other state | REJECT. Wrap it in a first-class collection type and put the operations and decisions on the collection in that type. A type whose whole state is the collection is a first-class collection |

@@ -62,7 +62,7 @@ const ALLOWED: Record<string, readonly string[]> = {
     "factory_rules",
     "process_managers",
   ],
-  element: ["element_id", "kind", "name", "aggregate", "attributes", "invariants", "unconstrained"],
+  element: ["element_id", "kind", "name", "aggregate", "attributes", "invariants"],
   attribute: ["name", "type", "required", "collection"],
   invariant: ["element_id", "name", "aggregate", "element", "statement"],
   command: [
@@ -408,10 +408,6 @@ function readElement(report: Report, node: Record<string, unknown>, where: strin
   if (kind === "domain-primitive" && attributes.length !== 1) {
     report.add("schema.primitive-shape", `${where}: domain-primitive must wrap exactly one attribute`);
   }
-  const unconstrained = report.optionalString(node, "unconstrained", where);
-  if (unconstrained !== undefined && kind !== "domain-primitive") {
-    report.add("schema.structure", `${where}: only a domain-primitive declares "unconstrained"`);
-  }
   return {
     element_id,
     kind: kind as DomainElementKind,
@@ -419,7 +415,6 @@ function readElement(report: Report, node: Record<string, unknown>, where: strin
     aggregate,
     attributes: attributes as ElementAttribute[],
     invariants: readStringArray(report, node, "invariants", where, false),
-    ...(unconstrained === undefined ? {} : { unconstrained }),
   };
 }
 

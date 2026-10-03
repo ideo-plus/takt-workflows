@@ -189,7 +189,7 @@ export const Invoice = {
 
 ## Domain Primitive
 
-Domain Primitive は値を 1 つ包み、値の規則を持つ。モデルは規則を、その Primitive を指す不変条件と、それを組み立てるファクトリ規則として宣言する。ファクトリ（`parse`）は規則を確かめ、自分のエラー型を持つ `Result` を返すので、存在する `CustomerId` は常に正しい。等価は値で決まる（`equals`）。companion 表現では同じ形を `type`、ブランド、`const` オブジェクトで書き、`equals` は相手に値の照合を頼む。
+Domain Primitive は値を1つ包み、基本データ型より狭いドメインの不変条件を持つ。`of` と `parse` を必ず両方提供する。初期化は `parse` の入力依存の拒否ガードを通してから行い、`of` は同じ入力を `parse` に渡す。`of` の域外入力は呼び出し側の契約違反として throw、`parse` の域外入力は操作固有のエラー型を持つ `Result` で返す。成功したインスタンスは必ず不変条件を満たす。モデルには不変条件と、それらすべてを検証する `parse` のファクトリ規則を宣言する。等価は値で決まる。
 
 ```ts
 import type { Result } from "@acme/language-extensions";
@@ -203,6 +203,12 @@ export class CustomerId {
     this.#value = value;
   }
 
+  static of(value: string): CustomerId {
+    const parsed = CustomerId.parse(value);
+    if (!parsed.ok) throw new Error("CustomerId is outside its domain");
+    return parsed.value;
+  }
+
   static parse(value: string): Result<CustomerId, ParseCustomerIdError> {
     if (!/^C[0-9]{6}$/.test(value)) return { ok: false, error: "invalid-format" };
     return { ok: true, value: new CustomerId(value) };
@@ -214,11 +220,15 @@ export class CustomerId {
 }
 ```
 
-規則のない Primitive は、モデルで `unconstrained` と理由を宣言し、何も確かめない `of` で組み立てる。
+基本データ型の値域だけで足りる値に DP を作らない。要求で未指定の規則は確認すべき未決事項として扱う。検証前の直接初期化や、別の値で検証してから初期化する経路を作らない。`ddd-lint` は宣言、入力拒否ガード、`of` の検証経路、直接初期化の迂回を構文から検査する。不変条件の業務上の意味を証明するものではないので、域内・境界・域外のテストも書く。
 
-`Money` はその例であり、明細の金額と請求書の合計を表す値として自分のモジュール `money` に置く。モデルは個々の明細金額を理由付きの `unconstrained` として宣言する。負の明細を別の明細で相殺できる一方、集約が合計の非負を守るためである。2 つの `Money` を足す `add` は、相手の `#value` を同じクラスの中で読む。`#` フィールドは同じクラスのほかのインスタンスからも読めるので、getter で値を取り出してクラスの外で足すことはない。`InvoiceLine` は金額を公開せず、受け取った合計に自分の金額を足した `Money` を返す（`addTo`）。合計も `Money` のまま受け渡し、負かどうかは `isNegative` に尋ねる。companion 表現では、`add` は相手に自分の値を足すよう頼む（`other.plus(state.value)`）。`equals` が相手に照合を頼むのと同じ形である。
+`Money` は100単位刻みの金額を表す DP であり、明細の金額と請求書の合計を表す値として自分のモジュール `money` に置く。この例の金額は100単位刻みの整数という不変条件を持つ。値引きの負数と0も許可し、集約が合計の非負を守る。2 つの `Money` を足す `add` は、相手の `#value` を同じクラスの中で読む。`#` フィールドは同じクラスのほかのインスタンスからも読めるので、getter で値を取り出してクラスの外で足すことはない。`InvoiceLine` は金額を公開せず、受け取った合計に自分の金額を足した `Money` を返す（`addTo`）。合計も `Money` のまま受け渡し、負かどうかは `isNegative` に尋ねる。companion 表現では、`add` は相手に自分の値を足すよう頼む（`other.plus(state.value)`）。`equals` が相手に照合を頼むのと同じ形である。
 
 ```ts
+import type { Result } from "@acme/language-extensions";
+
+export type ParseMoneyError = "invalid-increment";
+
 export class Money {
   readonly #value: number;
 
@@ -227,15 +237,22 @@ export class Money {
   }
 
   static of(value: number): Money {
-    return new Money(value);
+    const parsed = Money.parse(value);
+    if (!parsed.ok) throw new Error("Money is outside its domain");
+    return parsed.value;
+  }
+
+  static parse(value: number): Result<Money, ParseMoneyError> {
+    if (!Number.isFinite(value) || !Number.isInteger(value) || value % 100 !== 0) return { ok: false, error: "invalid-increment" };
+    return { ok: true, value: new Money(value) };
   }
 
   static zero(): Money {
-    return new Money(0);
+    return Money.of(0);
   }
 
   add(other: Money): Money {
-    return new Money(this.#value + other.#value);
+    return Money.of(this.#value + other.#value);
   }
 
   isNegative(): boolean {

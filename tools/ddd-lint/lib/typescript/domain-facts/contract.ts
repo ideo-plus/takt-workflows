@@ -63,7 +63,16 @@ export interface MemberFact {
    * enclosing function declares, not one at the top of the file. Present on members with a body only.
    */
   readonly returns_state_only?: boolean;
+  readonly initialization?: InitializationFact;
+  /** The sole field to which a constructor assigns its unchanged single parameter. */
+  readonly input_field?: string;
   readonly span: Span;
+}
+
+export interface InitializationFact {
+  readonly creations: readonly { readonly type_text: string; readonly guarded: boolean; readonly span: Span }[];
+  /** The receiver whose parse result is checked, thrown on failure and returned unchanged on success. */
+  readonly parse_delegate?: string;
 }
 
 /** A type a class names after `extends` or `implements`, as the source spells it. */

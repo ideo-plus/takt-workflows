@@ -17,6 +17,15 @@ export interface RuleDefinition {
 
 export const RULES: readonly RuleDefinition[] = [
   {
+    rule_id: "primitive-initialization",
+    name: "invariant-based-primitive-initialization",
+    statement: "a Domain Primitive lacks checked parse and panicking of, or initializes outside its invariant guard",
+    target_layers: ["domain"],
+    requires_model: true,
+    facts: ["impls", "domain-model", "factory-initialization"],
+    per_file: true,
+  },
+  {
     rule_id: "domain-packaging",
     name: "domain-package-vocabulary",
     statement: "affected domain crates use declared business packages rather than technical classifications",

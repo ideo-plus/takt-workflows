@@ -1,4 +1,4 @@
-//! Version 7 domain facts: the decision base of every rule the domain gate reports. Source is
+//! Version 10 domain facts: the decision base of every rule the domain gate reports. Source is
 //! never compiled or executed.
 //!
 //! One batch carries every source of the inspected program, and the answer carries one record per
@@ -31,7 +31,7 @@ use syn::{
 #[path = "domain_facts_tests.rs"]
 mod tests;
 
-const PROTOCOL_VERSION: u8 = 9;
+const PROTOCOL_VERSION: u8 = 10;
 
 /// The single-segment attributes the compiler itself defines, which expand to nothing and so cannot
 /// replace what they annotate. `cfg` and `cfg_attr` are left out: they are recorded under their own
@@ -562,8 +562,7 @@ impl<'a> Walk<'a> {
                     }
                 }
                 Scope::Closure(params) => {
-                    if let Some(param) =
-                        params.iter().find(|param| mentions(&param.pattern, name))
+                    if let Some(param) = params.iter().find(|param| mentions(&param.pattern, name))
                     {
                         return Resolved::Param(param.declared_type.clone());
                     }
@@ -859,6 +858,9 @@ impl<'a> Walk<'a> {
                             syn::ReturnType::Default => Value::Null,
                         },
                         "returns_field_only": returns_field_only(&method.block),
+                        "visibility": visibility(&method.vis),
+                        "span": span_json(start, method.span()),
+                        "initialization": crate::initialization::facts(method),
                         "line": line(start),
                     }));
                 }
@@ -1296,11 +1298,9 @@ fn binding_parts(walk: &Walk, pat: &syn::Pat) -> (String, Option<String>, bool) 
             let (pattern, _, mutable) = binding_parts(walk, &typed.pat);
             (pattern, Some(walk.text(typed.ty.span())), mutable)
         }
-        syn::Pat::Ident(ident) if ident.by_ref.is_none() && ident.subpat.is_none() => (
-            spelling(&ident.ident),
-            None,
-            ident.mutability.is_some(),
-        ),
+        syn::Pat::Ident(ident) if ident.by_ref.is_none() && ident.subpat.is_none() => {
+            (spelling(&ident.ident), None, ident.mutability.is_some())
+        }
         _ => (walk.text(pat.span()), None, false),
     }
 }
@@ -1438,7 +1438,9 @@ fn analyze(path: &str, source: &str) -> Value {
 pub fn run(value: Value) -> Result<Value, Box<dyn std::error::Error>> {
     let request: Request = serde_json::from_value(value)?;
     if request.protocol_version != PROTOCOL_VERSION || request.files.is_empty() {
-        return Err(format!("expected protocol_version {PROTOCOL_VERSION} and at least one file").into());
+        return Err(
+            format!("expected protocol_version {PROTOCOL_VERSION} and at least one file").into(),
+        );
     }
     let files: Vec<_> = request
         .files
