@@ -239,6 +239,20 @@ describe("TypeScript", () => {
     ]);
   });
 
+  test("a repository port method returns Result only when every member of its union is one", () => {
+    const port = "packages/command/billing-use-case/src/invoice-repository.ts";
+    const result = lint(sample.files, (files) => {
+      replace(files, port, "  store(invoiceId: string, invoice: Invoice): Result<void, RepositoryError>;", "  store(invoiceId: string, invoice: Invoice): Result<void, RepositoryError> | undefined;");
+      files[port] +=
+        "\nexport type PaymentRepository = {\n  remove(paymentId: string): (Result<void, RepositoryError>);\n  count: () => Result<number, RepositoryError> | Result<0, RepositoryError>;\n  findAll(): billing.Result<readonly string[], RepositoryError>;\n  listen: () => Result<() => void, RepositoryError> | undefined;\n};\n";
+    });
+    expect(result.unavailable).toEqual([]);
+    expect(result.findings.filter((entry) => entry.rule_id === "repository-result").map((entry) => `${entry.check}: ${entry.message}`)).toEqual([
+      "typescript-use-case: repository port method InvoiceRepository.store returns Result<void, RepositoryError> | undefined; return Result<…, RepositoryError> so the use case sees a failed load or store",
+      "typescript-use-case: repository port method PaymentRepository.listen returns Result<() => void, RepositoryError> | undefined; return Result<…, RepositoryError> so the use case sees a failed load or store",
+    ]);
+  });
+
   test("a Domain Primitive factory that does not return Result is reported", () => {
     const result = lint(sample.files, (files) =>
       replace(files, "packages/command/billing-domain/src/customer-id.ts", "static parse(value: string): Result<CustomerId, ParseCustomerIdError>", "static parse(value: string): CustomerId"),
@@ -460,11 +474,13 @@ impl ObservesTotal for InvoiceLine {
     expect(shared.findings.filter((entry) => entry.rule_id === "repository-mut-self")).toEqual([]);
   });
 
-  test("a repository port method returning a path-qualified Result is kept", () => {
+  test("a repository port method returning a path-qualified Result, absolute or not, is kept", () => {
     const port = "packages/command/billing-use-case/src/invoice_repository.rs";
-    const result = lint(sample.files, (files) =>
-      replace(files, port, "-> Result<(), RepositoryError>;", "-> std::result::Result<(), RepositoryError>;"),
-    );
+    const result = lint(sample.files, (files) => {
+      replace(files, port, "-> Result<(), RepositoryError>;", "-> std::result::Result<(), RepositoryError>;");
+      replace(files, port, "-> Result<Option<Invoice>, RepositoryError>;", "-> ::std::result::Result<Option<Invoice>, RepositoryError>;");
+    });
+    expect(result.unavailable).toEqual([]);
     expect(result.findings.filter((entry) => entry.rule_id === "repository-result")).toEqual([]);
   });
 
