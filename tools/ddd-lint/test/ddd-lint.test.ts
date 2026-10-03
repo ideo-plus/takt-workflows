@@ -105,9 +105,181 @@ describe("the knowledge samples pass", () => {
     });
 });
 
+describe("Domain Primitive initialization", () => {
+  for (const sample of typeScriptSamples()) {
+    const path = "packages/command/billing-domain/src/customer-id.ts";
+    test(`${sample.name} rejects a constrained primitive without of`, () => {
+      const result = lint(sample.files, (files) => {
+        files[path] = files[path].replace(/(?:static )?of\(value: string\): CustomerId \{[\s\S]*?\n  \},?\n/, "");
+      });
+      expect(result.findings.some((entry) => entry.rule_id === "primitive-initialization" && entry.message.includes("of"))).toBe(true);
+    });
+    test(`${sample.name} rejects initialization without its invariant guard`, () => {
+      const result = lint(sample.files, (files) => {
+        replace(files, path, '    if (!/^C[0-9]{6}$/.test(value)) return { ok: false, error: "invalid-format" };\n', "");
+      });
+      expect(result.findings.some((entry) => entry.rule_id === "primitive-initialization" && entry.message.includes("guard"))).toBe(true);
+    });
+  }
+  for (const sample of rustSamples()) {
+    const path = "packages/command/billing-domain/src/customer_id.rs";
+    test(`${sample.name} rejects a constrained primitive without of`, () => {
+      const result = lint(sample.files, (files) => {
+        files[path] = files[path].replace(/    pub fn of\(value: &str\) -> Self \{[\s\S]*?\n    \}\n/, "");
+      });
+      expect(result.findings.some((entry) => entry.rule_id === "primitive-initialization" && entry.message.includes("of"))).toBe(true);
+    });
+    test(`${sample.name} rejects initialization without its invariant guard`, () => {
+      const result = lint(sample.files, (files) => {
+        replace(files, path, `        let digits = value.strip_prefix('C').ok_or(ParseCustomerIdError::InvalidFormat)?;
+        if digits.len() != 6 || !digits.bytes().all(|byte| byte.is_ascii_digit()) {
+            return Err(ParseCustomerIdError::InvalidFormat);
+        }
+`, "");
+      });
+      expect(result.findings.some((entry) => entry.rule_id === "primitive-initialization" && entry.message.includes("guard"))).toBe(true);
+    });
+  }
+});
+
+describe("Domain Primitive validated input", () => {
+  for (const sample of typeScriptSamples()) {
+    const path = "packages/command/billing-domain/src/customer-id.ts";
+    test(`${sample.name} rejects of validating a different input`, () => {
+      const result = lint(sample.files, (files) => replace(files, path, "CustomerId.parse(value)", 'CustomerId.parse("bad")'));
+      expect(result.findings.some((entry) => entry.rule_id === "primitive-initialization" && entry.message.includes("of"))).toBe(true);
+    });
+    test(`${sample.name} rejects initializing a different value after validation`, () => {
+      const result = lint(sample.files, (files) => {
+        if (files[path].includes("new CustomerId(value)")) replace(files, path, "new CustomerId(value)", 'new CustomerId("bad")');
+        else replace(files, path, "const state = { value };", 'const state = { value: "bad" };');
+      });
+      expect(result.findings.some((entry) => entry.rule_id === "primitive-initialization" && entry.message.includes("guard"))).toBe(true);
+    });
+    test(`${sample.name} rejects a guard mentioning only an unrelated property name`, () => {
+      const result = lint(sample.files, (files) => replace(files, path, "!/^C[0-9]{6}$/.test(value)", "({ value: false }).value"));
+      expect(result.findings.some((entry) => entry.rule_id === "primitive-initialization" && entry.message.includes("guard"))).toBe(true);
+    });
+  }
+  for (const sample of rustSamples()) {
+    const path = "packages/command/billing-domain/src/customer_id.rs";
+    test(`${sample.name} rejects of validating a different input`, () => {
+      const result = lint(sample.files, (files) => replace(files, path, "Self::parse(value)", 'Self::parse("bad")'));
+      expect(result.findings.some((entry) => entry.rule_id === "primitive-initialization" && entry.message.includes("of"))).toBe(true);
+    });
+    test(`${sample.name} rejects initializing a different value after validation`, () => {
+      const result = lint(sample.files, (files) => replace(files, path, "Ok(CustomerId(value.to_string()))", 'Ok(CustomerId("bad".to_string()))'));
+      expect(result.findings.some((entry) => entry.rule_id === "primitive-initialization" && entry.message.includes("guard"))).toBe(true);
+    });
+  }
+});
+
+describe("Domain Primitive construction bypasses", () => {
+  for (const sample of typeScriptSamples()) {
+    const path = "packages/command/billing-domain/src/customer-id.ts";
+    test(`${sample.name} rejects construction before the input guard`, () => {
+      const result = lint(sample.files, (files) => {
+        if (files[path].includes("new CustomerId(value)")) {
+          replace(files, path, '    if (!/^C[0-9]{6}$/.test(value))', '    const unchecked = new CustomerId(value);\n    if (!/^C[0-9]{6}$/.test(value))');
+        } else {
+          const guard = '    if (!/^C[0-9]{6}$/.test(value)) return { ok: false, error: "invalid-format" };\n';
+          replace(files, path, guard, "");
+          replace(files, path, '    return { ok: true, value: instance };', guard + '    return { ok: true, value: instance };');
+        }
+      });
+      expect(result.findings.some((entry) => entry.rule_id === "primitive-initialization" && entry.message.includes("guard"))).toBe(true);
+    });
+    if (sample.files[path].includes("private constructor")) {
+      test(`${sample.name} rejects a constructor replacing the validated input`, () => {
+        const result = lint(sample.files, (files) => replace(files, path, "this.#value = value;", 'this.#value = "bad";'));
+        expect(result.findings.some((entry) => entry.rule_id === "primitive-initialization" && entry.message.includes("constructor"))).toBe(true);
+      });
+      test(`${sample.name} rejects another factory bypassing parse`, () => {
+        const result = lint(sample.files, (files) => replace(files, path, "  static parse(", '  static unchecked(value: string): CustomerId { return new CustomerId(value); }\n\n  static parse('));
+        expect(result.findings.some((entry) => entry.rule_id === "primitive-initialization" && entry.message.includes("bypass"))).toBe(true);
+      });
+    }
+  }
+  for (const sample of rustSamples()) {
+    const path = "packages/command/billing-domain/src/customer_id.rs";
+    test(`${sample.name} rejects a free function bypassing parse`, () => {
+      const result = lint(sample.files, (files) => { files[path] += '\npub fn unchecked(value: &str) -> CustomerId { CustomerId(value.to_string()) }\n'; });
+      expect(result.findings.some((entry) => entry.rule_id === "primitive-initialization" && entry.message.includes("bypass"))).toBe(true);
+    });
+    test(`${sample.name} rejects initialization in an unchecked callback`, () => {
+      const result = lint(sample.files, (files) => replace(files, path, "        Ok(CustomerId(value.to_string()))", '        let unchecked = || CustomerId("bad".to_string());\n        Ok(CustomerId(value.to_string()))'));
+      expect(result.findings.some((entry) => entry.rule_id === "primitive-initialization" && entry.message.includes("bypass"))).toBe(true);
+    });
+    test(`${sample.name} rejects an unchecked From conversion`, () => {
+      const result = lint(sample.files, (files) => { files[path] += '\nimpl From<String> for CustomerId { fn from(value: String) -> Self { Self(value) } }\n'; });
+      expect(result.findings.some((entry) => entry.rule_id === "primitive-initialization" && entry.message.includes("bypass"))).toBe(true);
+    });
+    test(`${sample.name} rejects derived deserialization bypassing parse`, () => {
+      const result = lint(sample.files, (files) => replace(files, path, "pub struct CustomerId", "#[derive(serde::Deserialize)]\npub struct CustomerId"));
+      expect(result.findings.some((entry) => entry.rule_id === "primitive-initialization" && entry.message.includes("Deserialize"))).toBe(true);
+    });
+  }
+});
+
+describe("Domain Primitive runtime contracts", () => {
+  for (const sample of typeScriptSamples()) test(`${sample.name} enforces of and parse at runtime`, () => {
+    const dir = writeProject(sample.files, "ddd-primitive-ts-");
+    try {
+      const code = `import assert from "node:assert/strict";
+import { CustomerId } from "./packages/command/billing-domain/src/customer-id.ts";
+import { Money } from "./packages/command/billing-domain/src/money.ts";
+assert.equal(CustomerId.parse("C000001").ok, true);
+assert.equal(CustomerId.parse("bad").ok, false);
+assert.throws(() => CustomerId.of("bad"));
+assert.equal(CustomerId.of("C000001").equals(CustomerId.of("C000001")), true);
+assert.equal(CustomerId.of("C000001").equals(CustomerId.of("C000002")), false);
+assert.equal(Money.parse(100).ok, true);
+assert.equal(Money.parse(0).ok, true);
+assert.equal(Money.of(-100).isNegative(), true);
+for (const value of [1, 99, 100.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+  assert.equal(Money.parse(value).ok, false);
+  assert.throws(() => Money.of(value));
+}`;
+      const result = spawnSync("bun", ["-e", code], { cwd: dir, encoding: "utf8" });
+      if (result.status !== 0) throw new Error(result.stderr || result.stdout);
+      expect(result.status).toBe(0);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+  for (const sample of rustSamples()) test(`${sample.name} enforces of and parse at runtime`, () => {
+    const dir = writeProject(sample.files, "ddd-primitive-rust-");
+    try {
+      const path = join(dir, "packages/command/billing-domain/tests/primitives.rs");
+      mkdirSync(dirname(path), { recursive: true });
+      writeFileSync(path, `use billing_domain::{customer_id::CustomerId, money::Money};
+#[test]
+fn parses_valid_values_and_returns_errors_for_invalid_values() {
+    assert!(CustomerId::parse("C000001").is_ok());
+    assert!(CustomerId::parse("bad").is_err());
+    assert_eq!(CustomerId::of("C000001"), CustomerId::of("C000001"));
+    assert_ne!(CustomerId::of("C000001"), CustomerId::of("C000002"));
+    assert!(Money::parse(100).is_ok());
+    assert!(Money::parse(0).is_ok());
+    assert!(Money::of(-100).is_negative());
+    assert!(Money::parse(1).is_err());
+    assert!(Money::parse(99).is_err());
+}
+#[test]
+#[should_panic]
+fn of_rejects_an_invalid_customer_id() { CustomerId::of("bad"); }
+#[test]
+#[should_panic]
+fn of_rejects_an_invalid_money_increment() { Money::of(1); }
+`);
+      const result = spawnSync("cargo", ["test", "--workspace"], { cwd: dir, encoding: "utf8" });
+      if (result.status !== 0) throw new Error(result.stderr + result.stdout);
+      expect(result.status).toBe(0);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+});
+
 describe("Rust sample domain model generation", () => {
   for (const sample of rustSamples())
-    test(`${sample.layout} declares Money with its unconstrained reason`, () => {
+    test(`${sample.layout} declares Money with its domain invariant and parser`, () => {
       const source = sample.files["docs/ddd/domain-model.yaml"] ?? "";
       const loaded = loadDomainModelSource(source, "docs/ddd/domain-model.yaml");
       expect(loaded.ok).toBe(true);
@@ -116,7 +288,9 @@ describe("Rust sample domain model generation", () => {
         (element) => element.element_id === "primitive.money",
       );
       expect(money?.kind).toBe("domain-primitive");
-      expect(money?.unconstrained).toBe("individual line amounts may be positive, zero, or negative");
+      const aggregate = loaded.model.bounded_contexts[0]!.aggregates[0]!;
+      expect(aggregate.invariants.some((entry) => entry.element === money?.element_id && entry.element_id === "invariant.invoice.money-increment")).toBe(true);
+      expect(aggregate.factory_rules.some((entry) => entry.target_element === money?.element_id && entry.preconditions.includes("invariant.invoice.money-increment"))).toBe(true);
     });
 });
 
@@ -537,21 +711,21 @@ describe("model files", () => {
     expect(result.findings.some((entry) => entry.rule_id === "idempotency.j")).toBe(true);
   });
 
-  test("a Domain Primitive declares its value rule or that it has none", () => {
+  test("a Domain Primitive always declares its domain invariant and parser", () => {
     const model = "docs/ddd/domain-model.yaml";
     const primitive = (id: string, extra = "") =>
       `          - { element_id: primitive.${id}, kind: domain-primitive, name: X, aggregate: aggregate.invoice, attributes: [{ name: value, type: string, required: true }]${extra} }\n        invariants:\n`;
     const findings = (edit: (files: Record<string, string>) => void) =>
       lint(sample.files, edit).findings.filter((entry) => entry.rule_id === "completeness.primitive-rule").map((entry) => entry.message);
     expect(findings((files) => replace(files, model, "        invariants:\n", primitive("invoice-number")))).toEqual([
-      'domain-primitive primitive.invoice-number declares no value rule (an invariant on it and a factory rule that builds it) and no "unconstrained" rationale',
+      'domain-primitive primitive.invoice-number declares no domain invariant and no factory rule that builds it and returns its errors',
     ]);
-    expect(findings((files) => replace(files, model, "        invariants:\n", primitive("memo", ", unconstrained: any text the customer writes")))).toEqual([]);
-    expect(
-      findings((files) =>
+    const unconstrained = lint(sample.files, (files) =>
         replace(files, model, "name: CustomerId, aggregate: aggregate.invoice,", "name: CustomerId, aggregate: aggregate.invoice, unconstrained: any string,"),
-      ),
-    ).toEqual(["domain-primitive primitive.customer-id declares unconstrained but also a value rule; keep one"]);
+    );
+    expect(unconstrained.pass).toBe(false);
+    expect(unconstrained.findings.some((entry) => entry.message.includes("unconstrained"))).toBe(true);
+    expect(findings((files) => replace(files, model, "preconditions: [invariant.invoice.customer-id-format]", "preconditions: [invariant.invoice.total-not-negative]"))).toContain("domain-primitive primitive.customer-id has an invariant but no factory rule that checks all of its invariants and returns its errors");
   });
 
   test("a command without success_type in the mapping is reported", () => {

@@ -41,6 +41,10 @@ pub enum ParseCustomerIdError {
 pub struct CustomerId(String);
 
 impl CustomerId {
+    pub fn of(value: &str) -> Self {
+        Self::parse(value).expect("CustomerId is outside its domain")
+    }
+
     pub fn parse(value: &str) -> Result<Self, ParseCustomerIdError> {
         let digits = value.strip_prefix('C').ok_or(ParseCustomerIdError::InvalidFormat)?;
         if digits.len() != 6 || !digits.bytes().all(|byte| byte.is_ascii_digit()) {
@@ -51,20 +55,32 @@ impl CustomerId {
 }
 `;
 
-export const RUST_MONEY = `#[derive(Debug, Clone, PartialEq, Eq)]
+export const RUST_MONEY = `#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ParseMoneyError {
+    InvalidIncrement,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Money(i64);
 
 impl Money {
     pub fn of(value: i64) -> Self {
-        Money(value)
+        Self::parse(value).expect("Money is outside its domain")
+    }
+
+    pub fn parse(value: i64) -> Result<Self, ParseMoneyError> {
+        if value % 100 != 0 {
+            return Err(ParseMoneyError::InvalidIncrement);
+        }
+        Ok(Self(value))
     }
 
     pub fn zero() -> Self {
-        Money(0)
+        Self::of(0)
     }
 
     pub fn add(&mut self, rhs: &Money) {
-        self.0 += rhs.0;
+        *self = Self::of(self.0.checked_add(rhs.0).expect("Money arithmetic overflow"));
     }
 
     pub fn is_negative(&self) -> bool {
@@ -425,6 +441,10 @@ export const RUST_AGGREGATE_MAPPING = [
   "        code: { method: parse, error_type: ParseCustomerIdError }",
   "        errors:",
   "          - { error_ref: error.invoice.parse-customer-id.invalid-format, code: { case: InvalidFormat } }",
+  "      - operation_ref: factory.invoice.parse-money",
+  "        code: { method: parse, error_type: ParseMoneyError }",
+  "        errors:",
+  "          - { error_ref: error.invoice.parse-money.invalid-increment, code: { case: InvalidIncrement } }",
   "      - operation_ref: command.invoice.add-line",
   "        code: { method: add_line, success_type: AddInvoiceLineOutcome, error_type: AddInvoiceLineError }",
   "        errors:",

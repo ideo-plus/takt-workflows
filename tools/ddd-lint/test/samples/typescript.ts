@@ -38,7 +38,11 @@ export const RESULT_SOURCE = `export type Result<T, E> =
 const RESULT_INDEX = `export type { Result } from "./result.ts";
 `;
 
-export const CLASS_MONEY = `export class Money {
+export const CLASS_MONEY = `import type { Result } from "${RESULT_NAME}";
+
+export type ParseMoneyError = "invalid-increment";
+
+export class Money {
   readonly #value: number;
 
   private constructor(value: number) {
@@ -46,15 +50,22 @@ export const CLASS_MONEY = `export class Money {
   }
 
   static of(value: number): Money {
-    return new Money(value);
+    const parsed = Money.parse(value);
+    if (!parsed.ok) throw new Error("Money is outside its domain");
+    return parsed.value;
+  }
+
+  static parse(value: number): Result<Money, ParseMoneyError> {
+    if (!Number.isFinite(value) || !Number.isInteger(value) || value % 100 !== 0) return { ok: false, error: "invalid-increment" };
+    return { ok: true, value: new Money(value) };
   }
 
   static zero(): Money {
-    return new Money(0);
+    return Money.of(0);
   }
 
   add(other: Money): Money {
-    return new Money(this.#value + other.#value);
+    return Money.of(this.#value + other.#value);
   }
 
   isNegative(): boolean {
@@ -82,7 +93,11 @@ export class InvoiceLine {
 }
 `;
 
-const COMPANION_MONEY = `const brand: unique symbol = Symbol("Money");
+const COMPANION_MONEY = `import type { Result } from "${RESULT_NAME}";
+
+export type ParseMoneyError = "invalid-increment";
+
+const brand: unique symbol = Symbol("Money");
 
 export type Money = {
   readonly [brand]: true;
@@ -93,6 +108,12 @@ export type Money = {
 
 export const Money = {
   of(value: number): Money {
+    const parsed = Money.parse(value);
+    if (!parsed.ok) throw new Error("Money is outside its domain");
+    return parsed.value;
+  },
+  parse(value: number): Result<Money, ParseMoneyError> {
+    if (!Number.isFinite(value) || !Number.isInteger(value) || value % 100 !== 0) return { ok: false, error: "invalid-increment" };
     const state = { value };
     const instance: Money = {
       [brand]: true,
@@ -106,7 +127,7 @@ export const Money = {
         return state.value < 0;
       },
     };
-    return instance;
+    return { ok: true, value: instance };
   },
   zero(): Money {
     return Money.of(0);
@@ -148,6 +169,12 @@ export class CustomerId {
     this.#value = value;
   }
 
+  static of(value: string): CustomerId {
+    const parsed = CustomerId.parse(value);
+    if (!parsed.ok) throw new Error("CustomerId is outside its domain");
+    return parsed.value;
+  }
+
   static parse(value: string): Result<CustomerId, ParseCustomerIdError> {
     if (!/^C[0-9]{6}$/.test(value)) return { ok: false, error: "invalid-format" };
     return { ok: true, value: new CustomerId(value) };
@@ -172,6 +199,11 @@ export type CustomerId = {
 };
 
 export const CustomerId = {
+  of(value: string): CustomerId {
+    const parsed = CustomerId.parse(value);
+    if (!parsed.ok) throw new Error("CustomerId is outside its domain");
+    return parsed.value;
+  },
   parse(value: string): Result<CustomerId, ParseCustomerIdError> {
     if (!/^C[0-9]{6}$/.test(value)) return { ok: false, error: "invalid-format" };
     const state = { value };
@@ -551,8 +583,9 @@ export const DOMAIN_MODEL = `bounded_contexts:
           - { element_id: entity.invoice, kind: entity, name: Invoice, aggregate: aggregate.invoice }
           - { element_id: vo.invoice-line, kind: value-object, name: InvoiceLine, aggregate: aggregate.invoice }
           - { element_id: primitive.customer-id, kind: domain-primitive, name: CustomerId, aggregate: aggregate.invoice, attributes: [{ name: value, type: string, required: true }] }
-          - { element_id: primitive.money, kind: domain-primitive, name: Money, aggregate: aggregate.invoice, unconstrained: "individual line amounts may be positive, zero, or negative", attributes: [{ name: value, type: decimal, required: true }] }
+          - { element_id: primitive.money, kind: domain-primitive, name: Money, aggregate: aggregate.invoice, attributes: [{ name: value, type: decimal, required: true }] }
         invariants:
+          - { element_id: invariant.invoice.money-increment, name: MoneyIncrement, aggregate: aggregate.invoice, element: primitive.money, statement: monetary amounts are finite integer multiples of 100; negative discounts and zero are permitted }
           - { element_id: invariant.invoice.customer-id-format, name: CustomerIdFormat, aggregate: aggregate.invoice, element: primitive.customer-id, statement: a customer ID is C followed by six digits }
           - { element_id: invariant.invoice.total-not-negative, name: TotalNotNegative, aggregate: aggregate.invoice, statement: the total of the lines is never negative }
           - { element_id: invariant.invoice.issued-has-lines, name: IssuedHasLines, aggregate: aggregate.invoice, statement: an issued invoice has at least one line }
@@ -596,6 +629,12 @@ export const DOMAIN_MODEL = `bounded_contexts:
             preconditions: [invariant.invoice.customer-id-format]
             domain_errors:
               - { element_id: error.invoice.parse-customer-id.invalid-format, name: InvalidFormat, operation: factory.invoice.parse-customer-id, condition: the value is not C followed by six digits }
+          - element_id: factory.invoice.parse-money
+            name: ParseMoney
+            target_element: primitive.money
+            preconditions: [invariant.invoice.money-increment]
+            domain_errors:
+              - { element_id: error.invoice.parse-money.invalid-increment, name: InvalidIncrement, operation: factory.invoice.parse-money, condition: the amount is not a finite integer multiple of 100 }
 lineage: []
 `;
 
@@ -621,6 +660,10 @@ export const AGGREGATE_MAPPING = [
   "        code: { method: parse, error_type: ParseCustomerIdError }",
   "        errors:",
   "          - { error_ref: error.invoice.parse-customer-id.invalid-format, code: { case: invalid-format } }",
+  "      - operation_ref: factory.invoice.parse-money",
+  "        code: { method: parse, error_type: ParseMoneyError }",
+  "        errors:",
+  "          - { error_ref: error.invoice.parse-money.invalid-increment, code: { case: invalid-increment } }",
   "      - operation_ref: command.invoice.add-line",
   "        code: { method: addLine, success_type: AddInvoiceLineOutcome, error_type: AddInvoiceLineError }",
   "        errors:",

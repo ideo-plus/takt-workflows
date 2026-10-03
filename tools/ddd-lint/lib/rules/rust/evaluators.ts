@@ -11,6 +11,7 @@ import type { FindingInput } from "../../shared/findings.ts";
 import { containsMediaWord, toPascal } from "../lists.ts";
 import type { DomainTypeSymbol, InspectionContext, InspectionTarget } from "../types.ts";
 import { evaluateDomainPackaging } from "./packaging.ts";
+import { rulePrimitiveInitialization } from "./primitives.ts";
 import { within as withinSpan } from "./program.ts";
 
 function within(span: Span, outer: Span): boolean {
@@ -689,6 +690,7 @@ export const PER_FILE_EVALUATORS: Record<
   a: ruleA,
   b: ruleB,
   operation: ruleOperation,
+  "primitive-initialization": rulePrimitiveInitialization,
   "in-place": ruleInPlace,
   collection: ruleCollection,
   "port-placement": rulePortPlacement,

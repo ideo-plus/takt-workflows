@@ -42,8 +42,9 @@ bounded_contexts:
           - { element_id: entity.invoice, kind: entity, name: Invoice, aggregate: aggregate.invoice }
           - { element_id: vo.invoice-line, kind: value-object, name: InvoiceLine, aggregate: aggregate.invoice }
           - { element_id: primitive.customer-id, kind: domain-primitive, name: CustomerId, aggregate: aggregate.invoice, attributes: [{ name: value, type: string, required: true }] }
-          - { element_id: primitive.money, kind: domain-primitive, name: Money, aggregate: aggregate.invoice, unconstrained: "値引きの明細があるので、個々の明細金額は正にも 0 にも負にもなる", attributes: [{ name: value, type: decimal, required: true }] }
+          - { element_id: primitive.money, kind: domain-primitive, name: Money, aggregate: aggregate.invoice, attributes: [{ name: value, type: decimal, required: true }] }
         invariants:
+          - { element_id: invariant.invoice.money-increment, name: MoneyIncrement, aggregate: aggregate.invoice, element: primitive.money, statement: 金額は100単位刻みの有限な整数であり、値引きの負数と0も許可する }
           - { element_id: invariant.invoice.customer-id-format, name: CustomerIdFormat, aggregate: aggregate.invoice, element: primitive.customer-id, statement: 顧客 ID は C に続く 6 桁の数字である }
           - { element_id: invariant.invoice.total-not-negative, name: TotalNotNegative, aggregate: aggregate.invoice, statement: 明細の合計は負にならない }
           - { element_id: invariant.invoice.issued-has-lines, name: IssuedHasLines, aggregate: aggregate.invoice, statement: 発行済みの請求書は明細を 1 件以上持つ }
@@ -87,12 +88,18 @@ bounded_contexts:
             preconditions: [invariant.invoice.customer-id-format]
             domain_errors:
               - { element_id: error.invoice.parse-customer-id.invalid-format, name: InvalidFormat, operation: factory.invoice.parse-customer-id, condition: 値が C に続く 6 桁の数字ではない }
+          - element_id: factory.invoice.parse-money
+            name: ParseMoney
+            target_element: primitive.money
+            preconditions: [invariant.invoice.money-increment]
+            domain_errors:
+              - { element_id: error.invoice.parse-money.invalid-increment, name: InvalidIncrement, operation: factory.invoice.parse-money, condition: 金額が100単位刻みの有限な整数ではない }
 lineage: []
 ```
 
 要素 ID は小文字のケバブケースで `<kind>.<segments>` と書く。`bc`、`aggregate`、`entity`、`vo`、`primitive`、`pm` は区切り 1 つ、`invariant`、`command`、`event`、`transition`、`factory` は集約と名前の 2 つ、`error` は集約、操作、名前の 3 つをとる。`lineage` の項目（`lineage-0001`、関係は `renamed`、`split`、`merged`、`deprecated`）が ID の変化を記録する。
 
-Domain Primitive（`kind: domain-primitive`）は属性を 1 つだけ包み、値の規則を宣言する。規則があれば、`element` でその Primitive を指す不変条件と、それを `target_element` に取って規則違反をエラーとして返すファクトリ規則の両方を書く（上の `primitive.customer-id`、`invariant.invoice.customer-id-format`、`factory.invoice.parse-customer-id`）。規則がなければ、要素に `unconstrained` と理由を書く（上の `primitive.money`）。どちらも書かないこと、両方を書くことはしない。`collection: true` の属性は、コードではファーストクラスコレクションの型で持つ。
+Domain Primitive（`kind: domain-primitive`）は属性を1つ包み、基本データ型より狭いドメインの不変条件を持つ。`element` でその Primitive を指す不変条件と、それらすべてを `preconditions` に取って規則違反を返す `parse` のファクトリ規則を必ず宣言する。コードには `of` と `parse` を両方置き、どちらも不変条件に基づいて初期化する。`of` は同じ入力を `parse` に渡し、域外なら契約違反として例外にする。`parse` は入力を検証して、自分のエラー型の `Result` を返す。基本データ型の値域だけで足りるものには DP を作らない。未指定の規則は未決事項として確認し、無制約の DP にしない。`collection: true` の属性はファーストクラスコレクションの型で持つ。
 
 ### 集約写像
 
@@ -113,6 +120,10 @@ aggregate_mappings:
         code: { method: parse, error_type: ParseCustomerIdError }
         errors:
           - { error_ref: error.invoice.parse-customer-id.invalid-format, code: { case: invalid-format } }
+      - operation_ref: factory.invoice.parse-money
+        code: { method: parse, error_type: ParseMoneyError }
+        errors:
+          - { error_ref: error.invoice.parse-money.invalid-increment, code: { case: invalid-increment } }
       - operation_ref: command.invoice.add-line
         code: { method: addLine, success_type: AddInvoiceLineOutcome, error_type: AddInvoiceLineError }
         errors:

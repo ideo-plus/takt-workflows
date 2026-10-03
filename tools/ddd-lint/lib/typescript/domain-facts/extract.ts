@@ -35,6 +35,7 @@ import type {
   Visibility,
 } from "./contract.ts";
 import { forwardedTo } from "./forwarding.ts";
+import { constructorInputField, initializationFacts } from "./initialization.ts";
 
 /** Members a literal spells, and whether a spread or an unspellable computed name hides others. */
 interface LiteralMembers {
@@ -134,6 +135,7 @@ export function extractFileFacts(api: CompilerApi, file: ts.SourceFile): TypeScr
           ? { return_type_text: node.type.getText(file) }
           : {}),
         ...(body ? { writes: body.writes, returns_state_only: body.returns_state_only } : {}),
+        ...(api.isMethodDeclaration(node) && node.body ? { initialization: initializationFacts(api, node, file, spanOf) } : {}),
         span: spanOf(node),
       },
     ];
@@ -161,6 +163,7 @@ export function extractFileFacts(api: CompilerApi, file: ts.SourceFile): TypeScr
           ambient: false,
           abstract: false,
           params: paramsOf(element.parameters),
+          input_field: constructorInputField(api, element),
           span: spanOf(element),
         };
         const parameterProperties = element.parameters
