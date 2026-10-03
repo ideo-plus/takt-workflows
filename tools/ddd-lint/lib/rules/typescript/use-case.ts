@@ -136,7 +136,7 @@ function statedReturn(member: MemberFact): string | undefined | null {
   if (member.kind === "method") return member.return_type_text;
   if (member.kind !== "property" || member.type_text === undefined) return null;
   let depth = 0;
-  const text = member.type_text;
+  const text = unparenthesized(member.type_text);
   for (let index = 0; index < text.length - 1; index += 1) {
     const char = text[index];
     if (char === "(" || char === "<" || char === "{" || char === "[") depth += 1;
