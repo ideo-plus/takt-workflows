@@ -163,27 +163,39 @@ impl Invoice {
 }
 ```
 
-`restore` は、壊れた状態を専用の型で知らせる。業務上の失敗ではないからである。`add_line` は最後に反映した明細追加のコマンド ID を記憶し（モデルは `retention: last-one` を宣言する）、再送されたコマンドをほかのどの判定より先に認識する。そのときは `AddInvoiceLineOutcome::Duplicate` を返し、何も変えず、イベントも生まないので、イベントが二重に公開されない。何かを変える前に、変えた後の合計を確かめる。イベントもドメイン型であり、フィールドは非公開、集約のモジュールの中で自分の `new` によって組み立て、公開する側には読み取り専用のアクセサを提供する。顧客は Domain Primitive `CustomerId`、明細金額は Domain Primitive `Money`、明細はファーストクラスコレクション `InvoiceLines` である。請求書 ID とコマンド ID は例を短く保つために `&str` のままにしている。実際のコードでは包み、請求書だけに属する型として `invoice` モジュールの下に置く（`invoice/invoice_id.rs`、`invoice/command_id.rs`）。モジュールのまとめ方はモデリング知識の「モジュール」にある。
+`restore` は、壊れた状態を専用の型で知らせる。業務上の失敗ではないからである。`add_line` は最後に反映した明細追加のコマンド ID を記憶し（モデルは `retention: last-one` を宣言する）、再送されたコマンドをほかのどの判定より先に認識する。そのときは `AddInvoiceLineOutcome::Duplicate` を返し、何も変えず、イベントも生まないので、イベントが二重に公開されない。何かを変える前に、変えた後の合計を確かめる。イベントもドメイン型であり、フィールドは非公開、集約のモジュールの中で自分の `new` によって組み立て、公開する側には読み取り専用のアクセサを提供する。顧客は Domain Primitive `CustomerId`、明細金額は Domain Primitive `Money`、明細はファーストクラスコレクション `InvoiceLines` である。請求書 ID とコマンド ID は例を短く保つために `&str` のままにしている。業務上の書式や値域がある場合は DP で包み、請求書だけに属する型として `invoice` モジュールの下に置く（`invoice/invoice_id.rs`、`invoice/command_id.rs`）。モジュールのまとめ方はモデリング知識の「モジュール」にある。
 
 ## その場での変更
 
 ドメインの型の種類によらず、変わるものを `&mut` で受け取り、その場で変える。変わる値オブジェクト、Domain Primitive、コレクションは `&mut self` を取り、`()` を返す。変更が失敗し得るなら `Result<(), E>` を返す。ドメインメソッドは外部の `&mut` 引数を変更せず、変更の受け手自身を receiver にする。その禁止形は構文から検出するが、本体の文が実際に引数を変更するかまでは証明しない。`&self` や `self` を取って新しいインスタンスを返すことはせず、`Add` のような新しい値を返す演算子も実装しない。所有権があるので安全である。`&` で共有された値は変えられず、変える前の値が要る呼び出し側は先に `clone` する。集約の中の値の `&mut self` のメソッドはコマンドではなく、集約のコマンドがそれを呼ぶ。
 
 ```rust
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ParseMoneyError {
+    InvalidIncrement,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Money(i64);
 
 impl Money {
     pub fn of(value: i64) -> Self {
-        Money(value)
+        Self::parse(value).expect("Money is outside its domain")
+    }
+
+    pub fn parse(value: i64) -> Result<Self, ParseMoneyError> {
+        if value % 100 != 0 {
+            return Err(ParseMoneyError::InvalidIncrement);
+        }
+        Ok(Self(value))
     }
 
     pub fn zero() -> Self {
-        Money(0)
+        Self::of(0)
     }
 
     pub fn add(&mut self, rhs: &Money) {
-        self.0 += rhs.0;
+        *self = Self::of(self.0.checked_add(rhs.0).expect("Money arithmetic overflow"));
     }
 
     pub fn is_negative(&self) -> bool {
@@ -211,11 +223,11 @@ impl InvoiceLine {
 }
 ```
 
-`Money` は Domain Primitive であり、明細の金額と請求書の合計を表す値として自分のモジュール `money`（`src/money.rs`）に置く。モデルでは個々の明細金額を理由付きの `unconstrained` として宣言する。負の明細を別の明細で相殺できる一方、集約が合計の非負を守るためである。`Money::add` は受け手の `Money` 自身を `&mut self` で変更し、`InvoiceLine` は裸の値やgetterを公開せず、Domain Primitiveを操作へ渡す。その場での変更規則は外部の `&mut` 引数を拒否するが、通常の `&self` 問い合わせは許可する。
+`Money` は Domain Primitive であり、明細の金額と請求書の合計を表す値として自分のモジュール `money`（`src/money.rs`）に置く。この例の金額は100単位刻みの整数という不変条件を持つ。値引きの負数と0も許可し、集約が合計の非負を守る。`Money::add` は受け手の `Money` 自身を `&mut self` で変更し、`InvoiceLine` は裸の値やgetterを公開せず、Domain Primitiveを操作へ渡す。その場での変更規則は外部の `&mut` 引数を拒否するが、通常の `&self` 問い合わせは許可する。
 
 ## Domain Primitive
 
-Domain Primitive は値を 1 つ包み、値の規則を持つ。モデルは規則を、その Primitive を指す不変条件と、それを組み立てるファクトリ規則として宣言する。ファクトリは規則を確かめ、そのファクトリ固有のエラー enum を返すので、存在する `CustomerId` は常に正しい。等価は値で決まる。
+Domain Primitive は値を1つ包み、基本データ型より狭いドメインの不変条件を持つ。`of` と `parse` を必ず両方提供する。初期化は `parse` の入力依存の拒否ガードを通してから行い、`of` は同じ入力を `parse` に渡す。`of` の域外入力は呼び出し側の契約違反として panic、`parse` の域外入力は操作固有のエラー型を持つ `Result` で返す。成功したインスタンスは必ず不変条件を満たす。モデルには不変条件と、それらすべてを検証する `parse` のファクトリ規則を宣言する。等価は値で決まる。
 
 ```rust
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -227,6 +239,10 @@ pub enum ParseCustomerIdError {
 pub struct CustomerId(String);
 
 impl CustomerId {
+    pub fn of(value: &str) -> Self {
+        Self::parse(value).expect("CustomerId is outside its domain")
+    }
+
     pub fn parse(value: &str) -> Result<Self, ParseCustomerIdError> {
         let digits = value.strip_prefix('C').ok_or(ParseCustomerIdError::InvalidFormat)?;
         if digits.len() != 6 || !digits.bytes().all(|byte| byte.is_ascii_digit()) {
@@ -237,7 +253,7 @@ impl CustomerId {
 }
 ```
 
-規則のない Primitive は、モデルで `unconstrained` と理由を宣言し、何も確かめない `of` のような関連関数で組み立てる。
+基本データ型の値域だけで足りる値に DP を作らない。要求で未指定の規則は確認すべき未決事項として扱う。検証前の直接初期化や、別の値で検証してから初期化する経路を作らない。`ddd-lint` は宣言、入力拒否ガード、`of` の検証経路、直接初期化の迂回を構文から検査する。不変条件の業務上の意味を証明するものではないので、域内・境界・域外のテストも書く。
 
 ## ファーストクラスコレクション
 
@@ -280,7 +296,7 @@ impl InvoiceLines {
 | 条件 | 意味・選択肢 |
 |------|-------------|
 | 値に業務上の規則（形式、範囲）がある | ファクトリが規則を確かめて Result を返す Domain Primitive |
-| 値に業務上の規則がない | `unconstrained` と理由を宣言した Domain Primitive |
+| 基本データ型の値域だけで足りる | 基本データ型を使い、DP を作らない |
 | 複数の値が規則とともに常に一緒に動く | 値オブジェクト |
 | 型がほかの状態と並べてコレクションを持つ | ファーストクラスコレクションの型 |
 

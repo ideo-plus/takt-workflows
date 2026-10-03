@@ -33,6 +33,7 @@ import {
 import { factsOf } from "./file-facts.ts";
 import { ruleL, ruleM, ruleN } from "./interface-adapter.ts";
 import { ruleA } from "./state-hiding.ts";
+import { rulePrimitiveInitialization } from "./primitives.ts";
 import type { TsGate, TsInspection, TsTarget } from "./types.ts";
 import { ruleH, ruleI, ruleRepositoryResult, ruleUseCaseName } from "./use-case.ts";
 
@@ -96,6 +97,7 @@ export function evaluateTypeScriptDomain(run: ProjectContext, api: CheckApi): Ch
       ...ruleA(target.file, factsOf(inspection, target.file), inspection.undecided),
       ...ruleImmutable(inspection, target),
       ...ruleOperation(inspection, target),
+      ...rulePrimitiveInitialization(inspection, target),
       ...ruleCollection(inspection, target),
       ...rulePortPlacement(inspection, target),
       ...ruleC(inspection, target),

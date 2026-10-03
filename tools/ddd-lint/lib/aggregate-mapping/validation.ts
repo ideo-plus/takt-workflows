@@ -242,7 +242,11 @@ function checkOperations(
           MAPPING_RULES.ownerMismatch,
           `${where}: the operation belongs to ${resolved.owner}, not to ${aggregate.element_id}`,
         );
-      const method = JSON.stringify([spelling.methodNamespace(resolved.kind), operation.code.method]);
+      const targetElement = resolved.kind === "factory"
+        ? (index.byId(resolved.element_id)?.node as FactoryRule | undefined)?.target_element
+        : aggregate?.root_element;
+      // Distinct Domain Primitives each own parse; methods collide only on the same target type.
+      const method = JSON.stringify([targetElement ?? entry.aggregate_ref, spelling.methodNamespace(resolved.kind), operation.code.method]);
       if (methods.has(method))
         report.add(
           MAPPING_RULES.duplicate,

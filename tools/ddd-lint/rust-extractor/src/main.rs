@@ -1,6 +1,7 @@
 mod analysis;
 mod domain_facts;
 mod error_contract;
+mod initialization;
 mod state_evidence;
 
 use serde::Deserialize;
@@ -39,7 +40,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     if std::env::args().nth(1).as_deref() == Some("--domain-facts-version") {
         println!(
             "{}",
-            json!({"extractor": "0.0.0", "syn": "3.0.5", "protocol_version": 9})
+            json!({"extractor": "0.0.0", "syn": "3.0.5", "protocol_version": 10})
         );
         return Ok(());
     }
@@ -59,7 +60,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         println!("{}", error_contract::run(value)?);
         return Ok(());
     }
-    if value.get("protocol_version").and_then(|v| v.as_u64()) == Some(9) {
+    if value.get("protocol_version").and_then(|v| v.as_u64()) == Some(10) {
         println!("{}", domain_facts::run(value)?);
         return Ok(());
     }

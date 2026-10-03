@@ -11,6 +11,7 @@
 | その場で変えるか、新しいインスタンスにするか（ドメイン層） | その場で変える。下の「その場での変更」に従う。コマンドは `&mut self` を取って集約を変え、`Result<success_type, error_type>` を返す。`&self` や `self` を取ってイベントだけを返すメソッドは、状態を変えないコマンドとみなす |
 | 内部可変性で隠さない（ドメイン層） | `Cell`、`RefCell`、`Mutex`、`RwLock`、アトミック型にドメイン型の業務状態を持たせることは、内部可変性で隠すことにあたる。技術的なキャッシュに使うときは、そのことを明記する |
 | 業務上の失敗は Result で返す（ドメイン層） | 業務上の失敗を `panic!`、`unwrap`、`expect` で伝えることは throw にあたる。操作のエラー型は `error_type` の名前の enum で、バリアントは写像の case |
+| Domain Primitive の初期化 | `pub fn of(value: T) -> Self` と `pub fn parse(value: T) -> Result<Self, Parse…Error>` を必ず置く。`of` は同じ入力の `Self::parse(value).expect(...)` を返す。`parse` は入力依存の拒否ガードで不変条件違反を `Err` にしてから、その入力で初期化する。他の関連関数・復元・複製用の経路から直接初期化しない。`Deserialize` の derive は初期化経路を構文から検査できないため使わず、`parse` を通す実装を置く |
 | エラー型を広げない（ドメイン層） | `Other(String)`、`Unknown` のような何でも入るバリアントは、広げたことにあたる |
 | 壊れた状態の扱い（ドメイン層） | 復元は専用の復元エラーを返すか panic してよい |
 | 重複成功（ドメイン層の冪等性） | 成功値を `Applied(イベント)` と `Duplicate` の enum にし、重複のときは `Duplicate` を返す |

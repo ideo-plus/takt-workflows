@@ -1,5 +1,7 @@
 # DDD TypeScript Policy
 
+Always provide of(value: T): VO and parse(value: T): Result<VO, Parse…Error> on every Domain Primitive. parse rejects invariant violations with an input-dependent guard before initializing that input. of calls parse with the unchanged input, throws on a caller contract violation, and returns the checked value on success. Direct initialization uses this checked path in both class and companion representations.
+
 Defines how the rules of the other DDD policies are judged in TypeScript code, and the rules only TypeScript has (code representation, immutability, where `Result` lives, package boundaries, checkable syntax). When the reading breaks a rule, that rule's verdict applies. Module layout belongs to the module layout policy.
 
 ## Reading the Rules

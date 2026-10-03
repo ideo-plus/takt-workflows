@@ -163,27 +163,39 @@ impl Invoice {
 }
 ```
 
-`restore` reports a corrupt state with its own type because it is not a business failure. `add_line` remembers the ID of the last add-line command it applied (the model declares `retention: last-one`) and recognizes a resent command before any other check: it returns `AddInvoiceLineOutcome::Duplicate`, changes nothing, and produces no event, so the event is never published twice. It checks the new total before it changes anything. Events are domain types too: their fields are private, they are built by their own `new` inside the aggregate's module, and they offer read-only accessors to the code that publishes them. The customer is the Domain Primitive `CustomerId`, the line amounts are the Domain Primitive `Money`, and the lines are the first-class collection `InvoiceLines`. The invoice ID and the command ID stay `&str` only to keep the example short; real code wraps them and places them under the `invoice` module as types that belong to the invoice alone (`invoice/invoice_id.rs`, `invoice/command_id.rs`). How to group modules is in "Modules" of the modeling knowledge.
+`restore` reports a corrupt state with its own type because it is not a business failure. `add_line` remembers the ID of the last add-line command it applied (the model declares `retention: last-one`) and recognizes a resent command before any other check: it returns `AddInvoiceLineOutcome::Duplicate`, changes nothing, and produces no event, so the event is never published twice. It checks the new total before it changes anything. Events are domain types too: their fields are private, they are built by their own `new` inside the aggregate's module, and they offer read-only accessors to the code that publishes them. The customer is the Domain Primitive `CustomerId`, the line amounts are the Domain Primitive `Money`, and the lines are the first-class collection `InvoiceLines`. The invoice ID and the command ID stay `&str` only to keep the example short; when they have domain format or range rules, wrap them as DPs and place them under the `invoice` module as types that belong to the invoice alone (`invoice/invoice_id.rs`, `invoice/command_id.rs`). How to group modules is in "Modules" of the modeling knowledge.
 
 ## Changing in Place
 
 What changes is taken as `&mut` and changed in place, whatever kind of domain type it is. A value object, Domain Primitive, or collection that changes takes `&mut self` and returns `()`, or `Result<(), E>` when the change can fail; it does not take `&self` or `self` and hand back a new instance, and it does not implement operators such as `Add` that return a new value. A domain method must not mutate an external `&mut` argument; the receiver owns the change. The in-place rule detects that forbidden parameter shape syntactically, but cannot prove which statements in the body mutate it. Ownership keeps this safe: a value shared through `&` cannot change, and a caller that needs the value before the change clones it first. The `&mut self` methods of the values inside an aggregate are not commands; the aggregate's commands call them.
 
 ```rust
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ParseMoneyError {
+    InvalidIncrement,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Money(i64);
 
 impl Money {
     pub fn of(value: i64) -> Self {
-        Money(value)
+        Self::parse(value).expect("Money is outside its domain")
+    }
+
+    pub fn parse(value: i64) -> Result<Self, ParseMoneyError> {
+        if value % 100 != 0 {
+            return Err(ParseMoneyError::InvalidIncrement);
+        }
+        Ok(Self(value))
     }
 
     pub fn zero() -> Self {
-        Money(0)
+        Self::of(0)
     }
 
     pub fn add(&mut self, rhs: &Money) {
-        self.0 += rhs.0;
+        *self = Self::of(self.0.checked_add(rhs.0).expect("Money arithmetic overflow"));
     }
 
     pub fn is_negative(&self) -> bool {
@@ -211,11 +223,11 @@ impl InvoiceLine {
 }
 ```
 
-`Money` is a Domain Primitive, the amount of a line and the total of an invoice, in a module of its own, `money` (`src/money.rs`). Its model declaration marks individual line amounts `unconstrained` with a rationale: a negative line can be balanced by another line, while the aggregate keeps the total non-negative. `Money::add` changes the receiving `Money` through `&mut self`; `InvoiceLine` supplies the Domain Primitive to an operation without exposing a bare value or a getter. The in-place rule rejects methods that receive an external `&mut` value, but permits ordinary `&self` queries.
+`Money` is a Domain Primitive, the amount of a line and the total of an invoice, in a module of its own, `money` (`src/money.rs`). This example requires integer monetary amounts in steps of 100; negative discounts and zero are valid, while the aggregate keeps the total non-negative. `Money::add` changes the receiving `Money` through `&mut self`; `InvoiceLine` supplies the Domain Primitive to an operation without exposing a bare value or a getter. The in-place rule rejects methods that receive an external `&mut` value, but permits ordinary `&self` queries.
 
 ## Domain Primitives
 
-A Domain Primitive wraps one value and states its value rule. The model declares the rule as an invariant on the primitive and a factory rule that builds it; the factory checks the rule and returns the factory's own error enum, so a `CustomerId` that exists is always valid. Equality follows the value.
+A Domain Primitive wraps one value and has domain invariants narrower than its backing type. Always provide both of and parse. Initialize only after parse rejects invalid input; of delegates the unchanged input to parse and panics (Rust) or throws (TypeScript) on a caller contract violation. parse returns its own error type in Result. Every successful instance satisfies the invariants. Declare those invariants and the parse factory rule that checks all of them in the model. Equality follows the value.
 
 ```rust
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -227,6 +239,10 @@ pub enum ParseCustomerIdError {
 pub struct CustomerId(String);
 
 impl CustomerId {
+    pub fn of(value: &str) -> Self {
+        Self::parse(value).expect("CustomerId is outside its domain")
+    }
+
     pub fn parse(value: &str) -> Result<Self, ParseCustomerIdError> {
         let digits = value.strip_prefix('C').ok_or(ParseCustomerIdError::InvalidFormat)?;
         if digits.len() != 6 || !digits.bytes().all(|byte| byte.is_ascii_digit()) {
@@ -237,7 +253,7 @@ impl CustomerId {
 }
 ```
 
-A primitive without a rule declares `unconstrained` with a rationale in the model and is built by an associated function such as `of` that checks nothing.
+Do not introduce a DP when the backing type alone expresses the valid domain. Resolve unspecified rules as open questions. Never initialize before validation or validate one value and initialize another. ddd-lint checks declarations, input rejection guards, of delegation and direct-construction bypasses from syntax; it does not prove the business meaning of an invariant. Test valid, boundary and invalid values too.
 
 ## First-Class Collections
 
@@ -280,7 +296,7 @@ impl InvoiceLines {
 | Condition | Meaning / options |
 |-----------|-------------------|
 | The value has a business rule (format, range) | Domain Primitive whose factory checks the rule and returns a Result |
-| The value has no business rule | Domain Primitive declared `unconstrained` with a rationale |
+| The backing type alone expresses the valid domain | Use the backing type directly; do not create a DP |
 | Several values always travel together with a rule | Value object |
 | A type holds a collection beside other state | First-class collection type |
 

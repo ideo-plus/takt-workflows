@@ -42,8 +42,9 @@ bounded_contexts:
           - { element_id: entity.invoice, kind: entity, name: Invoice, aggregate: aggregate.invoice }
           - { element_id: vo.invoice-line, kind: value-object, name: InvoiceLine, aggregate: aggregate.invoice }
           - { element_id: primitive.customer-id, kind: domain-primitive, name: CustomerId, aggregate: aggregate.invoice, attributes: [{ name: value, type: string, required: true }] }
-          - { element_id: primitive.money, kind: domain-primitive, name: Money, aggregate: aggregate.invoice, unconstrained: "a discount line makes an individual line amount positive, zero, or negative", attributes: [{ name: value, type: decimal, required: true }] }
+          - { element_id: primitive.money, kind: domain-primitive, name: Money, aggregate: aggregate.invoice, attributes: [{ name: value, type: decimal, required: true }] }
         invariants:
+          - { element_id: invariant.invoice.money-increment, name: MoneyIncrement, aggregate: aggregate.invoice, element: primitive.money, statement: monetary amounts are finite integer multiples of 100; negative discounts and zero are permitted }
           - { element_id: invariant.invoice.customer-id-format, name: CustomerIdFormat, aggregate: aggregate.invoice, element: primitive.customer-id, statement: a customer ID is C followed by six digits }
           - { element_id: invariant.invoice.total-not-negative, name: TotalNotNegative, aggregate: aggregate.invoice, statement: the total of the lines is never negative }
           - { element_id: invariant.invoice.issued-has-lines, name: IssuedHasLines, aggregate: aggregate.invoice, statement: an issued invoice has at least one line }
@@ -87,12 +88,18 @@ bounded_contexts:
             preconditions: [invariant.invoice.customer-id-format]
             domain_errors:
               - { element_id: error.invoice.parse-customer-id.invalid-format, name: InvalidFormat, operation: factory.invoice.parse-customer-id, condition: the value is not C followed by six digits }
+          - element_id: factory.invoice.parse-money
+            name: ParseMoney
+            target_element: primitive.money
+            preconditions: [invariant.invoice.money-increment]
+            domain_errors:
+              - { element_id: error.invoice.parse-money.invalid-increment, name: InvalidIncrement, operation: factory.invoice.parse-money, condition: the amount is not a finite integer multiple of 100 }
 lineage: []
 ```
 
 Element IDs are `<kind>.<segments>` in lower kebab case. `bc`, `aggregate`, `entity`, `vo`, `primitive`, and `pm` take one segment; `invariant`, `command`, `event`, `transition`, and `factory` take the aggregate and a name; `error` takes the aggregate, the operation, and a name. A `lineage` entry (`lineage-0001`, relation `renamed`, `split`, `merged`, or `deprecated`) records how an ID changed.
 
-A Domain Primitive (`kind: domain-primitive`) wraps exactly one attribute and declares its value rule. When it has one, write both an invariant whose `element` is the primitive and a factory rule whose `target_element` is the primitive and which returns a broken rule as an error (`primitive.customer-id`, `invariant.invoice.customer-id-format`, and `factory.invoice.parse-customer-id` above). When it has none, write `unconstrained` with the rationale on the element (`primitive.money` above). Never write neither, and never both. An attribute with `collection: true` is held in code as a first-class collection type.
+A Domain Primitive (`kind: domain-primitive`) wraps one attribute and has a domain invariant narrower than its backing type. Declare invariants whose `element` names the primitive and a `parse` factory rule whose `preconditions` include every such invariant. Always provide both `of` and `parse`: `of` passes the unchanged input to `parse` and throws or panics on a caller contract violation; `parse` checks the invariants before initialization and returns its own error type in Result. Do not introduce a DP when the backing type alone expresses the valid domain. Resolve unspecified value rules as open questions rather than declaring an unconstrained DP. Attributes with `collection: true` use first-class collection types.
 
 ### Aggregate mapping
 
@@ -113,6 +120,10 @@ aggregate_mappings:
         code: { method: parse, error_type: ParseCustomerIdError }
         errors:
           - { error_ref: error.invoice.parse-customer-id.invalid-format, code: { case: invalid-format } }
+      - operation_ref: factory.invoice.parse-money
+        code: { method: parse, error_type: ParseMoneyError }
+        errors:
+          - { error_ref: error.invoice.parse-money.invalid-increment, code: { case: invalid-increment } }
       - operation_ref: command.invoice.add-line
         code: { method: addLine, success_type: AddInvoiceLineOutcome, error_type: AddInvoiceLineError }
         errors:

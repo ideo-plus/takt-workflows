@@ -10,7 +10,7 @@ The project settings choose one representation for every aggregate, Entity, Doma
 | The team prefers plain types and functions | `companion`: a `type` literal plus a `const` object of the same name; the factory's closure holds the state |
 | Aggregate execution model or persistence differs between aggregates | Irrelevant to this choice; the representation is project-wide |
 
-In the examples below the customer is the Domain Primitive `CustomerId`, the line amounts are the Domain Primitive `Money`, and the lines are the first-class collection `InvoiceLines`. The invoice ID and the command ID stay bare `string` only to keep the examples short; real code wraps them the same way and places them under the invoice's module as types that belong to the invoice alone (`invoice/invoice-id.ts`, `invoice/command-id.ts`). How to group modules is in "Modules" of the modeling knowledge.
+In the examples below the customer is the Domain Primitive `CustomerId`, the line amounts are the Domain Primitive `Money`, and the lines are the first-class collection `InvoiceLines`. The invoice ID and the command ID stay bare `string` only to keep the examples short; when they have domain format or range rules, wrap them as DPs and place them under the invoice's module as types that belong to the invoice alone (`invoice/invoice-id.ts`, `invoice/command-id.ts`). How to group modules is in "Modules" of the modeling knowledge.
 
 `private`, `protected`, and `readonly` are erased at run time; a `#` field and a closure are private at run time. A brand stops an object of the same shape from being assigned; it does not prove that a factory built the value.
 
@@ -189,7 +189,7 @@ export const Invoice = {
 
 ## Domain Primitives
 
-A Domain Primitive wraps one value and states its value rule. The model declares the rule as an invariant on the primitive and a factory rule that builds it; the factory (`parse`) checks the rule and returns a `Result` with its own error type, so a `CustomerId` that exists is always valid. Equality follows the value (`equals`). The companion representation writes the same shape as a `type`, a brand, and a `const` object, and its `equals` asks the other value to match.
+A Domain Primitive wraps one value and has domain invariants narrower than its backing type. Always provide both of and parse. Initialize only after parse rejects invalid input; of delegates the unchanged input to parse and panics (Rust) or throws (TypeScript) on a caller contract violation. parse returns its own error type in Result. Every successful instance satisfies the invariants. Declare those invariants and the parse factory rule that checks all of them in the model. Equality follows the value.
 
 ```ts
 import type { Result } from "@acme/language-extensions";
@@ -203,6 +203,12 @@ export class CustomerId {
     this.#value = value;
   }
 
+  static of(value: string): CustomerId {
+    const parsed = CustomerId.parse(value);
+    if (!parsed.ok) throw new Error("CustomerId is outside its domain");
+    return parsed.value;
+  }
+
   static parse(value: string): Result<CustomerId, ParseCustomerIdError> {
     if (!/^C[0-9]{6}$/.test(value)) return { ok: false, error: "invalid-format" };
     return { ok: true, value: new CustomerId(value) };
@@ -214,11 +220,15 @@ export class CustomerId {
 }
 ```
 
-A primitive without a rule declares `unconstrained` with a rationale in the model and is built by an `of` that checks nothing.
+Do not introduce a DP when the backing type alone expresses the valid domain. Resolve unspecified rules as open questions. Never initialize before validation or validate one value and initialize another. ddd-lint checks declarations, input rejection guards, of delegation and direct-construction bypasses from syntax; it does not prove the business meaning of an invariant. Test valid, boundary and invalid values too.
 
-`Money` is such a primitive; it is the amount of a line and the total of an invoice, and it lives in a module of its own, `money`. The model declares individual line amounts `unconstrained` with a rationale: a negative line can be balanced by another line, while the aggregate keeps the total non-negative. `add`, which adds two `Money` values, reads the other value's `#value` inside the same class. A `#` field is readable from other instances of the same class, so no getter takes the value out to add it outside the class. `InvoiceLine` does not expose its amount; it returns the `Money` it gets by adding its amount to the total it receives (`addTo`). The total is passed around as `Money` too, and whether it is negative is asked of it (`isNegative`). In the companion representation `add` asks the other value to add this one's value (`other.plus(state.value)`), the same shape as `equals` asking the other value to match.
+`Money` is a DP for amounts in steps of 100; it is the amount of a line and the total of an invoice, and it lives in a module of its own, `money`. This example requires integer monetary amounts in steps of 100; negative discounts and zero are valid, while the aggregate keeps the total non-negative. `add`, which adds two `Money` values, reads the other value's `#value` inside the same class. A `#` field is readable from other instances of the same class, so no getter takes the value out to add it outside the class. `InvoiceLine` does not expose its amount; it returns the `Money` it gets by adding its amount to the total it receives (`addTo`). The total is passed around as `Money` too, and whether it is negative is asked of it (`isNegative`). In the companion representation `add` asks the other value to add this one's value (`other.plus(state.value)`), the same shape as `equals` asking the other value to match.
 
 ```ts
+import type { Result } from "@acme/language-extensions";
+
+export type ParseMoneyError = "invalid-increment";
+
 export class Money {
   readonly #value: number;
 
@@ -227,15 +237,22 @@ export class Money {
   }
 
   static of(value: number): Money {
-    return new Money(value);
+    const parsed = Money.parse(value);
+    if (!parsed.ok) throw new Error("Money is outside its domain");
+    return parsed.value;
+  }
+
+  static parse(value: number): Result<Money, ParseMoneyError> {
+    if (!Number.isFinite(value) || !Number.isInteger(value) || value % 100 !== 0) return { ok: false, error: "invalid-increment" };
+    return { ok: true, value: new Money(value) };
   }
 
   static zero(): Money {
-    return new Money(0);
+    return Money.of(0);
   }
 
   add(other: Money): Money {
-    return new Money(this.#value + other.#value);
+    return Money.of(this.#value + other.#value);
   }
 
   isNegative(): boolean {
