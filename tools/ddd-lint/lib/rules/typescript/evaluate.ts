@@ -34,7 +34,7 @@ import { factsOf } from "./file-facts.ts";
 import { ruleL, ruleM, ruleN } from "./interface-adapter.ts";
 import { ruleA } from "./state-hiding.ts";
 import type { TsGate, TsInspection, TsTarget } from "./types.ts";
-import { ruleH, ruleI, ruleUseCaseName } from "./use-case.ts";
+import { ruleH, ruleI, ruleRepositoryResult, ruleUseCaseName } from "./use-case.ts";
 
 const DOMAIN: TsGate = {
   label: "domain",
@@ -119,6 +119,7 @@ export function evaluateTypeScriptUseCase(run: ProjectContext, api: CheckApi): C
       ...ruleI(inspection, target),
       ...ruleD(inspection, target),
       ...ruleUseCaseName(inspection, target),
+      ...ruleRepositoryResult(inspection, target),
     ],
     whole: (inspection) => ruleG(buildEdges(inspection)),
   });

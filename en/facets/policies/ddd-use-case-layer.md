@@ -20,6 +20,7 @@ Judges the code of the use-case layer. A use case orchestrates: it loads, calls 
 | An unknown persistence outcome is retried without reconciliation by command ID or equivalent evidence | REJECT |
 | A command's first success, duplicate success, and rejection are not returned in a form the caller can tell apart | REJECT |
 | Events or new state are published before persistence succeeds | REJECT |
+| The `Result` of a repository port is dropped, or an event is returned although the store failed | REJECT. Return the failure as an error of the use case |
 | Upsert is presented as sufficient proof of idempotency | REJECT. State the idempotency strategy |
 
 ## Multiple Aggregates

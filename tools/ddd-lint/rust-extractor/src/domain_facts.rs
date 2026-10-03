@@ -31,7 +31,7 @@ use syn::{
 #[path = "domain_facts_tests.rs"]
 mod tests;
 
-const PROTOCOL_VERSION: u8 = 7;
+const PROTOCOL_VERSION: u8 = 8;
 
 /// The single-segment attributes the compiler itself defines, which expand to nothing and so cannot
 /// replace what they annotate. `cfg` and `cfg_attr` are left out: they are recorded under their own
@@ -664,6 +664,26 @@ impl<'a> Walk<'a> {
                         _ => None,
                     })
                     .collect();
+                // What each method declares it returns, so a rule can read a port's contract.
+                let signatures: Vec<Value> = node
+                    .items
+                    .iter()
+                    .filter_map(|item| match item {
+                        syn::TraitItem::Fn(method) => Some(json!({
+                            "name": spelling(&method.sig.ident),
+                            "return_type_text": match &method.sig.output {
+                                syn::ReturnType::Type(_, ty) => Value::from(self.text(ty.span())),
+                                syn::ReturnType::Default => Value::Null,
+                            },
+                            "line": line(declared_fn_start(
+                                &syn::Visibility::Inherited,
+                                &method.modifiers,
+                                &method.sig,
+                            )),
+                        })),
+                        _ => None,
+                    })
+                    .collect();
                 // `unsafe` stands between the visibility and the keyword, and opens the declaration
                 // when no visibility is written.
                 let start = declared_start(
@@ -675,7 +695,7 @@ impl<'a> Walk<'a> {
                 );
                 self.traits.push(json!({
                     "name": spelling(&node.ident), "module": self.module, "methods": methods,
-                    "line": line(start),
+                    "signatures": signatures, "line": line(start),
                 }));
                 for item in &node.items {
                     match item {

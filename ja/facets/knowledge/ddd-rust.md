@@ -308,49 +308,58 @@ impl Invoice {
 
 ## ポート、ユースケース、アダプタ
 
-リポジトリポートは集約の名前を付けた trait で、ユースケースのクレートで宣言し、ドメインのクレートには宣言しない。ユースケースはそれを trait オブジェクト（静的ディスパッチならジェネリック引数）で持ち、コマンドが変えた請求書を保存し、永続化の後に呼び出し側が公開できるようイベントを返す。
+リポジトリポートは集約の名前を付けた trait で、ユースケースのクレートで宣言し、ドメインのクレートには宣言しない。読み込みと保存はプロセスの外に出るので失敗しうる。どのメソッドも `Result` を返し、失敗は `RepositoryError` で伝える。`RepositoryError` はポートの隣に宣言するインフラの失敗であり、業務上のエラーではない。検索は、見つからないことを失敗にせず `Ok(None)` で返す（`Result<Option<Invoice>, RepositoryError>`）。保存は `Result<(), RepositoryError>` を返す。ユースケースはポートをジェネリック引数で持つ（静的ディスパッチ）。trait オブジェクトにするのは、実行時に実装を選ぶ必要があるときだけである。ユースケースは見つからなかった請求書を自分のエラー（`InvoiceNotFound`）にし、コマンドが変えた請求書を保存し、保存の失敗は捨てずに返し、永続化の後に呼び出し側が公開できるようイベントを返す。
 
 ```rust
 use billing_domain::invoice::Invoice;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct InvoiceNotFound;
+/// A load or a store that did not complete: a failure of the infrastructure, not a business error.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RepositoryError {
+    pub message: String,
+}
 
 pub trait InvoiceRepository {
-    fn find_by_id(&self, invoice_id: &str) -> Result<Invoice, InvoiceNotFound>;
-    fn store(&self, invoice_id: &str, invoice: Invoice);
+    fn find_by_id(&self, invoice_id: &str) -> Result<Option<Invoice>, RepositoryError>;
+    fn store(&self, invoice_id: &str, invoice: Invoice) -> Result<(), RepositoryError>;
 }
 
 use billing_domain::invoice::{InvoiceIssued, IssueInvoiceError};
 
-use crate::invoice_repository::{InvoiceNotFound, InvoiceRepository};
+use crate::invoice_repository::{InvoiceRepository, RepositoryError};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct InvoiceNotFound;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum IssueInvoiceFailure {
     NotFound(InvoiceNotFound),
     Rejected(IssueInvoiceError),
+    Repository(RepositoryError),
 }
 
-pub struct IssueInvoiceUseCase<'a> {
-    invoice_repository: &'a dyn InvoiceRepository,
+pub struct IssueInvoiceUseCase<'a, R: InvoiceRepository> {
+    invoice_repository: &'a R,
 }
 
-impl<'a> IssueInvoiceUseCase<'a> {
-    pub fn new(invoice_repository: &'a dyn InvoiceRepository) -> Self {
+impl<'a, R: InvoiceRepository> IssueInvoiceUseCase<'a, R> {
+    pub fn new(invoice_repository: &'a R) -> Self {
         IssueInvoiceUseCase { invoice_repository }
     }
 
     /// Issues the invoice, stores it, and hands back the event for the caller to publish.
     pub fn execute(&self, invoice_id: &str) -> Result<InvoiceIssued, IssueInvoiceFailure> {
-        let mut invoice = self.invoice_repository.find_by_id(invoice_id).map_err(IssueInvoiceFailure::NotFound)?;
+        let Some(mut invoice) = self.invoice_repository.find_by_id(invoice_id).map_err(IssueInvoiceFailure::Repository)? else {
+            return Err(IssueInvoiceFailure::NotFound(InvoiceNotFound));
+        };
         let issued = invoice.issue().map_err(IssueInvoiceFailure::Rejected)?;
-        self.invoice_repository.store(invoice_id, invoice);
+        self.invoice_repository.store(invoice_id, invoice).map_err(IssueInvoiceFailure::Repository)?;
         Ok(issued)
     }
 }
 ```
 
-アダプタはポートを実装し、名前に保存媒体の接頭辞を付けてよい。集約は `restore`、顧客は `parse`、明細のコレクションは `of` で組み立て直す。
+アダプタはポートを実装し、名前に保存媒体の接頭辞を付けてよい。集約は `restore`、顧客は `parse`、明細のコレクションは `of` で組み立て直す。記録がなければ `Ok(None)` を返し、保存媒体の失敗は `RepositoryError` にして返す（インメモリの実装は失敗しない）。
 
 ```rust
 use std::cell::RefCell;
@@ -361,7 +370,7 @@ use billing_domain::invoice::line::InvoiceLine;
 use billing_domain::invoice::lines::InvoiceLines;
 use billing_domain::invoice::Invoice;
 use billing_domain::money::Money;
-use billing_use_case::invoice_repository::{InvoiceNotFound, InvoiceRepository};
+use billing_use_case::invoice_repository::{InvoiceRepository, RepositoryError};
 
 pub struct InvoiceRecord {
     pub customer: String,
@@ -383,20 +392,23 @@ impl InMemoryInvoiceRepository {
 }
 
 impl InvoiceRepository for InMemoryInvoiceRepository {
-    fn find_by_id(&self, invoice_id: &str) -> Result<Invoice, InvoiceNotFound> {
+    fn find_by_id(&self, invoice_id: &str) -> Result<Option<Invoice>, RepositoryError> {
         if let Some(stored) = self.stored.borrow().get(invoice_id) {
-            return Ok(stored.clone());
+            return Ok(Some(stored.clone()));
         }
-        let record = self.records.get(invoice_id).ok_or(InvoiceNotFound)?;
+        let Some(record) = self.records.get(invoice_id) else {
+            return Ok(None);
+        };
         let customer = CustomerId::parse(&record.customer).expect("corrupt invoice record: customer ID");
         let lines = InvoiceLines::of(record.amounts.iter().map(|amount| InvoiceLine::of(Money::of(*amount))).collect());
         let invoice = Invoice::restore(invoice_id, customer, lines, record.issued, record.last_add_line_command_id.clone())
             .expect("corrupt invoice record");
-        Ok(invoice)
+        Ok(Some(invoice))
     }
 
-    fn store(&self, invoice_id: &str, invoice: Invoice) {
+    fn store(&self, invoice_id: &str, invoice: Invoice) -> Result<(), RepositoryError> {
         self.stored.borrow_mut().insert(invoice_id.to_string(), invoice);
+        Ok(())
     }
 }
 ```
