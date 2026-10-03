@@ -1,0 +1,7 @@
+[workspace]
+members = [
+    "packages/command/reservation-domain",
+    "packages/command/reservation-use-case",
+    "packages/command/reservation-interface-adapter",
+]
+resolver = "2"

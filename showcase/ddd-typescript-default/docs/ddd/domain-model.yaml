@@ -1,0 +1,101 @@
+bounded_contexts:
+  - element_id: bc.reservation
+    name: 会議室予約
+    aggregates:
+      - element_id: aggregate.reservation
+        name: Reservation
+        bounded_context: bc.reservation
+        root_element: entity.reservation
+        states: [confirmed, cancelled]
+        elements:
+          - element_id: entity.reservation
+            kind: entity
+            name: Reservation
+            aggregate: aggregate.reservation
+            attributes:
+              - { name: id, type: primitive.reservation-id, required: true }
+              - { name: memberId, type: primitive.member-id, required: true }
+              - { name: roomId, type: primitive.room-id, required: true }
+              - { name: slot, type: vo.time-slot, required: true }
+              - { name: status, type: string, required: true }
+          - element_id: primitive.reservation-id
+            kind: domain-primitive
+            name: ReservationId
+            aggregate: aggregate.reservation
+            attributes: [{ name: value, type: string, required: true }]
+            unconstrained: 要求に書式指定がなく、呼び出し側の文字列を識別に使う
+          - element_id: primitive.member-id
+            kind: domain-primitive
+            name: MemberId
+            aggregate: aggregate.reservation
+            attributes: [{ name: value, type: string, required: true }]
+            unconstrained: 書式や会員登録の検証は今回の要求に含まれない
+          - element_id: primitive.room-id
+            kind: domain-primitive
+            name: RoomId
+            aggregate: aggregate.reservation
+            attributes: [{ name: value, type: string, required: true }]
+            unconstrained: 書式や部屋登録の検証は今回の要求に含まれない
+          - element_id: vo.time-slot
+            kind: value-object
+            name: TimeSlot
+            aggregate: aggregate.reservation
+            attributes:
+              - { name: startsAt, type: integer, required: true }
+              - { name: endsAt, type: integer, required: true }
+        invariants:
+          - element_id: invariant.reservation.valid-time-slot
+            name: 有効な予約時間枠
+            aggregate: aggregate.reservation
+            element: vo.time-slot
+            statement: 開始と終了は有効な日時であり、終了は開始より後である
+          - element_id: invariant.reservation.cancel-once
+            name: 取消は一度だけ成立する
+            aggregate: aggregate.reservation
+            statement: 確定予約だけが取消済みへ遷移でき、取消済み予約の取消は失敗する
+        commands:
+          - element_id: command.reservation.cancel
+            name: CancelReservation
+            aggregate: aggregate.reservation
+            effect: transition
+            state_effect: transitions
+            transitions: [transition.reservation.cancel]
+            domain_errors:
+              - element_id: error.reservation.cancel.already-cancelled
+                name: AlreadyCancelled
+                operation: command.reservation.cancel
+                condition: 予約が既に取消済みである
+            event: event.reservation.cancelled
+            idempotency: { strategy: none }
+        events:
+          - element_id: event.reservation.cancelled
+            name: ReservationCancelled
+            aggregate: aggregate.reservation
+            produced_by: command.reservation.cancel
+        transitions:
+          - element_id: transition.reservation.cancel
+            name: 予約取消
+            aggregate: aggregate.reservation
+            from_state: confirmed
+            to_state: cancelled
+            command: command.reservation.cancel
+        factory_rules:
+          - element_id: factory.reservation.reserve
+            name: Reserve
+            target_element: entity.reservation
+            preconditions: [invariant.reservation.valid-time-slot]
+            domain_errors:
+              - element_id: error.reservation.reserve.invalid-time-slot
+                name: InvalidTimeSlot
+                operation: factory.reservation.reserve
+                condition: 入力日時から有効な時間枠を作成できない
+          - element_id: factory.reservation.create-time-slot
+            name: CreateTimeSlot
+            target_element: vo.time-slot
+            preconditions: [invariant.reservation.valid-time-slot]
+            domain_errors:
+              - element_id: error.reservation.create-time-slot.invalid-time-slot
+                name: InvalidTimeSlot
+                operation: factory.reservation.create-time-slot
+                condition: 日時が無効、または終了が開始以下である
+lineage: []

@@ -1,0 +1,3 @@
+mod in_memory_reservation_repository;
+
+pub use in_memory_reservation_repository::InMemoryReservationRepository;

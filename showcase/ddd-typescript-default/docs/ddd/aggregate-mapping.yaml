@@ -1,0 +1,75 @@
+model_ref: domain-model.yaml
+aggregate_mappings:
+  - aggregate_ref: aggregate.reservation
+    programming_model: class
+    persistence_method: state-sourcing
+    reference_ids: [entity.reservation]
+    code:
+      language: typescript
+      package: "@acme/reservation-domain"
+      module: [reservation]
+      type: Reservation
+    operations:
+      - operation_ref: factory.reservation.reserve
+        code: { method: reserve, error_type: ReserveReservationError }
+        errors:
+          - error_ref: error.reservation.reserve.invalid-time-slot
+            code: { case: invalid-time-slot }
+      - operation_ref: factory.reservation.create-time-slot
+        code: { method: create, error_type: CreateTimeSlotError }
+        errors:
+          - error_ref: error.reservation.create-time-slot.invalid-time-slot
+            code: { case: invalid-time-slot }
+      - operation_ref: command.reservation.cancel
+        code:
+          method: cancel
+          success_type: CancelReservationOutcome
+          error_type: CancelReservationError
+        errors:
+          - error_ref: error.reservation.cancel.already-cancelled
+            code: { case: already-cancelled }
+domain_packages:
+  - term: 会議室予約
+    model_refs: [bc.reservation]
+    rationale: 予約に関する業務上の型と操作を公開する
+    code: { language: typescript, package: "@acme/reservation-domain", module: [] }
+  - term: 予約
+    model_refs: [aggregate.reservation, entity.reservation]
+    rationale: 予約作成、取消、保存状態の復元を所有する
+    code: { language: typescript, package: "@acme/reservation-domain", module: [reservation] }
+  - term: 予約識別子
+    model_refs: [primitive.reservation-id]
+    rationale: 予約を識別する値を予約概念の配下に置く
+    code: { language: typescript, package: "@acme/reservation-domain", module: [reservation, reservation-id] }
+  - term: 予約時間枠
+    model_refs: [vo.time-slot, invariant.reservation.valid-time-slot]
+    rationale: 予約の時間枠とその検証を所有する
+    code: { language: typescript, package: "@acme/reservation-domain", module: [reservation, time-slot] }
+  - term: 会員識別子
+    model_refs: [primitive.member-id]
+    rationale: 予約した会員を識別する
+    code: { language: typescript, package: "@acme/reservation-domain", module: [member-id] }
+  - term: 部屋識別子
+    model_refs: [primitive.room-id]
+    rationale: 予約対象の部屋を識別する
+    code: { language: typescript, package: "@acme/reservation-domain", module: [room-id] }
+  - term: 会議室予約のユースケース
+    model_refs: [bc.reservation]
+    rationale: 予約操作と保存ポートを公開する
+    code: { language: typescript, package: "@acme/reservation-use-case", module: [] }
+  - term: 予約取消
+    model_refs: [command.reservation.cancel]
+    rationale: IDによる読込、取消、保存を実行する
+    code: { language: typescript, package: "@acme/reservation-use-case", module: [cancel-reservation] }
+  - term: 予約の保存と読込
+    model_refs: [aggregate.reservation]
+    rationale: 予約リポジトリのポートを宣言する
+    code: { language: typescript, package: "@acme/reservation-use-case", module: [reservation-repository] }
+  - term: 会議室予約のアダプタ
+    model_refs: [bc.reservation]
+    rationale: 予約リポジトリの実装を公開する
+    code: { language: typescript, package: "@acme/reservation-interface-adapter", module: [] }
+  - term: 予約のインメモリ保存
+    model_refs: [aggregate.reservation]
+    rationale: 予約状態をメモリに保存し復元する
+    code: { language: typescript, package: "@acme/reservation-interface-adapter", module: [in-memory-reservation-repository] }

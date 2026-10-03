@@ -11,6 +11,8 @@ A collection of [TAKT](https://github.com/nrslib/takt) workflows, facets, and ha
 
 More workflows will be added to this collection over time.
 
+See the [generated-code showcase](showcase/README.md) for meeting-room reservation code produced by the TypeScript and Rust DDD workflows, with the task, model configuration, and verification results.
+
 ## Highlights
 - **Install into the project you work in.** A one-line installer copies a bundle into the project's `.takt/`. No clone inside your repository.
 - **Configuration stays in the project.** Models and step assignments live in the project's committed `.takt/runtime.yaml`, so projects do not affect each other through `~/.takt`.

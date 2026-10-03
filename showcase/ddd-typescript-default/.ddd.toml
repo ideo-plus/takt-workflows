@@ -1,0 +1,5 @@
+languages = ["typescript"]
+
+[typescript]
+module_layout = "named-file"
+code_representation = "class"

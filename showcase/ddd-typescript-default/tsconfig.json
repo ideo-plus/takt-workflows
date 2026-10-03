@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "target": "esnext",
+    "strict": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "erasableSyntaxOnly": true
+  },
+  "files": [],
+  "include": [],
+  "references": [
+    { "path": "./packages/infrastructure/language-extensions" },
+    { "path": "./packages/command/reservation-domain" },
+    { "path": "./packages/command/reservation-use-case" },
+    { "path": "./packages/command/reservation-interface-adapter" }
+  ]
+}

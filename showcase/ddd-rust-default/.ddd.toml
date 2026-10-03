@@ -1,0 +1,4 @@
+languages = ["rust"]
+
+[rust]
+module_layout = "file"

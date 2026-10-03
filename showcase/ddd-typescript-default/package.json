@@ -1,0 +1,15 @@
+{
+  "name": "meeting-room-reservations-composition-root",
+  "private": true,
+  "type": "module",
+  "workspaces": ["packages/command/*", "packages/infrastructure/*"],
+  "engines": { "node": ">=24 <25" },
+  "scripts": {
+    "test": "node --test",
+    "typecheck": "tsc --project tsconfig.typecheck.json --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.8.0"
+  }
+}
