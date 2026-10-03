@@ -2,8 +2,8 @@ use super::*;
 
 fn check(source: &str) -> Value {
     let answer =
-        run(json!({"protocol_version":8,"files":[{"path":"lib.rs","source":source}]})).unwrap();
-    assert_eq!(answer["protocol_version"], 8);
+        run(json!({"protocol_version":9,"files":[{"path":"lib.rs","source":source}]})).unwrap();
+    assert_eq!(answer["protocol_version"], 9);
     answer["files"][0].clone()
 }
 
@@ -375,17 +375,28 @@ fn domain_facts_reads_a_type_and_a_trait_line_from_its_visibility_not_its_attrib
 #[test]
 fn domain_facts_reports_what_each_trait_method_returns() {
     let answer = check(
-        "pub trait InvoiceRepository {\n    fn find_by_id(&self, id: &str) -> Result<Option<Invoice>, RepositoryError>;\n    fn store(&self, invoice: &Invoice);\n    fn count(&self) -> std::result::Result<u64, RepositoryError> { Ok(0) }\n}",
+        "pub trait InvoiceRepository {\n    fn find_by_id(&self, id: &str) -> Result<Option<Invoice>, RepositoryError>;\n    fn store(&mut self, invoice: &Invoice);\n    fn count(&self) -> std::result::Result<u64, RepositoryError> { Ok(0) }\n}",
     );
     let signatures = list(&list(&answer, "traits")[0], "signatures");
+    assert!(list(&list(&answer, "traits")[0], "supertraits").is_empty());
     assert_eq!(signatures.len(), 3);
     assert_eq!(signatures[0]["name"], "find_by_id");
     assert_eq!(signatures[0]["return_type_text"], "Result<Option<Invoice>, RepositoryError>");
     assert_eq!(signatures[0]["line"], 2);
     assert_eq!(signatures[1]["line"], 3);
     assert_eq!(signatures[1]["name"], "store");
+    assert_eq!(signatures[0]["receiver"], "ref-self");
     assert!(signatures[1]["return_type_text"].is_null());
+    assert_eq!(signatures[1]["receiver"], "mut-self");
     assert_eq!(signatures[2]["return_type_text"], "std::result::Result<u64, RepositoryError>");
+}
+
+/// A trait reports the bounds it demands of its implementations, each as the source spells it.
+#[test]
+fn domain_facts_reports_the_supertraits_of_a_trait() {
+    let answer = check("pub trait InvoiceRepository: Send + Sync + std::fmt::Debug {}");
+    let supertraits = list(&list(&answer, "traits")[0], "supertraits");
+    assert_eq!(supertraits, &vec![json!("Send"), json!("Sync"), json!("std::fmt::Debug")]);
 }
 
 /// How a method takes the value it is declared on decides whether it mutates it, so each notation
@@ -879,7 +890,7 @@ fn domain_facts_marks_an_unparsed_file_instead_of_reporting_it_as_declaring_noth
 
 #[test]
 fn domain_facts_answers_one_record_per_requested_file_in_order() {
-    let answer = run(json!({"protocol_version":8,"files":[
+    let answer = run(json!({"protocol_version":9,"files":[
         {"path":"b.rs","source":"pub struct B(pub u64);"},
         {"path":"a.rs","source":"pub struct A(pub u64);"}]}))
     .unwrap();
@@ -893,9 +904,9 @@ fn domain_facts_answers_one_record_per_requested_file_in_order() {
 fn domain_facts_refuses_a_request_that_is_not_this_protocol() {
     for request in [
         json!({"protocol_version":6,"files":[{"path":"lib.rs","source":""}]}),
-        json!({"protocol_version":8,"files":[]}),
-        json!({"protocol_version":8,"files":[{"path":"lib.rs"}]}),
-        json!({"protocol_version":8,"files":[{"path":"lib.rs","source":"","extra":true}]}),
+        json!({"protocol_version":9,"files":[]}),
+        json!({"protocol_version":9,"files":[{"path":"lib.rs"}]}),
+        json!({"protocol_version":9,"files":[{"path":"lib.rs","source":"","extra":true}]}),
     ] {
         assert!(run(request).is_err());
     }

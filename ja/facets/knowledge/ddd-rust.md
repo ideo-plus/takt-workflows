@@ -308,7 +308,7 @@ impl Invoice {
 
 ## ポート、ユースケース、アダプタ
 
-リポジトリポートは集約の名前を付けた trait で、ユースケースのクレートで宣言し、ドメインのクレートには宣言しない。読み込みと保存はプロセスの外に出るので失敗しうる。どのメソッドも `Result` を返し、失敗は `RepositoryError` で伝える。`RepositoryError` はポートの隣に宣言するインフラの失敗であり、業務上のエラーではない。検索は、見つからないことを失敗にせず `Ok(None)` で返す（`Result<Option<Invoice>, RepositoryError>`）。保存は `Result<(), RepositoryError>` を返す。ユースケースはポートをジェネリック引数で持つ（静的ディスパッチ）。trait オブジェクトにするのは、実行時に実装を選ぶ必要があるときだけである。ユースケースは見つからなかった請求書を自分のエラー（`InvoiceNotFound`）にし、コマンドが変えた請求書を保存し、保存の失敗は捨てずに返し、永続化の後に呼び出し側が公開できるようイベントを返す。
+リポジトリポートは集約の名前を付けた trait で、ユースケースのクレートで宣言し、ドメインのクレートには宣言しない。読み込みと保存はプロセスの外に出るので失敗しうる。どのメソッドも `Result` を返し、失敗は `RepositoryError` で伝える。`RepositoryError` はポートの隣に宣言するインフラの失敗であり、業務上のエラーではない。検索は、見つからないことを失敗にせず `Ok(None)` で返す（`Result<Option<Invoice>, RepositoryError>`）。保存は保存先を変えるので `&mut self` を取り、`Result<(), RepositoryError>` を返す。`&self` を取って実装の中の `RefCell` などで保存先を変えるのは、内部可変性で変更を隠すことになる。例外は、並行処理でポートを共有し、ロックが必要なときだけである。そのときは trait に `Send + Sync` を付け、保存は `&self` を取り、実装は `Mutex` や `RwLock` で保存先を守る。ユースケースはポートをジェネリック引数の `&mut` 参照で持ち（静的ディスパッチ）、`execute` は `&mut self` を取る。trait オブジェクトにするのは、実行時に実装を選ぶ必要があるときだけである。ユースケースは見つからなかった請求書を自分のエラー（`InvoiceNotFound`）にし、コマンドが変えた請求書を保存し、保存の失敗は捨てずに返し、永続化の後に呼び出し側が公開できるようイベントを返す。
 
 ```rust
 use billing_domain::invoice::Invoice;
@@ -321,7 +321,7 @@ pub struct RepositoryError {
 
 pub trait InvoiceRepository {
     fn find_by_id(&self, invoice_id: &str) -> Result<Option<Invoice>, RepositoryError>;
-    fn store(&self, invoice_id: &str, invoice: Invoice) -> Result<(), RepositoryError>;
+    fn store(&mut self, invoice_id: &str, invoice: Invoice) -> Result<(), RepositoryError>;
 }
 
 use billing_domain::invoice::{InvoiceIssued, IssueInvoiceError};
@@ -339,16 +339,16 @@ pub enum IssueInvoiceFailure {
 }
 
 pub struct IssueInvoiceUseCase<'a, R: InvoiceRepository> {
-    invoice_repository: &'a R,
+    invoice_repository: &'a mut R,
 }
 
 impl<'a, R: InvoiceRepository> IssueInvoiceUseCase<'a, R> {
-    pub fn new(invoice_repository: &'a R) -> Self {
+    pub fn new(invoice_repository: &'a mut R) -> Self {
         IssueInvoiceUseCase { invoice_repository }
     }
 
     /// Issues the invoice, stores it, and hands back the event for the caller to publish.
-    pub fn execute(&self, invoice_id: &str) -> Result<InvoiceIssued, IssueInvoiceFailure> {
+    pub fn execute(&mut self, invoice_id: &str) -> Result<InvoiceIssued, IssueInvoiceFailure> {
         let Some(mut invoice) = self.invoice_repository.find_by_id(invoice_id).map_err(IssueInvoiceFailure::Repository)? else {
             return Err(IssueInvoiceFailure::NotFound(InvoiceNotFound));
         };
@@ -362,7 +362,6 @@ impl<'a, R: InvoiceRepository> IssueInvoiceUseCase<'a, R> {
 アダプタはポートを実装し、名前に保存媒体の接頭辞を付けてよい。集約は `restore`、顧客は `parse`、明細のコレクションは `of` で組み立て直す。記録がなければ `Ok(None)` を返し、保存媒体の失敗は `RepositoryError` にして返す（インメモリの実装は失敗しない）。
 
 ```rust
-use std::cell::RefCell;
 use std::collections::HashMap;
 
 use billing_domain::customer_id::CustomerId;
@@ -382,18 +381,18 @@ pub struct InvoiceRecord {
 /// The invoices stored here take precedence over the records they were first read from.
 pub struct InMemoryInvoiceRepository {
     records: HashMap<String, InvoiceRecord>,
-    stored: RefCell<HashMap<String, Invoice>>,
+    stored: HashMap<String, Invoice>,
 }
 
 impl InMemoryInvoiceRepository {
     pub fn new(records: HashMap<String, InvoiceRecord>) -> Self {
-        InMemoryInvoiceRepository { records, stored: RefCell::new(HashMap::new()) }
+        InMemoryInvoiceRepository { records, stored: HashMap::new() }
     }
 }
 
 impl InvoiceRepository for InMemoryInvoiceRepository {
     fn find_by_id(&self, invoice_id: &str) -> Result<Option<Invoice>, RepositoryError> {
-        if let Some(stored) = self.stored.borrow().get(invoice_id) {
+        if let Some(stored) = self.stored.get(invoice_id) {
             return Ok(Some(stored.clone()));
         }
         let Some(record) = self.records.get(invoice_id) else {
@@ -406,8 +405,8 @@ impl InvoiceRepository for InMemoryInvoiceRepository {
         Ok(Some(invoice))
     }
 
-    fn store(&self, invoice_id: &str, invoice: Invoice) -> Result<(), RepositoryError> {
-        self.stored.borrow_mut().insert(invoice_id.to_string(), invoice);
+    fn store(&mut self, invoice_id: &str, invoice: Invoice) -> Result<(), RepositoryError> {
+        self.stored.insert(invoice_id.to_string(), invoice);
         Ok(())
     }
 }

@@ -134,6 +134,15 @@ export const RULES: readonly RuleDefinition[] = [
     per_file: true,
   },
   {
+    rule_id: "repository-mut-self",
+    name: "repository-write-receiver",
+    statement: "a Rust repository port method that changes what is stored (store…, delete…) does not take &mut self, and the port is not declared Sync for sharing across threads",
+    target_layers: ["use-case"],
+    requires_model: false,
+    facts: ["traits"],
+    per_file: true,
+  },
+  {
     rule_id: "i",
     name: "use-case-chaining",
     statement: "use case calls another use case",

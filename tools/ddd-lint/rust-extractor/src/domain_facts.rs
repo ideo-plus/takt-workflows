@@ -31,7 +31,7 @@ use syn::{
 #[path = "domain_facts_tests.rs"]
 mod tests;
 
-const PROTOCOL_VERSION: u8 = 8;
+const PROTOCOL_VERSION: u8 = 9;
 
 /// The single-segment attributes the compiler itself defines, which expand to nothing and so cannot
 /// replace what they annotate. `cfg` and `cfg_attr` are left out: they are recorded under their own
@@ -671,6 +671,7 @@ impl<'a> Walk<'a> {
                     .filter_map(|item| match item {
                         syn::TraitItem::Fn(method) => Some(json!({
                             "name": spelling(&method.sig.ident),
+                            "receiver": receiver_kind(&method.sig),
                             "return_type_text": match &method.sig.output {
                                 syn::ReturnType::Type(_, ty) => Value::from(self.text(ty.span())),
                                 syn::ReturnType::Default => Value::Null,
@@ -693,9 +694,15 @@ impl<'a> Walk<'a> {
                         .map(|token| token.span)
                         .unwrap_or(node.trait_token.span),
                 );
+                // The bounds a trait demands of its implementations, as the source spells each one.
+                let supertraits: Vec<Value> = node
+                    .supertraits
+                    .iter()
+                    .map(|bound| Value::from(self.text(bound.span())))
+                    .collect();
                 self.traits.push(json!({
                     "name": spelling(&node.ident), "module": self.module, "methods": methods,
-                    "signatures": signatures, "line": line(start),
+                    "signatures": signatures, "supertraits": supertraits, "line": line(start),
                 }));
                 for item in &node.items {
                     match item {
