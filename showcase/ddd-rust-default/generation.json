@@ -1,0 +1,232 @@
+{
+  "workflow": "ddd-rust-default",
+  "bundle_commit": "ddd4a8d603d79ef27856f3804612d2302565ede0",
+  "bundle_language": "ja",
+  "task_sha256": "ee6182dd4d45ba9e50c9dbb5689ce9529bc261f1ba3effbf5a5456b4287e0529",
+  "execution": {
+    "exit_code": 0,
+    "elapsed_seconds": 9128,
+    "takt_version": "0.67.0",
+    "started_at": "2026-10-03T16:36:30.930718+00:00",
+    "finished_at": "2026-10-03T19:08:39.083599+00:00"
+  },
+  "execution_attempts": [
+    {
+      "exit_code": 0,
+      "elapsed_seconds": 9128,
+      "takt_version": "0.67.0",
+      "started_at": "2026-10-03T16:36:30.930718+00:00",
+      "finished_at": "2026-10-03T19:08:39.083599+00:00"
+    }
+  ],
+  "elapsed_seconds_total": 9128,
+  "providers_and_models": [
+    {
+      "workflow": "development-core",
+      "step": "plan",
+      "provider": "codex",
+      "model": "gpt-6.1-sol"
+    },
+    {
+      "workflow": "development-core",
+      "step": "write_tests",
+      "provider": "codex",
+      "model": "gpt-5.6-sol"
+    },
+    {
+      "workflow": "ddd-implement",
+      "step": "implement",
+      "provider": "codex",
+      "model": "gpt-6.1-sol"
+    },
+    {
+      "step": "implement",
+      "agent": "testing-review-companion",
+      "provider": "codex",
+      "model": "gpt-6-astra"
+    },
+    {
+      "step": "implement",
+      "agent": "ai-antipattern-review-companion",
+      "provider": "codex",
+      "model": "gpt-6-astra"
+    },
+    {
+      "workflow": "development-core",
+      "step": "replan",
+      "provider": "codex",
+      "model": "gpt-6.1-sol"
+    },
+    {
+      "step": "implement",
+      "agent": "review-companion-moderator",
+      "provider": "codex",
+      "model": "gpt-6-astra"
+    },
+    {
+      "workflow": "ddd-review",
+      "step": "review",
+      "provider": "codex",
+      "model": "gpt-6.1-sol"
+    },
+    {
+      "workflow": "peer-review",
+      "step": "review-adjudication",
+      "provider": "codex",
+      "model": "gpt-6.1-sol"
+    },
+    {
+      "workflow": "ddd-remediation",
+      "step": "fix-plan",
+      "provider": "codex",
+      "model": "gpt-6.1-sol"
+    },
+    {
+      "workflow": "ddd-remediation",
+      "step": "fix",
+      "provider": "codex",
+      "model": "gpt-6.1-sol"
+    },
+    {
+      "step": "fix",
+      "agent": "testing-review-companion",
+      "provider": "codex",
+      "model": "gpt-6-astra"
+    },
+    {
+      "step": "fix",
+      "agent": "ai-antipattern-review-companion",
+      "provider": "codex",
+      "model": "gpt-6-astra"
+    },
+    {
+      "workflow": "ddd-remediation",
+      "step": "fix-verifier",
+      "provider": "codex",
+      "model": "gpt-6.1-sol"
+    },
+    {
+      "workflow": "peer-review",
+      "step": "final-gate",
+      "provider": "codex",
+      "model": "gpt-6.1-sol"
+    }
+  ],
+  "generated_file_sha256": {
+    "Cargo.toml": "ef9060e0ecbbadc0e26692aedb0feee1ba7a80017e19d8a16334307e975d9207",
+    "Cargo.lock": "0568fd741c4d5d91e363d9c63523c59f8c2e15b11594f99022dbbd4bc53d3519",
+    ".ddd.toml": "e72b3a506a3db23660fd9dc481bacd7821940f3e0f075f1d767947033f39b9e9",
+    ".gitignore": "54d812f808766fdd595bdd77352a4d5496a66fb636bb28634e214d86d4bcf47f",
+    "packages/command/reservation-domain/Cargo.toml": "740010d36ab7d62acaa3f178fae8d50d29bf7da164ae0f3a9c15b5ac2e42fdae",
+    "packages/command/reservation-interface-adapter/Cargo.toml": "56ace5343ab6e2e6a2ab956188cae2748a7312956e2b38f32877ebf60d3318ed",
+    "packages/command/reservation-use-case/Cargo.toml": "a93770ee5cb4130a2b821db2108e6f40bc7d96a725310fcc195e5ae60343bb34",
+    "packages/command/reservation-use-case/tests/cancel_reservation.rs": "51de68555ec841e643e03f125edfe7bbaaadefdc1bfa6bb6029c40835c2e469e",
+    "packages/command/reservation-use-case/src/cancel_reservation.rs": "d64a5a15c6bdc8d3460f5e4e6364b79310dbf7702d818bc78a7d2353245afaf1",
+    "packages/command/reservation-use-case/src/lib.rs": "09d32c435600d0161a70011c136071e1dbb3e37105b3c6e32b844fc917940f00",
+    "packages/command/reservation-use-case/src/reservation_repository.rs": "575e7d49a36b435fab4e82653f34a30ada4dca959f12c45ca40dfd711a8dc0a8",
+    "packages/command/reservation-interface-adapter/tests/cancel_reservation.rs": "9b87d2f1c55329b8d4aef70857d3016d337230bea473f3758ef3340305db1f4c",
+    "packages/command/reservation-interface-adapter/src/in_memory_reservation_repository.rs": "d629f0aba95568aeaa95ecd253cb69a460d9cebe351ba389e4ca4c0178f9ddca",
+    "packages/command/reservation-interface-adapter/src/lib.rs": "2abcb628430f8fff7ef507d746a238ef7571b9c93c313b346f2b7d6a68de3f89",
+    "packages/command/reservation-domain/tests/reservation.rs": "142863fb6c47f1042f7ae87316a29ce427ca12c4be82a344a7edf1e373182892",
+    "packages/command/reservation-domain/src/room_id.rs": "1face674dd2c2a19e2a7ab6ab0e70230828903257bcb7dbd2a64031aa269bfa0",
+    "packages/command/reservation-domain/src/member_id.rs": "b6b17b964abd346961d65939a12463a21ab36df4835ddafea10cc32da5af9c1b",
+    "packages/command/reservation-domain/src/lib.rs": "55111398b23004be74394a3a786873ac002db08e0a869f640804bb69bac38cc0",
+    "packages/command/reservation-domain/src/reservation.rs": "03ef611e033aa3489a51b9e62a39ba6488717ddc4f7d2d0d154550dcafc4c3cb",
+    "packages/command/reservation-domain/src/reservation/reservation_cancelled.rs": "9d18e811e5047fafa5453a6a08255403cde5d24f310e252f67658bd131b95959",
+    "packages/command/reservation-domain/src/reservation/reservation_confirmed.rs": "a7938f1df0fd5b8d58ed9a539950b964b8f98adcb5ea4313d18294f6e7d9a7f7",
+    "packages/command/reservation-domain/src/reservation/time_slot.rs": "d08dfee92192f5112b01a1a3112e23841d1ec96750c5e19d1ce960b5d9edee6c",
+    "packages/command/reservation-domain/src/reservation/reservation_id.rs": "d01847b873861b90efe57e011ef612c68ed52f85fc513c79ec83d7fdee855613",
+    "docs/ddd/aggregate-mapping.yaml": "cb80fe6f81b5bc5504a2df6b6652dcaccbceba0fb24769719987d7c92bd2a8d3",
+    "docs/ddd/domain-model.yaml": "f3c0470b091e580934fa9c15df160aa208d545e8063d16efa4623553f6241bff",
+    "docs/ddd/layer-structure.yaml": "0b8e4f4add8dc4c82712997e95d06ef3c4a7030ab8f4ddd6fc13623e915a3da6"
+  },
+  "runtime_override": "Existing local Codex profiles, replacing the template profiles; Claude fallback removed.",
+  "sandbox_verification": {
+    "pass": true,
+    "checks_passed": 44,
+    "checks_failed": 0
+  },
+  "takt_version": "0.67.0",
+  "node_version": "v24.19.0",
+  "bun_version": "1.4.2",
+  "cargo_version": "cargo 1.95.0 (f2d3ce0bd 2026-03-21)",
+  "codex_cli_version": "codex-cli 0.160.0",
+  "standalone_verification": {
+    "tests": {
+      "exit_code": 0,
+      "pass": 25,
+      "fail": 0,
+      "ignored": 0
+    },
+    "format": {
+      "exit_code": 0
+    },
+    "ddd_lint": {
+      "exit_code": 0,
+      "result": {
+        "pass": true,
+        "results": [
+          {
+            "check": "model",
+            "findings": []
+          },
+          {
+            "check": "mapping",
+            "findings": []
+          },
+          {
+            "check": "layers",
+            "findings": []
+          },
+          {
+            "check": "rust-domain",
+            "findings": [],
+            "note": "8 files outside domain; 8 non-target files skipped"
+          },
+          {
+            "check": "rust-use-case",
+            "findings": [],
+            "note": "13 files outside use-case; 13 non-target files skipped"
+          },
+          {
+            "check": "rust-interface-adapter",
+            "findings": [],
+            "note": "14 files outside interface-adapter/rmu; 14 non-target files skipped"
+          },
+          {
+            "check": "rust-module-layout",
+            "findings": [],
+            "note": "file; 3 crates"
+          }
+        ]
+      }
+    }
+  },
+  "generation_procedure": {
+    "install": [
+      "scripts/use-lang.sh",
+      "ja",
+      "<sandbox project>"
+    ],
+    "runtime_and_config": "Saved runtime.yaml and config.yaml applied to the sandbox .takt directory.",
+    "doctor": [
+      "takt",
+      "workflow",
+      "doctor",
+      "ddd-rust-default"
+    ],
+    "command": [
+      "timeout",
+      "10800",
+      "takt",
+      "--pipeline",
+      "--skip-git",
+      "-w",
+      "ddd-rust-default",
+      "-t",
+      "<contents of task.txt>"
+    ],
+    "timeout_seconds": 10800,
+    "verification": "scripts/sandbox-check.mjs verify --mode real, then standalone tests and DDD lint in the saved snapshot."
+  }
+}

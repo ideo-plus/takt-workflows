@@ -1,0 +1,36 @@
+model_ref: domain-model.yaml
+layer_structures:
+  - context_ref: bc.reservation
+    cqrs: false
+    packages:
+      - role: command
+        code: { language: typescript, package: "@acme/reservation-domain" }
+      - role: command
+        code: { language: typescript, package: "@acme/reservation-use-case" }
+      - role: command
+        code: { language: typescript, package: "@acme/reservation-interface-adapter" }
+    dependencies:
+      - code: { language: typescript, package: "@acme/reservation-domain" }
+        depends_on:
+          - { language: typescript, package: "@acme/language-extensions" }
+      - code: { language: typescript, package: "@acme/reservation-use-case" }
+        depends_on:
+          - { language: typescript, package: "@acme/reservation-domain" }
+          - { language: typescript, package: "@acme/language-extensions" }
+      - code: { language: typescript, package: "@acme/reservation-interface-adapter" }
+        depends_on:
+          - { language: typescript, package: "@acme/reservation-domain" }
+          - { language: typescript, package: "@acme/reservation-use-case" }
+    ports:
+      - name: ReservationRepository
+        kind: repository
+        verbs: [findById, store]
+    repositories:
+      - name: ReservationRepository
+        aggregate_ref: aggregate.reservation
+        io_unit: single
+        verbs: [findById, store]
+        store_semantics: upsert
+    restoration_paths:
+      - { aggregate_ref: aggregate.reservation, via: full-constructor }
+    persistence_backend: in-memory

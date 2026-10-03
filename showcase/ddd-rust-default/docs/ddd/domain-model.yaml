@@ -1,0 +1,270 @@
+{
+  "bounded_contexts": [
+    {
+      "element_id": "bc.reservation",
+      "name": "会議室予約",
+      "aggregates": [
+        {
+          "element_id": "aggregate.reservation",
+          "name": "会議室予約",
+          "bounded_context": "bc.reservation",
+          "root_element": "entity.reservation",
+          "states": [
+            "未生成",
+            "confirmed",
+            "cancelled"
+          ],
+          "elements": [
+            {
+              "element_id": "entity.reservation",
+              "kind": "entity",
+              "name": "予約",
+              "aggregate": "aggregate.reservation",
+              "attributes": [
+                {
+                  "name": "id",
+                  "type": "primitive.reservation-id",
+                  "required": true
+                },
+                {
+                  "name": "member_id",
+                  "type": "primitive.member-id",
+                  "required": true
+                },
+                {
+                  "name": "room_id",
+                  "type": "primitive.room-id",
+                  "required": true
+                },
+                {
+                  "name": "time_slot",
+                  "type": "vo.time-slot",
+                  "required": true
+                },
+                {
+                  "name": "status",
+                  "type": "string",
+                  "required": true
+                }
+              ]
+            },
+            {
+              "element_id": "primitive.reservation-id",
+              "kind": "domain-primitive",
+              "name": "ReservationId",
+              "aggregate": "aggregate.reservation",
+              "unconstrained": "値域と生成規則は要求に指定されていない",
+              "attributes": [
+                {
+                  "name": "value",
+                  "type": "integer",
+                  "required": true
+                }
+              ]
+            },
+            {
+              "element_id": "primitive.member-id",
+              "kind": "domain-primitive",
+              "name": "MemberId",
+              "aggregate": "aggregate.reservation",
+              "unconstrained": "値域と生成規則は要求に指定されていない",
+              "attributes": [
+                {
+                  "name": "value",
+                  "type": "integer",
+                  "required": true
+                }
+              ]
+            },
+            {
+              "element_id": "primitive.room-id",
+              "kind": "domain-primitive",
+              "name": "RoomId",
+              "aggregate": "aggregate.reservation",
+              "unconstrained": "値域と生成規則は要求に指定されていない",
+              "attributes": [
+                {
+                  "name": "value",
+                  "type": "integer",
+                  "required": true
+                }
+              ]
+            },
+            {
+              "element_id": "vo.time-slot",
+              "kind": "value-object",
+              "name": "予約時間枠",
+              "aggregate": "aggregate.reservation",
+              "attributes": [
+                {
+                  "name": "start",
+                  "type": "integer",
+                  "required": true
+                },
+                {
+                  "name": "end",
+                  "type": "integer",
+                  "required": true
+                }
+              ]
+            }
+          ],
+          "invariants": [
+            {
+              "element_id": "invariant.reservation.time-slot-end-after-start",
+              "name": "終了時刻の順序",
+              "aggregate": "aggregate.reservation",
+              "element": "vo.time-slot",
+              "statement": "終了時刻が開始時刻より後である"
+            },
+            {
+              "element_id": "invariant.reservation.has-valid-time-slot",
+              "name": "有効な時間枠の保持",
+              "aggregate": "aggregate.reservation",
+              "statement": "予約は検証済みの時間枠を保持する"
+            },
+            {
+              "element_id": "invariant.reservation.can-be-cancelled-once",
+              "name": "取消は一度だけ",
+              "aggregate": "aggregate.reservation",
+              "statement": "確定状態からのみ取消でき、再取消は失敗する"
+            }
+          ],
+          "commands": [
+            {
+              "element_id": "command.reservation.reserve-room",
+              "name": "会議室を予約する",
+              "aggregate": "aggregate.reservation",
+              "effect": "transition",
+              "state_effect": "transitions",
+              "transitions": [
+                "transition.reservation.reserve-room"
+              ],
+              "domain_errors": [
+                {
+                  "element_id": "error.reservation.reserve-room.already-confirmed",
+                  "name": "AlreadyConfirmed",
+                  "operation": "command.reservation.reserve-room",
+                  "condition": "予約は確定済みである"
+                },
+                {
+                  "element_id": "error.reservation.reserve-room.already-cancelled",
+                  "name": "AlreadyCancelled",
+                  "operation": "command.reservation.reserve-room",
+                  "condition": "予約は取消済みである"
+                }
+              ],
+              "event": "event.reservation.confirmed",
+              "idempotency": {
+                "strategy": "none"
+              }
+            },
+            {
+              "element_id": "command.reservation.cancel",
+              "name": "予約を取り消す",
+              "aggregate": "aggregate.reservation",
+              "effect": "transition",
+              "state_effect": "transitions",
+              "transitions": [
+                "transition.reservation.cancel"
+              ],
+              "domain_errors": [
+                {
+                  "element_id": "error.reservation.cancel.already-cancelled",
+                  "name": "AlreadyCancelled",
+                  "operation": "command.reservation.cancel",
+                  "condition": "予約は取消済みである"
+                },
+                {
+                  "element_id": "error.reservation.cancel.not-confirmed",
+                  "name": "NotConfirmed",
+                  "operation": "command.reservation.cancel",
+                  "condition": "予約は未生成の準備段階である"
+                }
+              ],
+              "event": "event.reservation.cancelled",
+              "idempotency": {
+                "strategy": "none"
+              }
+            }
+          ],
+          "events": [
+            {
+              "element_id": "event.reservation.confirmed",
+              "name": "予約が確定された",
+              "aggregate": "aggregate.reservation",
+              "produced_by": "command.reservation.reserve-room"
+            },
+            {
+              "element_id": "event.reservation.cancelled",
+              "name": "予約が取り消された",
+              "aggregate": "aggregate.reservation",
+              "produced_by": "command.reservation.cancel"
+            }
+          ],
+          "transitions": [
+            {
+              "element_id": "transition.reservation.reserve-room",
+              "name": "予約確定",
+              "aggregate": "aggregate.reservation",
+              "from_state": "未生成",
+              "to_state": "confirmed",
+              "command": "command.reservation.reserve-room"
+            },
+            {
+              "element_id": "transition.reservation.cancel",
+              "name": "予約取消",
+              "aggregate": "aggregate.reservation",
+              "from_state": "confirmed",
+              "to_state": "cancelled",
+              "command": "command.reservation.cancel"
+            }
+          ],
+          "factory_rules": [
+            {
+              "element_id": "factory.reservation.create-time-slot",
+              "name": "時間枠生成",
+              "target_element": "vo.time-slot",
+              "preconditions": [
+                "invariant.reservation.time-slot-end-after-start"
+              ],
+              "domain_errors": [
+                {
+                  "element_id": "error.reservation.create-time-slot.end-not-after-start",
+                  "name": "EndNotAfterStart",
+                  "operation": "factory.reservation.create-time-slot",
+                  "condition": "end <= start"
+                }
+              ]
+            },
+            {
+              "element_id": "factory.reservation.create",
+              "name": "予約生成",
+              "target_element": "entity.reservation",
+              "preconditions": [
+                "invariant.reservation.time-slot-end-after-start",
+                "invariant.reservation.has-valid-time-slot"
+              ],
+              "domain_errors": [
+                {
+                  "element_id": "error.reservation.create.end-not-after-start",
+                  "name": "EndNotAfterStart",
+                  "operation": "factory.reservation.create",
+                  "condition": "end <= start"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "lineage": [
+    {
+      "lineage_id": "lineage-0001",
+      "element_id": "error.reservation.reserve-room.end-not-after-start",
+      "relation": "deprecated",
+      "deprecated_at": "2026-10-04"
+    }
+  ]
+}

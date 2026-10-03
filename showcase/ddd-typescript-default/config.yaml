@@ -1,0 +1,17 @@
+language: ja
+
+# TAKT project configuration for the takt-workflows bundle.
+# scripts/use-lang.sh copies this file to <project>/.takt/config.yaml when none exists,
+# prepending `language:` for the bundle language it installs. Commit it.
+
+# A step that hits a rate limit or session cap is re-run on the next entry that differs from the
+# current provider/model and has not been tried yet, instead of failing the run.
+rate_limit_fallback:
+  switch_chain:
+    - { provider: codex,  model: gpt-5.6-sol }
+
+# The DDD workflows (ddd-rust-default, ddd-typescript-default) run ddd-lint
+# (bun .takt/tools/ddd-lint/ddd-lint.ts) as a command quality gate. TAKT refuses command gates
+# in workflows unless this is enabled.
+workflow_command_gates:
+  custom_scripts: true

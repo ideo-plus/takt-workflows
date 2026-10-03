@@ -1,0 +1,11 @@
+{
+  "name": "@acme/reservation-use-case",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "dependencies": {
+    "@acme/reservation-domain": "1.0.0",
+    "@acme/language-extensions": "1.0.0"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "name": "@acme/reservation-domain",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "dependencies": { "@acme/language-extensions": "1.0.0" }
+}

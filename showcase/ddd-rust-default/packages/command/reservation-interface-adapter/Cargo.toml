@@ -1,0 +1,8 @@
+[package]
+name = "reservation-interface-adapter"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+reservation-domain = { path = "../reservation-domain" }
+reservation-use-case = { path = "../reservation-use-case" }
