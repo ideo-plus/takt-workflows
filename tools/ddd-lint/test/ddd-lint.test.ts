@@ -225,6 +225,20 @@ describe("TypeScript", () => {
     ]);
   });
 
+  test("a repository port method that does not return Result is reported", () => {
+    const port = "packages/command/billing-use-case/src/invoice-repository.ts";
+    const result = lint(sample.files, (files) => {
+      replace(files, port, "  store(invoiceId: string, invoice: Invoice): Result<void, RepositoryError>;", "  store(invoiceId: string, invoice: Invoice): void;");
+      files[port] += "\nexport type PaymentRepository = {\n  findById(paymentId: string): Promise<string>;\n  remove: (paymentId: string) => void;\n  count: () => Result<number, RepositoryError>;\n  readonly name: string;\n};\n";
+    });
+    expect(result.unavailable).toEqual([]);
+    expect(result.findings.filter((entry) => entry.rule_id === "repository-result").map((entry) => `${entry.check}: ${entry.message}`)).toEqual([
+      "typescript-use-case: repository port method InvoiceRepository.store returns void; return Result<…, RepositoryError> so the use case sees a failed load or store",
+      "typescript-use-case: repository port method PaymentRepository.findById returns Promise<string>; return Result<…, RepositoryError> so the use case sees a failed load or store",
+      "typescript-use-case: repository port method PaymentRepository.remove returns void; return Result<…, RepositoryError> so the use case sees a failed load or store",
+    ]);
+  });
+
   test("a Domain Primitive factory that does not return Result is reported", () => {
     const result = lint(sample.files, (files) =>
       replace(files, "packages/command/billing-domain/src/customer-id.ts", "static parse(value: string): Result<CustomerId, ParseCustomerIdError>", "static parse(value: string): CustomerId"),
@@ -406,14 +420,35 @@ impl ObservesTotal for InvoiceLine {
   test("a use case type not named <Verb><Object>UseCase is reported", () => {
     const useCase = "packages/command/billing-use-case/src/issue_invoice.rs";
     const result = lint(sample.files, (files) => {
-      replace(files, useCase, "pub struct IssueInvoiceUseCase<'a> {", "pub struct IssueInvoice<'a> {");
-      replace(files, useCase, "impl<'a> IssueInvoiceUseCase<'a> {", "impl<'a> IssueInvoice<'a> {");
+      replace(files, useCase, "pub struct IssueInvoiceUseCase<'a, R: InvoiceRepository> {", "pub struct IssueInvoice<'a, R: InvoiceRepository> {");
+      replace(files, useCase, "impl<'a, R: InvoiceRepository> IssueInvoiceUseCase<'a, R> {", "impl<'a, R: InvoiceRepository> IssueInvoice<'a, R> {");
       replace(files, useCase, "        IssueInvoiceUseCase { invoice_repository }", "        IssueInvoice { invoice_repository }");
     });
     expect(result.unavailable).toEqual([]);
     expect(result.findings.filter((entry) => entry.rule_id === "use-case-name").map((entry) => `${entry.check}: ${entry.message}`)).toEqual([
       "rust-use-case: use case IssueInvoice is not named <Verb><Object>UseCase; name it IssueInvoiceUseCase",
     ]);
+  });
+
+  test("a repository port method that does not return Result is reported", () => {
+    const port = "packages/command/billing-use-case/src/invoice_repository.rs";
+    const result = lint(sample.files, (files) => {
+      replace(files, port, "    fn store(&self, invoice_id: &str, invoice: Invoice) -> Result<(), RepositoryError>;", "    fn store(&self, invoice_id: &str, invoice: Invoice);");
+      replace(files, port, "    fn find_by_id(&self, invoice_id: &str) -> Result<Option<Invoice>, RepositoryError>;", "    fn find_by_id(&self, invoice_id: &str) -> Option<Invoice>;");
+    });
+    expect(result.unavailable).toEqual([]);
+    expect(result.findings.filter((entry) => entry.rule_id === "repository-result").map((entry) => `${entry.check}: ${entry.message}`)).toEqual([
+      "rust-use-case: repository port method InvoiceRepository::find_by_id returns Option<Invoice>; return Result<…, RepositoryError> so the use case sees a failed load or store",
+      "rust-use-case: repository port method InvoiceRepository::store returns (); return Result<…, RepositoryError> so the use case sees a failed load or store",
+    ]);
+  });
+
+  test("a repository port method returning a path-qualified Result is kept", () => {
+    const port = "packages/command/billing-use-case/src/invoice_repository.rs";
+    const result = lint(sample.files, (files) =>
+      replace(files, port, "-> Result<(), RepositoryError>;", "-> std::result::Result<(), RepositoryError>;"),
+    );
+    expect(result.findings.filter((entry) => entry.rule_id === "repository-result")).toEqual([]);
   });
 
   test("an event with public fields built outside its impl is reported", () => {

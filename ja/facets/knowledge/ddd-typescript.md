@@ -372,28 +372,29 @@ export { Money } from "./money.ts";
 
 ## ユースケースとインターフェイスアダプタ
 
-リポジトリポートは `<Aggregate>Repository` という名前の `interface` で、ユースケースのパッケージに宣言し、ドメインのパッケージには宣言しない。検索は自分のエラー型を返す。
+リポジトリポートは `<Aggregate>Repository` という名前の `interface` で、ユースケースのパッケージに宣言し、ドメインのパッケージには宣言しない。読み込みと保存はプロセスの外に出るので失敗しうる。どのメソッドも `Result` を返し、失敗は `RepositoryError` で伝える。`RepositoryError` はポートの隣に宣言するインフラの失敗であり、業務上のエラーではないので、操作ごとのエラー型の規則は当てはまらない。検索は、見つからないことを失敗にせず `undefined` で返す（`Result<Invoice | undefined, RepositoryError>`）。保存は `Result<void, RepositoryError>` を返す。
 
 ```ts
 import type { Invoice } from "@acme/billing-domain";
 import type { Result } from "@acme/language-extensions";
 
-export type InvoiceNotFound = "invoice-not-found";
+export type RepositoryError = { readonly kind: "repository-error"; readonly message: string };
 
 export interface InvoiceRepository {
-  findById(invoiceId: string): Result<Invoice, InvoiceNotFound>;
-  store(invoiceId: string, invoice: Invoice): void;
+  findById(invoiceId: string): Result<Invoice | undefined, RepositoryError>;
+  store(invoiceId: string, invoice: Invoice): Result<void, RepositoryError>;
 }
 ```
 
-`execute` は ID を受け取り、集約は受け取らない。ユースケースはポートを `#` フィールドに持ち、すべての受け手に 1 つの型を明記し、集約にコマンドの実行を頼み、コマンドが返したインスタンスを保存し、永続化の後に呼び出し側が公開できるようイベントを返す。
+`execute` は ID を受け取り、集約は受け取らない。ユースケースはポートを `#` フィールドに持ち、すべての受け手に 1 つの型を明記し、集約にコマンドの実行を頼み、コマンドが返したインスタンスを保存し、永続化の後に呼び出し側が公開できるようイベントを返す。見つからなかった請求書は、ユースケースが自分のエラー（`InvoiceNotFound`）にする。保存の失敗は捨てずに返し、そのときはイベントを返さない。
 
 ```ts
 import type { Invoice, InvoiceIssued, IssueInvoiceError, IssueInvoiceOutcome } from "@acme/billing-domain";
 import type { Result } from "@acme/language-extensions";
-import type { InvoiceNotFound, InvoiceRepository } from "./invoice-repository.ts";
+import type { InvoiceRepository, RepositoryError } from "./invoice-repository.ts";
 
-export type IssueInvoiceFailure = InvoiceNotFound | IssueInvoiceError;
+export type InvoiceNotFound = "invoice-not-found";
+export type IssueInvoiceFailure = InvoiceNotFound | IssueInvoiceError | RepositoryError;
 
 export class IssueInvoiceUseCase {
   readonly #invoiceRepository: InvoiceRepository;
@@ -403,24 +404,26 @@ export class IssueInvoiceUseCase {
   }
 
   execute(invoiceId: string): Result<InvoiceIssued, IssueInvoiceFailure> {
-    const found: Result<Invoice, InvoiceNotFound> = this.#invoiceRepository.findById(invoiceId);
+    const found: Result<Invoice | undefined, RepositoryError> = this.#invoiceRepository.findById(invoiceId);
     if (!found.ok) return found;
+    if (found.value === undefined) return { ok: false, error: "invoice-not-found" };
     const invoice: Invoice = found.value;
     const issued: Result<IssueInvoiceOutcome, IssueInvoiceError> = invoice.issue();
     if (!issued.ok) return issued;
     const outcome: IssueInvoiceOutcome = issued.value;
-    this.#invoiceRepository.store(invoiceId, outcome.invoice);
+    const stored: Result<void, RepositoryError> = this.#invoiceRepository.store(invoiceId, outcome.invoice);
+    if (!stored.ok) return stored;
     return { ok: true, value: outcome.event };
   }
 }
 ```
 
-アダプタはポートを実装し、名前に保存媒体の接頭辞を付けてよい。集約は `restore`、顧客は `parse`、明細のコレクションは `of` で組み立て直す。
+アダプタはポートを実装し、名前に保存媒体の接頭辞を付けてよい。集約は `restore`、顧客は `parse`、明細のコレクションは `of` で組み立て直す。記録がなければ `undefined` を返し、保存媒体の失敗は `RepositoryError` にして返す（インメモリの実装は失敗しない）。
 
 ```ts
 import { CustomerId, Invoice, InvoiceLine, InvoiceLines, Money } from "@acme/billing-domain";
 import type { ParseCustomerIdError } from "@acme/billing-domain";
-import type { InvoiceNotFound, InvoiceRepository } from "@acme/billing-use-case";
+import type { InvoiceRepository, RepositoryError } from "@acme/billing-use-case";
 import type { Result } from "@acme/language-extensions";
 
 export type InvoiceRecord = {
@@ -439,11 +442,11 @@ export class InMemoryInvoiceRepository implements InvoiceRepository {
     this.#stored = new Map();
   }
 
-  findById(invoiceId: string): Result<Invoice, InvoiceNotFound> {
+  findById(invoiceId: string): Result<Invoice | undefined, RepositoryError> {
     const stored: Invoice | undefined = this.#stored.get(invoiceId);
     if (stored !== undefined) return { ok: true, value: stored };
     const record: InvoiceRecord | undefined = this.#records.get(invoiceId);
-    if (record === undefined) return { ok: false, error: "invoice-not-found" };
+    if (record === undefined) return { ok: true, value: undefined };
     const customer: Result<CustomerId, ParseCustomerIdError> = CustomerId.parse(record.customer);
     if (!customer.ok) throw new Error("corrupt invoice record");
     const lines: InvoiceLines = InvoiceLines.of(record.amounts.map((amount: number) => InvoiceLine.of(Money.of(amount))));
@@ -451,8 +454,9 @@ export class InMemoryInvoiceRepository implements InvoiceRepository {
     return { ok: true, value: invoice };
   }
 
-  store(invoiceId: string, invoice: Invoice): void {
+  store(invoiceId: string, invoice: Invoice): Result<void, RepositoryError> {
     this.#stored.set(invoiceId, invoice);
+    return { ok: true, value: undefined };
   }
 }
 ```

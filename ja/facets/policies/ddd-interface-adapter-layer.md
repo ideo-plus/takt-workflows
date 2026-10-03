@@ -9,6 +9,8 @@
 | リポジトリポートの名前が `<Aggregate>Repository` でない、または保存媒体（`Postgres`、`Dynamo`、`InMemory`、`Http` など）を含む | REJECT |
 | リポジトリの実装が媒体名の接頭辞を持ち、ポート名で終わる（`PostgresInvoiceRepository`） | OK |
 | 理由なく、リポジトリポートに基本の動詞 `find_by_id`、`store`、`delete_by_id`（言語の表記に合わせる）がない | REJECT |
+| リポジトリポートのメソッドが `Result` を返さない（`store` が `void` や `()` を返す） | REJECT。読み込みと保存は失敗しうるので、`Result<…, RepositoryError>` を返す。`RepositoryError` はポートの隣に宣言するインフラの失敗であり、業務上のエラーではない |
+| 検索が、見つからないことをポートの失敗として返している | REJECT。`undefined`（Rust は `None`）を成功として返し、見つからないことはユースケースが自分のエラーにする |
 | リポジトリポートが画面向けの検索を提供している | REJECT。クエリ側に置く |
 | 1 つのリポジトリが複数種類の集約を扱っている | REJECT |
 | 外部のモデルを、採用するか変換するかを明示せずにドメインの中で使っている | REJECT |

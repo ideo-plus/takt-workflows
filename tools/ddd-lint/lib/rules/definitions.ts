@@ -125,6 +125,15 @@ export const RULES: readonly RuleDefinition[] = [
     per_file: true,
   },
   {
+    rule_id: "repository-result",
+    name: "fallible-repository-port",
+    statement: "a method of a repository port does not return Result, so a failed load or store cannot reach the use case",
+    target_layers: ["use-case"],
+    requires_model: false,
+    facts: ["traits"],
+    per_file: true,
+  },
+  {
     rule_id: "i",
     name: "use-case-chaining",
     statement: "use case calls another use case",

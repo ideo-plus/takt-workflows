@@ -1,5 +1,5 @@
 /**
- * Protocol version 7 of the native extractor: the facts every Rust rule decides on.
+ * Protocol version 8 of the native extractor: the facts every Rust rule decides on.
  *
  * The launch classification is the shared one in `native/launch.ts`; this module owns the protocol
  * identity, the one batch this inspection sends, and the strict conversion of native spellings into
@@ -15,7 +15,7 @@ import { ToolUnavailableError } from "../../project/context.ts";
 import { classifyNativeExtractor, type NativeOutcome, nativeIssue } from "../native/launch.ts";
 import { NATIVE_BIN_DIR, PLATFORM_KEY } from "../native/manifest.ts";
 
-const PROTOCOL = { flag: "--domain-facts-version", version: 7 };
+const PROTOCOL = { flag: "--domain-facts-version", version: 8 };
 /** The unresolved reason the extractor gives an attribute that may replace the item it annotates. */
 const ATTRIBUTE_MACRO_REASON = "attribute-macro";
 /** The extractor refuses a larger request, so an oversized batch is refused before it is sent. */
@@ -60,10 +60,18 @@ export interface TypeFact {
   readonly line: number;
 }
 
+/** What one method of a trait declares it returns; a method that declares nothing returns `()`. */
+export interface TraitSignatureFact {
+  readonly name: string;
+  readonly return_type_text?: string;
+  readonly line: number;
+}
+
 export interface TraitFact {
   readonly name: string;
   readonly module: readonly string[];
   readonly methods: readonly string[];
+  readonly signatures: readonly TraitSignatureFact[];
   /** Where the declaration opens, which is where a finding against it sends a reader. */
   readonly line: number;
 }
@@ -295,6 +303,17 @@ function declaredTrait(value: unknown): TraitFact {
     name: nonempty(raw.name),
     module: words(raw.module),
     methods: words(raw.methods),
+    signatures: array(raw.signatures).map(traitSignature),
+    line: line(raw.line),
+  };
+}
+
+function traitSignature(value: unknown): TraitSignatureFact {
+  const raw = object(value);
+  const returnType = optional(raw.return_type_text);
+  return {
+    name: nonempty(raw.name),
+    ...(returnType === undefined ? {} : { return_type_text: returnType }),
     line: line(raw.line),
   };
 }

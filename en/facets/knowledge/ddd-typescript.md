@@ -372,28 +372,29 @@ Module paths map to the `module` segments of the aggregate mapping: `src/index.t
 
 ## Use Case and Interface Adapter
 
-The repository port is an `interface` named `<Aggregate>Repository`, declared in the use-case package and never in a domain package. Its lookup returns its own error type.
+The repository port is an `interface` named `<Aggregate>Repository`, declared in the use-case package and never in a domain package. Loading and storing reach outside the process and can fail, so every method returns `Result` and reports a failure as `RepositoryError`. `RepositoryError` is declared beside the port; it is an infrastructure failure, not a business error, so the per-operation error-type rules do not apply to it. The lookup does not treat a missing invoice as a failure and returns `undefined` (`Result<Invoice | undefined, RepositoryError>`); the store returns `Result<void, RepositoryError>`.
 
 ```ts
 import type { Invoice } from "@acme/billing-domain";
 import type { Result } from "@acme/language-extensions";
 
-export type InvoiceNotFound = "invoice-not-found";
+export type RepositoryError = { readonly kind: "repository-error"; readonly message: string };
 
 export interface InvoiceRepository {
-  findById(invoiceId: string): Result<Invoice, InvoiceNotFound>;
-  store(invoiceId: string, invoice: Invoice): void;
+  findById(invoiceId: string): Result<Invoice | undefined, RepositoryError>;
+  store(invoiceId: string, invoice: Invoice): Result<void, RepositoryError>;
 }
 ```
 
-`execute` takes an ID and never an aggregate. The use case holds the port in a `#` field, states one named type on every receiver, asks the aggregate to run the command, stores the instance the command returned, and returns the event for the caller to publish after persistence.
+`execute` takes an ID and never an aggregate. The use case holds the port in a `#` field, states one named type on every receiver, asks the aggregate to run the command, stores the instance the command returned, and returns the event for the caller to publish after persistence. The use case turns a missing invoice into its own error (`InvoiceNotFound`). It returns a failed store instead of dropping it, and then returns no event.
 
 ```ts
 import type { Invoice, InvoiceIssued, IssueInvoiceError, IssueInvoiceOutcome } from "@acme/billing-domain";
 import type { Result } from "@acme/language-extensions";
-import type { InvoiceNotFound, InvoiceRepository } from "./invoice-repository.ts";
+import type { InvoiceRepository, RepositoryError } from "./invoice-repository.ts";
 
-export type IssueInvoiceFailure = InvoiceNotFound | IssueInvoiceError;
+export type InvoiceNotFound = "invoice-not-found";
+export type IssueInvoiceFailure = InvoiceNotFound | IssueInvoiceError | RepositoryError;
 
 export class IssueInvoiceUseCase {
   readonly #invoiceRepository: InvoiceRepository;
@@ -403,24 +404,26 @@ export class IssueInvoiceUseCase {
   }
 
   execute(invoiceId: string): Result<InvoiceIssued, IssueInvoiceFailure> {
-    const found: Result<Invoice, InvoiceNotFound> = this.#invoiceRepository.findById(invoiceId);
+    const found: Result<Invoice | undefined, RepositoryError> = this.#invoiceRepository.findById(invoiceId);
     if (!found.ok) return found;
+    if (found.value === undefined) return { ok: false, error: "invoice-not-found" };
     const invoice: Invoice = found.value;
     const issued: Result<IssueInvoiceOutcome, IssueInvoiceError> = invoice.issue();
     if (!issued.ok) return issued;
     const outcome: IssueInvoiceOutcome = issued.value;
-    this.#invoiceRepository.store(invoiceId, outcome.invoice);
+    const stored: Result<void, RepositoryError> = this.#invoiceRepository.store(invoiceId, outcome.invoice);
+    if (!stored.ok) return stored;
     return { ok: true, value: outcome.event };
   }
 }
 ```
 
-The adapter implements the port, may prefix its name with the storage medium, and restores the aggregate through `restore`, the customer through `parse`, and the lines through `of`.
+The adapter implements the port, may prefix its name with the storage medium, and restores the aggregate through `restore`, the customer through `parse`, and the lines through `of`. It returns `undefined` when there is no record and reports a failure of the storage as `RepositoryError` (the in-memory implementation never fails).
 
 ```ts
 import { CustomerId, Invoice, InvoiceLine, InvoiceLines, Money } from "@acme/billing-domain";
 import type { ParseCustomerIdError } from "@acme/billing-domain";
-import type { InvoiceNotFound, InvoiceRepository } from "@acme/billing-use-case";
+import type { InvoiceRepository, RepositoryError } from "@acme/billing-use-case";
 import type { Result } from "@acme/language-extensions";
 
 export type InvoiceRecord = {
@@ -439,11 +442,11 @@ export class InMemoryInvoiceRepository implements InvoiceRepository {
     this.#stored = new Map();
   }
 
-  findById(invoiceId: string): Result<Invoice, InvoiceNotFound> {
+  findById(invoiceId: string): Result<Invoice | undefined, RepositoryError> {
     const stored: Invoice | undefined = this.#stored.get(invoiceId);
     if (stored !== undefined) return { ok: true, value: stored };
     const record: InvoiceRecord | undefined = this.#records.get(invoiceId);
-    if (record === undefined) return { ok: false, error: "invoice-not-found" };
+    if (record === undefined) return { ok: true, value: undefined };
     const customer: Result<CustomerId, ParseCustomerIdError> = CustomerId.parse(record.customer);
     if (!customer.ok) throw new Error("corrupt invoice record");
     const lines: InvoiceLines = InvoiceLines.of(record.amounts.map((amount: number) => InvoiceLine.of(Money.of(amount))));
@@ -451,8 +454,9 @@ export class InMemoryInvoiceRepository implements InvoiceRepository {
     return { ok: true, value: invoice };
   }
 
-  store(invoiceId: string, invoice: Invoice): void {
+  store(invoiceId: string, invoice: Invoice): Result<void, RepositoryError> {
     this.#stored.set(invoiceId, invoice);
+    return { ok: true, value: undefined };
   }
 }
 ```

@@ -39,7 +39,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     if std::env::args().nth(1).as_deref() == Some("--domain-facts-version") {
         println!(
             "{}",
-            json!({"extractor": "0.0.0", "syn": "3.0.5", "protocol_version": 7})
+            json!({"extractor": "0.0.0", "syn": "3.0.5", "protocol_version": 8})
         );
         return Ok(());
     }
@@ -59,7 +59,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         println!("{}", error_contract::run(value)?);
         return Ok(());
     }
-    if value.get("protocol_version").and_then(|v| v.as_u64()) == Some(7) {
+    if value.get("protocol_version").and_then(|v| v.as_u64()) == Some(8) {
         println!("{}", domain_facts::run(value)?);
         return Ok(());
     }

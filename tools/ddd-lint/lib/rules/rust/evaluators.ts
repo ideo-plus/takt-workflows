@@ -464,6 +464,32 @@ function ruleUseCaseName(target: InspectionTarget, context: InspectionContext): 
   return out;
 }
 
+// --- (repository-result) a repository port reports its failures ------------
+// Every method of a repository port (a trait named `…Repository`) returns `Result<…>`. Loading and
+// storing reach outside the process and can fail; a `store` that returns `()` leaves the use case no
+// way to see that the state it changed was never kept.
+function ruleRepositoryResult(target: InspectionTarget, context: InspectionContext): FindingInput[] {
+  if (!target.file) return [];
+  const file = target.file;
+  const out: FindingInput[] = [];
+  for (const trait of declarationsOf(context, file).traits) {
+    if (!trait.name.endsWith("Repository")) continue;
+    for (const signature of trait.signatures) {
+      const returned = signature.return_type_text?.trim();
+      if (returned !== undefined && /^(?:\w+::)*Result\s*</.test(returned)) continue;
+      out.push(
+        finding(
+          "repository-result",
+          file,
+          `repository port method ${trait.name}::${signature.name} returns ${returned ?? "()"}; return Result<…, RepositoryError> so the use case sees a failed load or store`,
+          signature.line,
+        ),
+      );
+    }
+  }
+  return out;
+}
+
 // --- (i) use case chaining --------------------------------------------------
 function ruleI(target: InspectionTarget, context: InspectionContext): FindingInput[] {
   if (!target.file) return [];
@@ -642,6 +668,7 @@ export const PER_FILE_EVALUATORS: Record<
   h: ruleH,
   i: ruleI,
   "use-case-name": ruleUseCaseName,
+  "repository-result": ruleRepositoryResult,
   l: ruleL,
   m: ruleM,
   n: ruleN,
