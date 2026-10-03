@@ -465,9 +465,10 @@ function ruleUseCaseName(target: InspectionTarget, context: InspectionContext): 
 }
 
 // --- (repository-result) a repository port reports its failures ------------
-// Every method of a repository port (a trait named `…Repository`) returns `Result<…>`. Loading and
-// storing reach outside the process and can fail; a `store` that returns `()` leaves the use case no
-// way to see that the state it changed was never kept.
+// Every method of a repository port (a trait named `…Repository`) returns `Result<…>`, spelled bare or
+// through a path (`std::result::Result<…>`, `::std::result::Result<…>`). Loading and storing reach
+// outside the process and can fail; a `store` that returns `()` leaves the use case no way to see
+// that the state it changed was never kept.
 function ruleRepositoryResult(target: InspectionTarget, context: InspectionContext): FindingInput[] {
   if (!target.file) return [];
   const file = target.file;
@@ -476,7 +477,7 @@ function ruleRepositoryResult(target: InspectionTarget, context: InspectionConte
     if (!trait.name.endsWith("Repository")) continue;
     for (const signature of trait.signatures) {
       const returned = signature.return_type_text?.trim();
-      if (returned !== undefined && /^(?:\w+::)*Result\s*</.test(returned)) continue;
+      if (returned !== undefined && /^(?:::)?(?:\w+::)*Result\s*</.test(returned)) continue;
       out.push(
         finding(
           "repository-result",

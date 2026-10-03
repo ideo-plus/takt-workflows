@@ -146,6 +146,48 @@ function statedReturn(member: MemberFact): string | undefined | null {
   return null;
 }
 
+/** `text` less the parentheses that enclose it as a whole: `(Result<…>)` states `Result<…>`. */
+function unparenthesized(text: string): string {
+  let current = text.trim();
+  while (current.startsWith("(") && current.endsWith(")")) {
+    let depth = 0;
+    for (let index = 0; index < current.length - 1; index += 1) {
+      if (current[index] === "(") depth += 1;
+      else if (current[index] === ")") depth -= 1;
+      if (depth === 0) return current;
+    }
+    current = current.slice(1, -1).trim();
+  }
+  return current;
+}
+
+/** The members of the union `text` states outside any bracket, or `text` alone. */
+function unionMembers(text: string): string[] {
+  const members: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    if (char === "(" || char === "<" || char === "{" || char === "[") depth += 1;
+    else if (char === ")" || char === "}" || char === "]" || (char === ">" && text[index - 1] !== "=")) depth -= 1;
+    else if (depth === 0 && char === "|") {
+      members.push(text.slice(start, index));
+      start = index + 1;
+    }
+  }
+  members.push(text.slice(start));
+  return members.map((member) => member.trim()).filter((member) => member.length > 0);
+}
+
+/**
+ * Whether a stated return type is `Result<…>`, or a union of nothing else. A member such as
+ * `undefined` beside it is a way to return without reporting the failure.
+ */
+function statesResult(returned: string): boolean {
+  const members = unionMembers(unparenthesized(returned));
+  return members.length > 0 && members.every((member) => /^(?:[\w$]+\.)*Result\s*</.test(unparenthesized(member)));
+}
+
 /**
  * Every method of a repository port — an interface, or a type literal alias, named `…Repository` —
  * returns `Result<…>`. Loading and storing reach outside the process and can fail, and a port whose
@@ -156,7 +198,7 @@ export function ruleRepositoryResult(inspection: TsInspection, target: TsTarget)
     if (!isPortDeclaration(declaration) || !declaration.name.endsWith("Repository")) return [];
     return declaration.members.flatMap((member): FindingInput[] => {
       const returned = statedReturn(member);
-      if (returned === null || (returned !== undefined && /^(?:[\w$]+\.)*Result\s*</.test(returned))) return [];
+      if (returned === null || (returned !== undefined && statesResult(returned))) return [];
       return [
         {
           rule_id: "repository-result",
