@@ -35,6 +35,7 @@ import { ruleL, ruleM, ruleN, ruleInMemoryRestoration, ruleEventSourcingStorage 
 import { ruleA } from "./state-hiding.ts";
 import { rulePrimitiveInitialization } from "./primitives.ts";
 import { ruleFactoryNaming } from "./factories.ts";
+import { rulePrimaryConstructor } from "./constructors.ts";
 import type { TsGate, TsInspection, TsTarget } from "./types.ts";
 import { ruleH, ruleI, ruleRepositoryResult, ruleRepositoryContract, ruleUseCaseName } from "./use-case.ts";
 
@@ -100,6 +101,7 @@ export function evaluateTypeScriptDomain(run: ProjectContext, api: CheckApi): Ch
       ...ruleOperation(inspection, target),
       ...rulePrimitiveInitialization(inspection, target),
       ...ruleFactoryNaming(inspection, target),
+      ...rulePrimaryConstructor(inspection, target),
       ...ruleCollection(inspection, target),
       ...rulePortPlacement(inspection, target),
       ...ruleC(inspection, target),

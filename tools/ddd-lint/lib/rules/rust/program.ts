@@ -21,6 +21,7 @@ export interface RustType {
   module: string[];
   kind: "struct" | "enum" | "trait";
   fields: readonly FieldFact[];
+  field_count: number;
   derives: readonly string[];
   /** The names a trait declares; empty for a struct or an enum, which declare none. */
   traitMethods: readonly string[];
@@ -178,6 +179,7 @@ export function buildProgram(sources: RustSourceInventory, facts: DomainFactSet)
           ...located([...module, ...decl.module], decl.name),
           kind: decl.kind,
           fields: decl.fields,
+          field_count: decl.field_count,
           derives: decl.derives,
           traitMethods: [],
           methods: [],
@@ -188,6 +190,7 @@ export function buildProgram(sources: RustSourceInventory, facts: DomainFactSet)
           ...located([...module, ...decl.module], decl.name),
           kind: "trait",
           fields: [],
+          field_count: 0,
           derives: [],
           traitMethods: decl.methods,
           methods: [],

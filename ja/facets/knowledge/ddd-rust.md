@@ -2,6 +2,8 @@
 
 ## 集約
 
+非公開の基本コンストラクタ new に直接初期化を集め、検証付きの補助ファクトリはそこへ委譲する。DP は of → parse → new、集約の生成と ES の復元は業務ファクトリ／restore → 補助 → new の経路を使う。
+
 ファクトリ名はモデリング知識の「ファクトリ名の選択」に従う。`from` は失敗しない変換、`try_from` は Result を返す変換とする。標準の `From`／`TryFrom` を実装するときも、不変条件の検証経路を通す。非公開の完全コンストラクタ `new` は、業務ファクトリから呼ぶ内部の組み立て経路である。
 
 集約は、非公開のフィールド、状態全体を受け取る非公開のコンストラクタ、操作固有のエラー enum を返す検証付きのファクトリ、永続化されたイベント履歴のための `restore` 関数、`&mut self` を取って状態を変え、生んだ 1 つのイベントを返すコマンドを持つ。失敗したコマンドは何も変えず、イベントも生まない。
@@ -235,6 +237,8 @@ pub enum ParseMoneyError {
 pub struct Money(i64);
 
 impl Money {
+    fn new(value: i64) -> Self { Self(value) }
+
     pub fn of(value: i64) -> Self {
         Self::parse(value).expect("Money is outside its domain")
     }
@@ -243,7 +247,7 @@ impl Money {
         if value % 100 != 0 {
             return Err(ParseMoneyError::InvalidIncrement);
         }
-        Ok(Self(value))
+        Ok(Self::new(value))
     }
 
     pub fn zero() -> Self {
@@ -269,8 +273,10 @@ pub struct InvoiceLine {
 }
 
 impl InvoiceLine {
+    fn new(amount: Money) -> Self { InvoiceLine { amount } }
+
     pub fn of(amount: Money) -> Self {
-        InvoiceLine { amount }
+        Self::new(amount)
     }
 
     pub fn with_amount<R>(&self, use_amount: impl FnOnce(&Money) -> R) -> R {
@@ -295,6 +301,8 @@ pub enum ParseCustomerIdError {
 pub struct CustomerId(String);
 
 impl CustomerId {
+    fn new(value: String) -> Self { CustomerId(value) }
+
     pub fn of(value: &str) -> Self {
         Self::parse(value).expect("CustomerId is outside its domain")
     }
@@ -304,7 +312,7 @@ impl CustomerId {
         if digits.len() != 6 || !digits.bytes().all(|byte| byte.is_ascii_digit()) {
             return Err(ParseCustomerIdError::InvalidFormat);
         }
-        Ok(CustomerId(value.to_string()))
+        Ok(Self::new(value.to_string()))
     }
 }
 ```
@@ -323,8 +331,10 @@ use crate::money::Money;
 pub struct InvoiceLines(Vec<InvoiceLine>);
 
 impl InvoiceLines {
+    fn new(lines: Vec<InvoiceLine>) -> Self { InvoiceLines(lines) }
+
     pub fn of(lines: Vec<InvoiceLine>) -> Self {
-        InvoiceLines(lines)
+        Self::new(lines)
     }
 
     pub fn add(&mut self, line: InvoiceLine) {

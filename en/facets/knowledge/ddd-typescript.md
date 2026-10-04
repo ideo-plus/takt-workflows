@@ -2,6 +2,8 @@
 
 ## Code Representations
 
+The primary path is the single private class constructor or the single companion instance factory. Auxiliary construction delegates after validation. For a DP companion, parse both validates input and assembles the state closure as its primary path.
+
 Follow "Choosing Factory Names" in the modeling knowledge. A `from` converts another type and returns a Result with an operation-owned error when fallible. Instance `valueOf()` is a JavaScript conversion hook, separate from static-factory naming checks.
 
 The project settings choose one representation for every aggregate, Entity, Domain Primitive, and value object. Both hide state at run time and build through one full constructor; they differ in how the type is written.

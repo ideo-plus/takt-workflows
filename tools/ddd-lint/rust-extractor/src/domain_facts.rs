@@ -31,7 +31,7 @@ use syn::{
 #[path = "domain_facts_tests.rs"]
 mod tests;
 
-const PROTOCOL_VERSION: u8 = 10;
+const PROTOCOL_VERSION: u8 = 11;
 
 /// The single-segment attributes the compiler itself defines, which expand to nothing and so cannot
 /// replace what they annotate. `cfg` and `cfg_attr` are left out: they are recorded under their own
@@ -810,7 +810,7 @@ impl<'a> Walk<'a> {
         };
         self.types.push(json!({
             "name": spelling(ident), "kind": kind, "module": self.module,
-            "fields": named, "derives": self.derives(attrs), "line": line(start),
+            "fields": named, "field_count": fields.len(), "derives": self.derives(attrs), "line": line(start),
         }));
     }
 

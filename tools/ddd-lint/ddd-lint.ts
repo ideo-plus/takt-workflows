@@ -146,7 +146,7 @@ async function checkRust(context: ProjectContext): Promise<CheckResult[]> {
     report_layer_diagnostics = false,
   ) => evaluateRust(context, { target_layers, includes_query_side, report_layer_diagnostics, domain_facts: extractor }, rules, api);
   return Promise.all([
-    run("rust-domain", () => gate(["domain"], false, ["a", "b", "operation", "primitive-initialization", "factory-naming", "in-place", "collection", "port-placement", "c", "d", "g", "domain-packaging"], true)),
+    run("rust-domain", () => gate(["domain"], false, ["a", "b", "operation", "primitive-initialization", "factory-naming", "primary-constructor", "in-place", "collection", "port-placement", "c", "d", "g", "domain-packaging"], true)),
     run("rust-use-case", () => gate(["use-case"], false, ["g", "h", "i", "d", "use-case-name", "repository-result", "repository-result-contract", "repository-mut-self"])),
     run("rust-interface-adapter", () => gate(["interface-adapter", "rmu"], true, ["k", "l", "m", "n", "g", "in-memory-restoration", "event-sourcing-storage"])),
     run("rust-module-layout", () => {

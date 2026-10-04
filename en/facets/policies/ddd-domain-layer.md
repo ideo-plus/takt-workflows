@@ -21,6 +21,22 @@ Judges the code of the domain layer (aggregates, Entities, value objects, Domain
 | A restore factory rejects a corrupt state by throwing | OK. A corrupt state is not a business failure |
 | A factory the mapping binds to an operation returns the bare value although the operation has declared errors | REJECT |
 
+## Primary Constructor and Auxiliary Construction Paths
+
+A stateful domain class, struct, or companion has one primary constructor that assembles all state. Auxiliary paths that construct the same type, including `of`, `parse`, `create`, `from`, and `restore`, reach that primary directly or through another auxiliary path. This follows Scala's constructor-delegation structure. [Scala specification](https://www.scala-lang.org/files/archive/spec/2.13/05-classes-and-objects.html)
+
+| Criterion | Judgment |
+|-----------|----------|
+| No primary constructor exists, or multiple definitions directly initialize state | REJECT. Keep one assembly site |
+| The primary path leaves state uninitialized | REJECT. Do not construct an empty shell and populate it later |
+| An auxiliary path bypasses the primary, or delegation to it cannot be established | REJECT. Show a call chain reaching the primary |
+| Auxiliary delegation contains a cycle | REJECT |
+| An auxiliary reaches the primary through another auxiliary | OK. Direct invocation is not required |
+| A DP calls the primary before validation or stores a changed value | REJECT. Use `of → parse → primary constructor` and construct after the input rejection guard |
+| Invalid input fails without constructing an instance | OK. A failure path need not invoke the primary |
+
+The rule concerns new instance initialization. Language-provided enum variants, stateless unit values, and standard structural copies of already valid values follow their language's construction rules.
+
 ## Factory Naming
 
 Apply these rules to static methods, associated functions, and companion factories that construct a user-defined domain type. Standard-library calls and instance `valueOf()` methods are outside this naming rule. Provide the factories the type needs; a DP always provides both `of` and `parse`.

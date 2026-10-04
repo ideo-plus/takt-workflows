@@ -2,6 +2,8 @@
 
 ## Aggregate
 
+Centralize direct initialization in one private primary constructor new. Validating auxiliary factories delegate to it. DPs follow of → parse → new; aggregate creation and ES restoration follow business factory/restore → auxiliary → new.
+
 Follow "Choosing Factory Names" in the modeling knowledge. `from` is infallible; `try_from` returns a Result. Standard `From`/`TryFrom` implementations also follow invariant validation paths. The private full constructor `new` remains the internal construction path called by business factories.
 
 An aggregate keeps private fields, a private constructor that takes the whole state, validating factories that return the operation's own error enum, a `restore` function for persisted event history, and commands that take `&mut self`, change the state, and return the one event they produce. A command that fails changes nothing and produces no event.
@@ -235,6 +237,8 @@ pub enum ParseMoneyError {
 pub struct Money(i64);
 
 impl Money {
+    fn new(value: i64) -> Self { Self(value) }
+
     pub fn of(value: i64) -> Self {
         Self::parse(value).expect("Money is outside its domain")
     }
@@ -243,7 +247,7 @@ impl Money {
         if value % 100 != 0 {
             return Err(ParseMoneyError::InvalidIncrement);
         }
-        Ok(Self(value))
+        Ok(Self::new(value))
     }
 
     pub fn zero() -> Self {
@@ -269,8 +273,10 @@ pub struct InvoiceLine {
 }
 
 impl InvoiceLine {
+    fn new(amount: Money) -> Self { InvoiceLine { amount } }
+
     pub fn of(amount: Money) -> Self {
-        InvoiceLine { amount }
+        Self::new(amount)
     }
 
     pub fn with_amount<R>(&self, use_amount: impl FnOnce(&Money) -> R) -> R {
@@ -295,6 +301,8 @@ pub enum ParseCustomerIdError {
 pub struct CustomerId(String);
 
 impl CustomerId {
+    fn new(value: String) -> Self { CustomerId(value) }
+
     pub fn of(value: &str) -> Self {
         Self::parse(value).expect("CustomerId is outside its domain")
     }
@@ -304,7 +312,7 @@ impl CustomerId {
         if digits.len() != 6 || !digits.bytes().all(|byte| byte.is_ascii_digit()) {
             return Err(ParseCustomerIdError::InvalidFormat);
         }
-        Ok(CustomerId(value.to_string()))
+        Ok(Self::new(value.to_string()))
     }
 }
 ```
@@ -323,8 +331,10 @@ use crate::money::Money;
 pub struct InvoiceLines(Vec<InvoiceLine>);
 
 impl InvoiceLines {
+    fn new(lines: Vec<InvoiceLine>) -> Self { InvoiceLines(lines) }
+
     pub fn of(lines: Vec<InvoiceLine>) -> Self {
-        InvoiceLines(lines)
+        Self::new(lines)
     }
 
     pub fn add(&mut self, line: InvoiceLine) {

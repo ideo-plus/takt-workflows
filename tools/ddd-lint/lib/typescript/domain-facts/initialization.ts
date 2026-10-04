@@ -3,6 +3,18 @@ import type ts from "typescript";
 import type { CompilerApi } from "../compiler/settings.ts";
 import type { InitializationFact, Span } from "./contract.ts";
 
+export function constructorFields(api: CompilerApi, node: ts.ConstructorDeclaration): readonly string[] | undefined {
+  if (!node.body) return undefined;
+  const fields: string[] = [];
+  for (const statement of node.body.statements) {
+    if (!api.isExpressionStatement(statement) || !api.isBinaryExpression(statement.expression)) return undefined;
+    const { left, operatorToken } = statement.expression;
+    if (operatorToken.kind !== api.SyntaxKind.EqualsToken || !api.isPropertyAccessExpression(left) || left.expression.kind !== api.SyntaxKind.ThisKeyword) return undefined;
+    fields.push(left.name.getText());
+  }
+  return fields;
+}
+
 export function constructorInputField(
   api: CompilerApi,
   node: ts.ConstructorDeclaration,
