@@ -1,6 +1,14 @@
 import { join } from "node:path";
 import { loadLayerDeclaration } from "../layer-declaration/index.ts";
 import type { ProjectContext } from "../project/context.ts";
+import type { ModelAvailability } from "./types.ts";
+
+/** Model state elements are never event stream elements, even when imported under an event alias. */
+export function isAggregateStateElement(model: ModelAvailability, aggregateRef: string, typeName: string): boolean {
+  return model.index?.elements().some((element) =>
+    element.owner === aggregateRef && ["entity", "vo", "primitive"].includes(element.kind) && element.name === typeName,
+  ) ?? false;
+}
 
 /** A stored event stream explicitly states its element type. */
 export function eventStreamElement(text: string, language: "rust" | "typescript"): string | undefined {

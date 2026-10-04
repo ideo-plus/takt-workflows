@@ -456,6 +456,14 @@ describe("sample builds", () => {
 
 describe("Event Sourcing repository contract", () => {
   for (const sample of [eventTypeScriptSample(), eventRustSample()]) {
+    test(`${sample.name} rejects primitive values as event streams`, () => {
+      const rust = sample.name.includes("rust");
+      const path = rust ? "packages/command/billing-interface-adapter/src/in_memory_invoice_repository.rs" : "packages/command/billing-interface-adapter/src/in-memory-invoice-repository.ts";
+      const aliased = lint(sample.files, (files) => {
+        replace(files, path, rust ? "use billing_domain::invoice::{Invoice, InvoiceEvent};" : 'import type { InvoiceEvent } from "@acme/billing-domain";', rust ? "use billing_domain::invoice::Invoice;\nuse billing_domain::money::Money as InvoiceEvent;" : 'import type { Money as InvoiceEvent } from "@acme/billing-domain";');
+      });
+      expect(aliased.findings.some((finding) => finding.rule_id === "event-sourcing-storage")).toBe(true);
+    });
     test(`${sample.name} keeps loadEvents outside the repository port`, () => {
       const rust = sample.name.includes("rust");
       const path = rust ? "packages/command/billing-use-case/src/invoice_repository.rs" : "packages/command/billing-use-case/src/invoice-repository.ts";

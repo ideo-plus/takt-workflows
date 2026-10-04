@@ -12,7 +12,7 @@ import { containsMediaWord, toPascal } from "../lists.ts";
 import type { DomainTypeSymbol, InspectionContext, InspectionTarget } from "../types.ts";
 import { evaluateDomainPackaging } from "./packaging.ts";
 import { rulePrimitiveInitialization } from "./primitives.ts";
-import { inMemoryAggregates, storedMapValue, eventStreamElement } from "../in-memory.ts";
+import { inMemoryAggregates, storedMapValue, eventStreamElement, isAggregateStateElement } from "../in-memory.ts";
 import { repositoryContractProblem, resultArguments, expandGenericStoreResult } from "../repository-contract.ts";
 import { within as withinSpan } from "./program.ts";
 
@@ -734,8 +734,9 @@ function inMemoryStorage(target: InspectionTarget, context: InspectionContext, r
       const element = state ? value : eventStreamElement(value, "rust");
       const type = context.program.resolveType(target.file, [...module, ...repository.module], element ?? value);
       const direct = Boolean(type && owned.some((entry) => entry.type === type.name && entry.crate.replace(/-/g, "_") === type.crate));
+      const stateElement = Boolean(type && owned.some((entry) => isAggregateStateElement(context.model, entry.aggregate_ref, type.name)));
       const domainEvent = Boolean(type && owned.some((entry) => entry.crate.replace(/-/g, "_") === type.crate));
-      if (state ? direct : element !== undefined && domainEvent && !direct) continue;
+      if (state ? direct : element !== undefined && domainEvent && !direct && !stateElement) continue;
       findings.push(finding(rule, target.file, `${repository.name}.${field.name} stores ${value}; ${state ? "its map must retain the aggregate directly" : "Event Sourcing stores event streams rather than aggregate state"}`, field.line));
     }
   }
