@@ -9,6 +9,8 @@
 
 予約ID・会員ID・会議室IDの値域は1以上の整数です。DP の `parse` は域外入力を操作固有のエラーで返し、`of` は同じ検証を通して、域外なら panic／throw します。
 
+各例は、[ファクトリの命名規約](../ja/facets/knowledge/ddd-modeling.md#ファクトリ名の選択)に従います。VO の `of` と型付き入力の `parse`、Entity の業務名による生成、ES の履歴復元を使い分けています。自前の静的／関連ファクトリを検査する `factory-naming` も含め、両言語の DDD lint を確認しています。
+
 リポジトリの読み込みは `Result<Reservation | undefined, RepositoryError>`、保存は `Result<void, RepositoryError>` を返します。Rust はそれぞれ `Option<Reservation>`、`()` を成功値にします。読み込み時に履歴から集約を復元し、保存時に集約IDとドメインイベントを受け取って追記します。インメモリでも保持するのはイベント列です。ユースケースは集約の操作と保存依頼を行います。
 
 ## 生成と直接修正の記録

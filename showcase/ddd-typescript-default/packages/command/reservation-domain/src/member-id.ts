@@ -9,13 +9,13 @@ export class MemberId {
     this.#value = value;
   }
 
-  static of(value: unknown): MemberId {
+  static of(value: number): MemberId {
     const result = MemberId.parse(value);
     if (!result.ok) throw new Error("MemberId is outside its domain");
     return result.value;
   }
 
-  static parse(value: unknown): Result<MemberId, ParseMemberIdError> {
+  static parse(value: number): Result<MemberId, ParseMemberIdError> {
     if (typeof value !== "number" || !Number.isInteger(value) || value < 1) {
       return { ok: false, error: "invalid-id" };
     }

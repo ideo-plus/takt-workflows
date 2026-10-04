@@ -216,8 +216,8 @@
   "manual_revision": {
     "basis": "Explicit user instruction: remove ReservationSnapshot directly without TAKT; unify both showcases on Event Sourcing; retain no backward compatibility.",
     "started_at": "2026-10-04T05:46:34.699206+00:00",
-    "validation_bundle_commit": "c71f32d2a46912adc2f4f76d066afdfc00ddca33",
-    "finished_at": "2026-10-04T05:55:19.412309+00:00",
+    "validation_bundle_commit": "c41914f72bbad8cb20721852890c02ca8d67662b",
+    "finished_at": "2026-10-04T07:03:40.845172+00:00",
     "versions": {
       "node": "v24.19.0",
       "bun": "1.4.2",
@@ -228,13 +228,23 @@
       "docs/ddd/domain-model.yaml",
       "docs/ddd/layer-structure.yaml",
       "packages/command/reservation-domain/src/index.ts",
+      "packages/command/reservation-domain/src/member-id.ts",
       "packages/command/reservation-domain/src/reservation.ts",
+      "packages/command/reservation-domain/src/reservation/reservation-id.ts",
+      "packages/command/reservation-domain/src/room-id.ts",
+      "packages/command/reservation-domain/tests/identifiers.test.ts",
       "packages/command/reservation-domain/tests/reservation.test.ts",
       "packages/command/reservation-interface-adapter/src/in-memory-reservation-repository.ts",
       "packages/command/reservation-use-case/src/cancel-reservation.ts",
       "packages/command/reservation-use-case/src/reservation-repository.ts",
       "tests/composition-root/cancel-reservation.test.ts"
-    ]
+    ],
+    "factory_contract_update": {
+      "basis": "User approved the corrected factory naming proposal and requested direct manual showcase updates without TAKT.",
+      "typed_primitive_input": "number",
+      "rule": "factory-naming",
+      "verified_at": "2026-10-04T07:03:40.845172+00:00"
+    }
   },
   "identifier_domain_assumption": {
     "rule": "Reservation, member, and room IDs are positive integers starting at 1.",
@@ -263,12 +273,12 @@
     "packages/command/reservation-interface-adapter/src/in-memory-reservation-repository.ts": "08d29680730d7892be6180e0032b0ae200ecdec056471399654dd355485317df",
     "packages/command/reservation-interface-adapter/src/index.ts": "2fd92afa90aa9045bc87be32c85979dd4136df48051aa4d5a56c7a55a7212594",
     "packages/command/reservation-domain/tests/reservation.test.ts": "739b8e9cd069883797b5f7897de770113577975e111435695fdd7b5844de9b9b",
-    "packages/command/reservation-domain/tests/identifiers.test.ts": "60894682927d31b71706301594d8be34ae843f6c874564fb07badf768ca36667",
+    "packages/command/reservation-domain/tests/identifiers.test.ts": "50daaaefa5c6549fd30019fe2075736ae099114950ca439c2b7b7c78f0ad0eb8",
     "packages/command/reservation-domain/src/index.ts": "c90ea3d9a3ca97ad786d10d2a28875a5cea0a16ec7e01f901361c54debf08963",
     "packages/command/reservation-domain/src/reservation.ts": "385d59f1815f4989821b1143e628d2bed4004a95ba61f48eb1f53717ee1285ca",
-    "packages/command/reservation-domain/src/member-id.ts": "ebc62922cf24802bd1cc3fd135b159a9fe445b8a03ae58ec7404be7ca1f27ac3",
-    "packages/command/reservation-domain/src/room-id.ts": "16b1c76e81651f953b01a83c1788e666b9164f8e5a79e1f7095fe7072149a68e",
-    "packages/command/reservation-domain/src/reservation/reservation-id.ts": "c3c4a24ed35053d862909e360bf558cd7439cc4e0526527d9acde849f6920e07",
+    "packages/command/reservation-domain/src/member-id.ts": "b4b5d43cd2496f98a399fe111f55c16b6a99a1c656faec511ce70ba2a36a609d",
+    "packages/command/reservation-domain/src/room-id.ts": "e7cd8c041384f3746327e2ea4f71fb6aa8864600232c907b6646a2e19f4e32b4",
+    "packages/command/reservation-domain/src/reservation/reservation-id.ts": "61faeb4019711c788970c9eabc004f9cde94d6e54705983b5ac949fa6ab596ab",
     "docs/ddd/aggregate-mapping.yaml": "e599b72f6c53c52e513fbc6ade86dc111d13f889e26a668aaec30542c4060676",
     "docs/ddd/domain-model.yaml": "5e099c6e8e44c38d36e527cae9d95ba45b875ad6a504a375577f8fc21896398f",
     "docs/ddd/layer-structure.yaml": "d3a79960be3b55fd694ec56d5e52dc9477433ef32e57a5f57fca266c11f66cc9",
@@ -291,5 +301,12 @@
       "command": "npm run typecheck"
     },
     "format": null
-  }
+  },
+  "verification_history": [
+    {
+      "artifact_commit": "c55b26d216d3db44b1e144f6b44f2b3bc38ee837",
+      "validation_bundle_commit": "c71f32d2a46912adc2f4f76d066afdfc00ddca33",
+      "verified_at": "2026-10-04T05:55:19.412309+00:00"
+    }
+  ]
 }

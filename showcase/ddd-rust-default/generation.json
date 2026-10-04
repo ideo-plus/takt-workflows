@@ -112,8 +112,8 @@
   "manual_revision": {
     "basis": "Explicit user instruction: remove ReservationSnapshot directly without TAKT; unify both showcases on Event Sourcing; retain no backward compatibility.",
     "started_at": "2026-10-04T05:46:34.820720+00:00",
-    "validation_bundle_commit": "c71f32d2a46912adc2f4f76d066afdfc00ddca33",
-    "finished_at": "2026-10-04T05:55:19.424661+00:00",
+    "validation_bundle_commit": "c41914f72bbad8cb20721852890c02ca8d67662b",
+    "finished_at": "2026-10-04T07:03:40.845172+00:00",
     "versions": {
       "node": "v24.19.0",
       "bun": "1.4.2",
@@ -137,7 +137,13 @@
       "packages/command/reservation-use-case/src/cancel_reservation.rs",
       "packages/command/reservation-use-case/src/cancel_reservation/tests.rs",
       "packages/command/reservation-use-case/src/reservation_repository.rs"
-    ]
+    ],
+    "factory_contract_update": {
+      "basis": "User approved the corrected factory naming proposal and requested direct manual showcase updates without TAKT.",
+      "typed_primitive_input": "u64",
+      "rule": "factory-naming",
+      "verified_at": "2026-10-04T07:03:40.845172+00:00"
+    }
   },
   "identifier_domain_assumption": {
     "rule": "Reservation, member, and room IDs are positive integers starting at 1.",
@@ -191,5 +197,12 @@
       "pass": true,
       "command": "cargo fmt --all -- --check"
     }
-  }
+  },
+  "verification_history": [
+    {
+      "artifact_commit": "c55b26d216d3db44b1e144f6b44f2b3bc38ee837",
+      "validation_bundle_commit": "c71f32d2a46912adc2f4f76d066afdfc00ddca33",
+      "verified_at": "2026-10-04T05:55:19.424661+00:00"
+    }
+  ]
 }
