@@ -24,6 +24,8 @@ TypeScript の ID は `number` 型の1以上の整数を受け取り、0・負�
 
 ## テストを実行する
 
+基本コンストラクタは、状態全体を受け取る唯一の `private constructor` です。DP の `of → parse → constructor`、予約の `reserve → fromReserved → constructor`、復元と取消の補助経路が同じ基本コンストラクタを呼びます。`primary-constructor` で唯一性、全フィールドの初期化、補助経路の循環と到達性を検査しています。[規約](../../ja/facets/policies/ddd-domain-layer.md#基本コンストラクタと補助の生成経路)を参照してください。
+
 このディレクトリで実行します。
 
 ```sh
@@ -36,11 +38,11 @@ npm run typecheck
 
 | 項目 | 結果 |
 |---|---|
-| 修正後の確認日時 | 2026-10-04 16:03 JST |
+| 修正後の確認日時 | 2026-10-04 16:49 JST |
 | テスト | 26件成功、失敗0件 |
 | 型検査 | npm run typecheck 成功 |
 | DDD lint | 指摘0件、判定不能0件 |
-| 検査した規約 | [c41914f](https://github.com/ideo-plus/takt-workflows/tree/c41914f72bbad8cb20721852890c02ca8d67662b) |
+| 検査した規約 | [871d0d8](https://github.com/ideo-plus/takt-workflows/tree/871d0d866516c9264f4f10dbd77126a117ae4af6) |
 
 ## 元の生成記録
 

@@ -68,6 +68,9 @@ export interface MemberFact {
   readonly initialization?: InitializationFact;
   /** The sole field to which a constructor assigns its unchanged single parameter. */
   readonly input_field?: string;
+  /** Constructor implementation and its explicit direct assignments; absent assignments are opaque. */
+  readonly has_body?: boolean;
+  readonly constructor_fields?: readonly string[];
   readonly span: Span;
 }
 

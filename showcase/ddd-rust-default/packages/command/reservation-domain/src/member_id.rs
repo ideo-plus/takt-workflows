@@ -7,6 +7,10 @@ pub enum ParseMemberIdError {
 pub struct MemberId(u64);
 
 impl MemberId {
+    fn new(value: u64) -> Self {
+        Self(value)
+    }
+
     pub fn of(value: u64) -> Self {
         Self::parse(value).expect("MemberIdは1以上の整数である必要があります")
     }
@@ -20,7 +24,7 @@ impl MemberId {
         if value < 1 {
             return Err(ParseMemberIdError::NotPositive);
         }
-        Ok(Self(value))
+        Ok(Self::new(value))
     }
 
     pub fn value(&self) -> u64 {

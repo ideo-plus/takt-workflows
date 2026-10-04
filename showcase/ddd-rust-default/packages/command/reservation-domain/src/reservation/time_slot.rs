@@ -12,11 +12,15 @@ pub struct TimeSlot {
 }
 
 impl TimeSlot {
+    fn new(start: SystemTime, end: SystemTime) -> Self {
+        Self { start, end }
+    }
+
     pub fn create(start: SystemTime, end: SystemTime) -> Result<Self, CreateTimeSlotError> {
         if end <= start {
             return Err(CreateTimeSlotError::EndNotAfterStart);
         }
-        Ok(Self { start, end })
+        Ok(Self::new(start, end))
     }
 
     pub fn start(&self) -> &SystemTime {

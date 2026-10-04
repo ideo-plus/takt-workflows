@@ -170,7 +170,7 @@ describe("Domain Primitive validated input", () => {
       expect(result.findings.some((entry) => entry.rule_id === "primitive-initialization" && entry.message.includes("of"))).toBe(true);
     });
     test(`${sample.name} rejects initializing a different value after validation`, () => {
-      const result = lint(sample.files, (files) => replace(files, path, "Ok(CustomerId(value.to_string()))", 'Ok(CustomerId("bad".to_string()))'));
+      const result = lint(sample.files, (files) => replace(files, path, "Ok(Self::new(value.to_string()))", 'Ok(Self::new("bad".to_string()))'));
       expect(result.findings.some((entry) => entry.rule_id === "primitive-initialization" && entry.message.includes("guard"))).toBe(true);
     });
   }
@@ -209,7 +209,7 @@ describe("Domain Primitive construction bypasses", () => {
       expect(result.findings.some((entry) => entry.rule_id === "primitive-initialization" && entry.message.includes("bypass"))).toBe(true);
     });
     test(`${sample.name} rejects initialization in an unchecked callback`, () => {
-      const result = lint(sample.files, (files) => replace(files, path, "        Ok(CustomerId(value.to_string()))", '        let unchecked = || CustomerId("bad".to_string());\n        Ok(CustomerId(value.to_string()))'));
+      const result = lint(sample.files, (files) => replace(files, path, "        Ok(Self::new(value.to_string()))", '        let unchecked = || CustomerId("bad".to_string());\n        Ok(Self::new(value.to_string()))'));
       expect(result.findings.some((entry) => entry.rule_id === "primitive-initialization" && entry.message.includes("bypass"))).toBe(true);
     });
     test(`${sample.name} rejects an unchecked From conversion`, () => {
@@ -437,6 +437,86 @@ describe("Rust sample aggregate mapping", () => {
         rmSync(dir, { recursive: true, force: true });
       }
     });
+});
+
+describe("primary constructor contracts", () => {
+  for (const sample of typeScriptSamples()) {
+    const file = "packages/command/billing-domain/src/money.ts";
+    if (sample.representation === "class") {
+      test(`${sample.name}: primary constructor must be private`, () => {
+        const result = lint(sample.files, (files) => replace(files, file, "private constructor", "constructor"));
+        expect(result.findings.some((entry) => entry.rule_id === "primary-constructor")).toBe(true);
+      });
+      test(`${sample.name}: primary constructor must assign all state`, () => {
+        const result = lint(sample.files, (files) => replace(files, file, "this.#value = value;", ""));
+        expect(result.findings.some((entry) => entry.rule_id === "primary-constructor")).toBe(true);
+      });
+      test(`${sample.name}: cyclic auxiliary paths are rejected`, () => {
+        const result = lint(sample.files, (files) => replace(files, file, "  static of(", "  static first(value: number): Money { return Money.second(value); }\n  static second(value: number): Money { return Money.first(value); }\n\n  static of("));
+        expect(result.findings.some((entry) => entry.rule_id === "primary-constructor" && entry.message.includes("cycle"))).toBe(true);
+      });
+      test(`${sample.name}: indirect delegation reaches the sole constructor`, () => {
+        const result = lint(sample.files, (files) => replace(files, file, "  static of(", "  static make(value: number): Money { return Money.of(value); }\n\n  static of("));
+        expect(result.findings).toEqual([]);
+      });
+      test(`${sample.name}: an opaque auxiliary constructor cannot skip delegation verification`, () => {
+        const result = lint(sample.files, (files) => replace(files, file, "  static of(", "  static build(factory: () => Money): Money { return factory(); }\n\n  static of("));
+        expect(result.findings.some((entry) => entry.rule_id === "primary-constructor" && entry.message.includes("reach"))).toBe(true);
+      });
+      test(`${sample.name}: overload declarations are not multiple implementations`, () => {
+        const result = lint(sample.files, (files) => replace(files, file, "  private constructor(value: number) {", "  private constructor(value: number);\n  private constructor(value: number) {"));
+        expect(result.findings.filter((entry) => entry.rule_id === "primary-constructor")).toEqual([]);
+      });
+    } else {
+      test(`${sample.name}: two direct initialization factories are rejected`, () => {
+        const result = lint(sample.files, (files) => {
+          const source = files[file]; const begin = source.indexOf("  parse(value:"), end = source.indexOf("  zero():", begin);
+          const duplicate = source.slice(begin, end).replace("  parse(value:", "  otherParse(value:");
+          files[file] = source.slice(0,end) + duplicate + source.slice(end);
+        });
+        expect(result.findings.some((entry) => entry.rule_id === "primary-constructor" && entry.message.includes("found 2"))).toBe(true);
+      });
+      test(`${sample.name}: constructor cycles are rejected`, () => {
+        const result = lint(sample.files, (files) => replace(files, file, "  of(value:", "  first(value: number): Money { return Money.second(value); },\n  second(value: number): Money { return Money.first(value); },\n  of(value:"));
+        expect(result.findings.some((entry) => entry.rule_id === "primary-constructor" && entry.message.includes("cycle"))).toBe(true);
+      });
+      test(`${sample.name}: indirect delegation and delayed instance operations remain valid`, () => {
+        const result = lint(sample.files, (files) => replace(files, file, "  of(value:", "  make(value: number): Money { return Money.of(value); },\n  of(value:"));
+        expect(result.findings).toEqual([]);
+      });
+    }
+  }
+  for (const sample of rustSamples()) {
+    const file = "packages/command/billing-domain/src/money.rs";
+    test(`${sample.name}: primary constructor must be private`, () => {
+      const result = lint(sample.files, (files) => replace(files, file, "fn new(value:", "pub fn new(value:"));
+      expect(result.findings.some((entry) => entry.rule_id === "primary-constructor")).toBe(true);
+    });
+    test(`${sample.name}: duplicate raw initialization definitions are rejected`, () => {
+      const result = lint(sample.files, (files) => replace(files, file, "    fn new(", "    fn other(value: i64) -> Self { Self(value) }\n\n    fn new("));
+      expect(result.findings.some((entry) => entry.rule_id === "primary-constructor" && entry.message.includes("found 2"))).toBe(true);
+    });
+    test(`${sample.name}: cyclic auxiliary paths are rejected`, () => {
+      const result = lint(sample.files, (files) => replace(files, file, "    pub fn of(", "    pub fn first(value: i64) -> Self { Self::second(value) }\n    pub fn second(value: i64) -> Self { Self::first(value) }\n\n    pub fn of("));
+      expect(result.findings.some((entry) => entry.rule_id === "primary-constructor" && entry.message.includes("cycle"))).toBe(true);
+    });
+    test(`${sample.name}: direct primary calls cannot bypass parsed invariants`, () => {
+      const result = lint(sample.files, (files) => replace(files, file, "    pub fn of(", "    pub fn unchecked(value: i64) -> Self { Self::new(value) }\n\n    pub fn of("));
+      expect(result.findings.some((entry) => entry.rule_id === "primitive-initialization" && entry.message.includes("bypass"))).toBe(true);
+    });
+    test(`${sample.name}: primary constructor preserves validated input`, () => {
+      const result = lint(sample.files, (files) => replace(files, file, "Self { Self(value) }", "Self { Self(value + 100) }"));
+      expect(result.findings.some((entry) => entry.rule_id === "primitive-initialization" && entry.message.includes("unchanged"))).toBe(true);
+    });
+    test(`${sample.name}: indirect checked auxiliary paths remain valid`, () => {
+      const result = lint(sample.files, (files) => replace(files, file, "    pub fn of(", "    pub fn make(value: i64) -> Self { Self::of(value) }\n\n    pub fn of("));
+      expect(result.findings).toEqual([]);
+    });
+    test(`${sample.name}: an opaque auxiliary constructor cannot skip delegation verification`, () => {
+      const result = lint(sample.files, (files) => replace(files, file, "    pub fn of(", "    pub fn build(factory: fn() -> Self) -> Self { factory() }\n\n    pub fn of("));
+      expect(result.findings.some((entry) => entry.rule_id === "primary-constructor" && entry.message.includes("reach"))).toBe(true);
+    });
+  }
 });
 
 describe("domain factory naming", () => {

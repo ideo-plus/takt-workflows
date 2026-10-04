@@ -71,6 +71,7 @@ struct Creations {
     guarded: bool,
     input: Option<String>,
     entries: Vec<Value>,
+    delegations: Vec<Value>,
 }
 fn creation_span(span: proc_macro2::Span) -> Value {
     let (start, end) = (span.start(), span.end());
@@ -97,8 +98,17 @@ impl<'ast> Visit<'ast> for Creations {
                 if name == "Self" || name.chars().next().is_some_and(char::is_uppercase) {
                     let same =
                         node.args.len() == 1 && same_input(&node.args[0], self.input.as_deref());
-                    self.entries.push(json!({"type_text":name,"guarded":self.guarded && same,"line":node.span().start().line,"span":creation_span(node.span())}));
+                    self.entries.push(json!({"type_text":name,"guarded":self.guarded && same,"input_unchanged":same,"line":node.span().start().line,"span":creation_span(node.span())}));
                 }
+            } else {
+                let parts: Vec<String> = path
+                    .path
+                    .segments
+                    .iter()
+                    .map(|part| part.ident.to_string())
+                    .collect();
+                let same = node.args.len() == 1 && same_input(&node.args[0], self.input.as_deref());
+                self.delegations.push(json!({"type_text":parts[..parts.len()-1].join("::"),"callee_text":parts.last(),"guarded":self.guarded && same,"input_unchanged":same,"span":creation_span(node.span())}));
             }
         }
         visit::visit_expr_call(self, node);
@@ -114,7 +124,7 @@ impl<'ast> Visit<'ast> for Creations {
         let same = node.fields.len() == 1
             && same_input(&node.fields[0].expr, self.input.as_deref())
             && node.rest.is_none();
-        self.entries.push(json!({"type_text":name,"guarded":self.guarded && same,"line":node.span().start().line,"span":creation_span(node.span())}));
+        self.entries.push(json!({"type_text":name,"guarded":self.guarded && same,"input_unchanged":same,"line":node.span().start().line,"span":creation_span(node.span())}));
         visit::visit_expr_struct(self, node);
     }
     fn visit_expr_closure(&mut self, _: &'ast syn::ExprClosure) {}
@@ -144,6 +154,7 @@ pub fn facts(method: &syn::ImplItemFn) -> Value {
         guarded: false,
         input,
         entries: Vec::new(),
+        delegations: Vec::new(),
     };
     for statement in &method.block.stmts {
         if let syn::Stmt::Local(local) = statement {
@@ -195,5 +206,5 @@ pub fn facts(method: &syn::ImplItemFn) -> Value {
             }
         }
     }
-    json!({"creations":creations.entries,"parse_delegate":delegate})
+    json!({"creations":creations.entries,"delegations":creations.delegations,"parse_delegate":delegate})
 }

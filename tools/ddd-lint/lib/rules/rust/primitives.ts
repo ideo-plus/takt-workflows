@@ -2,6 +2,7 @@ import type { FindingInput } from "../../shared/findings.ts";
 import { factoryPrimitive } from "../primitives.ts";
 import type { InspectionContext, InspectionTarget } from "../types.ts";
 import { within } from "./program.ts";
+import { primaryConstructor } from "./constructors.ts";
 
 export function rulePrimitiveInitialization(
   target: InspectionTarget,
@@ -56,10 +57,9 @@ export function rulePrimitiveInitialization(
         of?.line,
       );
     const own = (name: string): boolean => ["Self", type.name].includes(name);
-    const creations =
-      parsed?.initialization.creations.filter((entry) =>
-        own(entry.type_text),
-      ) ?? [];
+    const primaries = primaryConstructor(type, context);
+    const primary = primaries.length === 1 ? primaries[0] : undefined;
+    const creations = parsed?.initialization.delegations.filter((entry) => own(entry.type_text) && entry.callee_text === primary?.method.name) ?? [];
     if (
       !parsed ||
       parsed.receiver !== "none" ||
@@ -69,10 +69,12 @@ export function rulePrimitiveInitialization(
       creations.some((entry) => !entry.guarded)
     )
       report(
-        `${type.name}::parse must reject invalid input with an invariant guard before every direct initialization`,
+        `${type.name}::parse must reject invalid input with an invariant guard before calling its primary constructor`,
         parsed?.line,
       );
-    for (const method of methods.filter((entry) => entry.name !== "parse")) {
+    if (primary && (primary.method.params.length !== 1 || primary.method.initialization.creations.filter((entry) => own(entry.type_text)).some((entry) => !entry.input_unchanged)))
+      report(`${type.name} primary constructor must store the unchanged validated input`, primary.method.line);
+    for (const method of methods.filter((entry) => entry.name !== primary?.method.name)) {
       if (method.initialization.creations.some((entry) => own(entry.type_text)))
         report(
           `${type.name}::${method.name} bypasses the invariant guard; initialize through of or parse`,
@@ -118,17 +120,23 @@ export function rulePrimitiveInitialization(
     ];
     for (const site of raw) {
       if (
-        !creations.some(
-          (creation) =>
-            creation.guarded &&
-            within(site, creation.span) &&
-            within(creation.span, site),
-        )
+        !primary || primary.file !== target.file || !within(site, primary.method.span)
       )
         report(
           `${type.name} initialization bypasses the invariant guard; initialize through of or parse`,
           site.start_line,
         );
+    }
+    if (primary) for (const [file, data] of context.program.facts.files) {
+      const source = context.program.files.get(file);
+      if (!source) continue;
+      for (const call of data.constructions.filter((entry) => entry.kind === "associated-call" && entry.callee_text === primary.method.name)) {
+        const owner = type.methods.find((entry) => entry.file === file && within(call.span, entry.method.span));
+        const resolved = call.type_text === "Self" ? (owner ? type : undefined) : context.program.resolveType(file, source.module, call.type_text);
+        if (resolved?.key !== type.key) continue;
+        if (!owner || owner.method.name !== "parse" || !creations.some((site) => site.guarded && within(site.span, call.span) && within(call.span, site.span)))
+          findings.push({ rule_id: "primitive-initialization", file, line: call.span.start_line, message: `${type.name} primary constructor call bypasses the validated parse path` });
+      }
     }
   }
   return findings;

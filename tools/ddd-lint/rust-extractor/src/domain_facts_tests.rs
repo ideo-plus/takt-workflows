@@ -2,9 +2,39 @@ use super::*;
 
 fn check(source: &str) -> Value {
     let answer =
-        run(json!({"protocol_version":10,"files":[{"path":"lib.rs","source":source}]})).unwrap();
-    assert_eq!(answer["protocol_version"], 10);
+        run(json!({"protocol_version":11,"files":[{"path":"lib.rs","source":source}]})).unwrap();
+    assert_eq!(answer["protocol_version"], 11);
     answer["files"][0].clone()
+}
+
+#[test]
+fn domain_facts_records_state_field_counts_and_guarded_primary_calls() {
+    let answer = check("struct Id(u64); struct Empty; impl Id { fn new(value: u64) -> Self { Self(value) } fn parse(value: u64) -> Result<Self, ()> { if value == 0 { return Err(()); } Ok(Self::new(value)) } }");
+    assert_eq!(answer["types"][0]["field_count"], 1);
+    assert_eq!(answer["types"][1]["field_count"], 0);
+    let methods = answer["impls"][0]["methods"].as_array().unwrap();
+    assert_eq!(
+        methods[0]["initialization"]["creations"][0]["input_unchanged"],
+        true
+    );
+    assert_eq!(
+        methods[1]["initialization"]["delegations"][0]["callee_text"],
+        "new"
+    );
+    assert_eq!(
+        methods[1]["initialization"]["delegations"][0]["guarded"],
+        true
+    );
+}
+
+#[test]
+fn domain_facts_does_not_trust_deferred_or_changed_primary_inputs() {
+    let answer = check("struct Id(u64); impl Id { fn parse(value: u64) -> Result<Self, ()> { if value == 0 { return Err(()); } let later = || Self::new(value); Ok(Self::new(value + 1)) } }");
+    let calls = answer["impls"][0]["methods"][0]["initialization"]["delegations"]
+        .as_array()
+        .unwrap();
+    assert_eq!(calls.len(), 1);
+    assert_eq!(calls[0]["guarded"], false);
 }
 
 fn list<'a>(value: &'a Value, key: &str) -> &'a Vec<Value> {
@@ -381,14 +411,20 @@ fn domain_facts_reports_what_each_trait_method_returns() {
     assert!(list(&list(&answer, "traits")[0], "supertraits").is_empty());
     assert_eq!(signatures.len(), 3);
     assert_eq!(signatures[0]["name"], "find_by_id");
-    assert_eq!(signatures[0]["return_type_text"], "Result<Option<Invoice>, RepositoryError>");
+    assert_eq!(
+        signatures[0]["return_type_text"],
+        "Result<Option<Invoice>, RepositoryError>"
+    );
     assert_eq!(signatures[0]["line"], 2);
     assert_eq!(signatures[1]["line"], 3);
     assert_eq!(signatures[1]["name"], "store");
     assert_eq!(signatures[0]["receiver"], "ref-self");
     assert!(signatures[1]["return_type_text"].is_null());
     assert_eq!(signatures[1]["receiver"], "mut-self");
-    assert_eq!(signatures[2]["return_type_text"], "std::result::Result<u64, RepositoryError>");
+    assert_eq!(
+        signatures[2]["return_type_text"],
+        "std::result::Result<u64, RepositoryError>"
+    );
 }
 
 /// A trait reports the bounds it demands of its implementations, each as the source spells it.
@@ -396,7 +432,10 @@ fn domain_facts_reports_what_each_trait_method_returns() {
 fn domain_facts_reports_the_supertraits_of_a_trait() {
     let answer = check("pub trait InvoiceRepository: Send + Sync + std::fmt::Debug {}");
     let supertraits = list(&list(&answer, "traits")[0], "supertraits");
-    assert_eq!(supertraits, &vec![json!("Send"), json!("Sync"), json!("std::fmt::Debug")]);
+    assert_eq!(
+        supertraits,
+        &vec![json!("Send"), json!("Sync"), json!("std::fmt::Debug")]
+    );
 }
 
 /// How a method takes the value it is declared on decides whether it mutates it, so each notation
@@ -435,13 +474,22 @@ fn domain_facts_reports_text_as_the_source_writes_it() {
     let answer = check(
         "use crate::billing::{Invoice, Ledger as Book};\n#[derive(Clone, serde::Serialize)]\npub struct Batch { entries: Box<Vec<Invoice>> }\ntype Alias = Option<Invoice>;\nimpl core::fmt::Debug for Box<Batch> {}\nfn build() -> Batch { Batch { entries: crate::billing::Invoice::all() } }\n",
     );
-    assert_eq!(answer["uses"][0]["path_text"], "crate::billing::{Invoice, Ledger as Book}");
+    assert_eq!(
+        answer["uses"][0]["path_text"],
+        "crate::billing::{Invoice, Ledger as Book}"
+    );
     assert_eq!(answer["types"][0]["derives"][1], "serde::Serialize");
-    assert_eq!(answer["types"][0]["fields"][0]["type_text"], "Box<Vec<Invoice>>");
+    assert_eq!(
+        answer["types"][0]["fields"][0]["type_text"],
+        "Box<Vec<Invoice>>"
+    );
     assert_eq!(answer["aliases"][0]["type_text"], "Option<Invoice>");
     assert_eq!(answer["impls"][0]["target_type_text"], "Box<Batch>");
     assert_eq!(answer["impls"][0]["trait_text"], "core::fmt::Debug");
-    assert_eq!(answer["constructions"][1]["type_text"], "crate::billing::Invoice");
+    assert_eq!(
+        answer["constructions"][1]["type_text"],
+        "crate::billing::Invoice"
+    );
 }
 
 /// The module walk follows these declarations to the next file, so a declaration it cannot resolve
@@ -882,15 +930,27 @@ fn domain_facts_records_the_error_helper_on_an_item_without_an_error_derive() {
 fn domain_facts_marks_an_unparsed_file_instead_of_reporting_it_as_declaring_nothing() {
     let answer = check("pub struct {");
     assert_eq!(answer["parsed"], false);
-    for key in ["members", "types", "traits", "impls", "functions", "uses", "modules", "calls"] {
-        assert!(answer.get(key).is_none(), "{key} is reported for an unparsed file");
+    for key in [
+        "members",
+        "types",
+        "traits",
+        "impls",
+        "functions",
+        "uses",
+        "modules",
+        "calls",
+    ] {
+        assert!(
+            answer.get(key).is_none(),
+            "{key} is reported for an unparsed file"
+        );
     }
     assert_eq!(answer["unresolved"][0]["reason"], "syntax-error");
 }
 
 #[test]
 fn domain_facts_answers_one_record_per_requested_file_in_order() {
-    let answer = run(json!({"protocol_version":10,"files":[
+    let answer = run(json!({"protocol_version":11,"files":[
         {"path":"b.rs","source":"pub struct B(pub u64);"},
         {"path":"a.rs","source":"pub struct A(pub u64);"}]}))
     .unwrap();
@@ -904,9 +964,9 @@ fn domain_facts_answers_one_record_per_requested_file_in_order() {
 fn domain_facts_refuses_a_request_that_is_not_this_protocol() {
     for request in [
         json!({"protocol_version":6,"files":[{"path":"lib.rs","source":""}]}),
-        json!({"protocol_version":10,"files":[]}),
-        json!({"protocol_version":10,"files":[{"path":"lib.rs"}]}),
-        json!({"protocol_version":10,"files":[{"path":"lib.rs","source":"","extra":true}]}),
+        json!({"protocol_version":11,"files":[]}),
+        json!({"protocol_version":11,"files":[{"path":"lib.rs"}]}),
+        json!({"protocol_version":11,"files":[{"path":"lib.rs","source":"","extra":true}]}),
     ] {
         assert!(run(request).is_err());
     }
