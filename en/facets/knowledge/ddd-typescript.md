@@ -2,6 +2,8 @@
 
 ## Code Representations
 
+Follow "Choosing Factory Names" in the modeling knowledge. A `from` converts another type and returns a Result with an operation-owned error when fallible. Instance `valueOf()` is a JavaScript conversion hook, separate from static-factory naming checks.
+
 The project settings choose one representation for every aggregate, Entity, Domain Primitive, and value object. Both hide state at run time and build through one full constructor; they differ in how the type is written.
 
 | Condition | Meaning / options |

@@ -9,13 +9,13 @@ export class RoomId {
     this.#value = value;
   }
 
-  static of(value: unknown): RoomId {
+  static of(value: number): RoomId {
     const result = RoomId.parse(value);
     if (!result.ok) throw new Error("RoomId is outside its domain");
     return result.value;
   }
 
-  static parse(value: unknown): Result<RoomId, ParseRoomIdError> {
+  static parse(value: number): Result<RoomId, ParseRoomIdError> {
     if (typeof value !== "number" || !Number.isInteger(value) || value < 1) {
       return { ok: false, error: "invalid-id" };
     }

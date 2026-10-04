@@ -57,7 +57,7 @@ export function rulePrimitiveInitialization(
           constructor?.span.start_line,
         );
     }
-    if (operations.some((entry) => entry.method !== "parse"))
+    if (!operations.some((entry) => entry.method === "parse"))
       report(`${type.name} must map its invariant-checking factory to parse`);
     const of = methods.find((entry) => entry.name === "of");
     if (

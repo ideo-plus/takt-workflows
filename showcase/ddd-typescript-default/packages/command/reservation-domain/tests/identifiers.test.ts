@@ -17,8 +17,8 @@ type ComparableIdentifier<T> = {
 };
 
 type IdentifierFactory<T extends ComparableIdentifier<T>> = {
-  of(value: unknown): T;
-  parse(value: unknown): ParseIdentifierResult<T>;
+  of(value: number): T;
+  parse(value: number): ParseIdentifierResult<T>;
 };
 
 function verifyIdentifierContract<T extends ComparableIdentifier<T>>(
@@ -39,8 +39,9 @@ function verifyIdentifierContract<T extends ComparableIdentifier<T>>(
   });
 
   test(`${name}.parseは正の整数でない入力を拒否する`, () => {
+    // 型検査のない JavaScript 呼出元から渡る文字列も検証する。
     for (const value of [0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, "1"]) {
-      assert.deepEqual(factory.parse(value), {
+      assert.deepEqual(factory.parse(value as number), {
         ok: false,
         error: "invalid-id",
       });
@@ -48,8 +49,9 @@ function verifyIdentifierContract<T extends ComparableIdentifier<T>>(
   });
 
   test(`${name}.ofは正の整数でない値を例外で拒否する`, () => {
+    // 実行時の契約違反も確認するため、入力の型検査を意図的に迂回する。
     for (const value of [0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, "1"]) {
-      assert.throws(() => factory.of(value));
+      assert.throws(() => factory.of(value as number));
     }
   });
 }

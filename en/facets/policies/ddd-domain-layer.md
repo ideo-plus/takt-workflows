@@ -21,6 +21,20 @@ Judges the code of the domain layer (aggregates, Entities, value objects, Domain
 | A restore factory rejects a corrupt state by throwing | OK. A corrupt state is not a business failure |
 | A factory the mapping binds to an operation returns the bare value although the operation has declared errors | REJECT |
 
+## Factory Naming
+
+Apply these rules to static methods, associated functions, and companion factories that construct a user-defined domain type. Standard-library calls and instance `valueOf()` methods are outside this naming rule. Provide the factories the type needs; a DP always provides both `of` and `parse`.
+
+| Criterion | Judgment |
+|-----------|----------|
+| Entity creation is named `of` | REJECT. Use `create` or a declared business name such as `reserve` or `open` |
+| A value's `of` does not return the value itself | REJECT. Return the value; invariant violations are caller contract violations. Use `parse` for the fallible entry point |
+| `parse` does not return `Result<ConstructedType, Parse…Error>` | REJECT. Typed numeric inputs are valid; parsing is not restricted to strings |
+| `from` has no single explicitly typed source, copies the same type, or only wraps a DP's backing input | REJECT. Convert a meaningfully distinct type. Reuse or clone the same value, and pass backing input to `of`/`parse` |
+| A converted value initializes without invariant validation | REJECT. A DP conversion also goes through the checked `parse` path. Retain the mapped `parse` factory when adding conversion factories |
+| Choosing generic `create` for Entity creation or `generate` for algorithmic generation | Choose from the operation's meaning; prefer an appropriate business name |
+| A method name alone is treated as proof of caching, sharing, freshness, or a generation algorithm | REJECT. Review the contract and implementation. The naming linter checks parameters, return types, and the modeled target |
+
 ## State Changes and Events
 
 | Criterion | Judgment |

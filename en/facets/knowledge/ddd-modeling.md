@@ -393,6 +393,27 @@ An aggregate-only context with no persistence still declares its package, depend
 
 Event Sourcing declares `via: event-replay` regardless of the storage medium. Its repository keeps ordered, append-only domain events, and reconstruction calls the aggregate's declared replay methods. The memory map contains event streams, not aggregate state objects or state-storage wrappers.
 
+## Choosing Factory Names
+
+Choose the name from its purpose and declare the implementation name in the aggregate mapping's `code.method`. These are this project's conventions, adapted to each language.
+
+| Name | Meaning and use |
+|------|-----------------|
+| `of` | Construct a VO from one value or several components; not restricted to several arguments. A DP validates backing input and panics/throws on a caller contract violation |
+| `parse` | Interpret and validate input, returning a Result with an operation-owned error. Typed numeric input such as `ReservationId::parse(value: u64)` is valid |
+| `from` | Convert a meaningfully distinct type. Do not use this name for a same-type copy or only wrapping DP backing input |
+| `create` | Create an Entity or domain object; prefer a business name such as `reserve` or `open` when it expresses the operation |
+| `generate` | Generate a value through computation or an algorithm, deterministic or random. Generated DP values also pass invariant validation |
+| `valueOf` | A technical API convention for obtaining an object representing a value; caching is an implementation choice. Standardize new domain APIs on `of`/`parse` |
+| `getInstance` | Acquire the instance to use. State sharing, caching, and singleton guarantees separately in its contract |
+| `newInstance` | Construct a fresh instance. Prefer `of`/`create`/business names in the domain and review freshness in the implementation |
+
+Rust uses snake_case, including `value_of`, `get_instance`, and `new_instance`. Rust `from` is infallible; a fallible conversion uses `try_from` and Result. A fallible TypeScript `from` returns a Result with an operation-owned error. TypeScript instance `valueOf()` is a language conversion hook, separate from a static factory.
+
+The naming linter checks the structure of `of`, `parse`, `from`, and Rust `try_from`. Review caching, freshness, and algorithmic meaning. ES `restore` and declared replay methods remain dedicated history reconstruction/application paths.
+
+Primary references: [LocalDate.of](https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/time/LocalDate.html), [Integer.valueOf/parseInt](https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/lang/Integer.html), [Calendar implementation](https://github.com/openjdk/jdk/blob/jdk-25-ga/src/java.base/share/classes/java/util/Calendar.java), [UUID.randomUUID](https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/util/UUID.html), [Rust From](https://doc.rust-lang.org/std/convert/trait.From.html), and [ECMAScript valueOf](https://tc39.es/ecma262/multipage/fundamental-objects.html#sec-object.prototype.valueof). The Java three-argument date example is `LocalDate.of(year, month, day)`; the standard UUID generation example is `UUID.randomUUID()`.
+
 ## Deriving the Model
 
 The model is derived from behavior, not from data tables: stories give past-tense domain events, each event has the command and actor that produce it, events that change the same state group into an aggregate, and the aggregate's invariant explains why they belong together.

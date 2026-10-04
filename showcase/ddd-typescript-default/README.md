@@ -14,7 +14,9 @@
 | 取消ユースケース | [cancel-reservation.ts](packages/command/reservation-use-case/src/cancel-reservation.ts) |
 | イベント履歴の保存と集約復元 | [in-memory-reservation-repository.ts](packages/command/reservation-interface-adapter/src/in-memory-reservation-repository.ts) |
 
-TypeScript の ID は1以上の安全な整数を受け取り、0・負数・小数・NaN・Infinity を拒否します。 `parse` は不正入力を操作固有のエラーを持つ Result で返し、`of` は同じ検証を通して域外なら throw します。
+TypeScript の ID は `number` 型の1以上の整数を受け取り、0・負数・小数・NaN・Infinity を拒否します。`parse` は不正入力を操作固有のエラーを持つ Result で返し、`of` は同じ検証を通して域外なら throw します。JavaScript の呼び出し元から数値以外が渡る場合も実行時に検証します。
+
+ファクトリの名前は、[命名規約](../../ja/facets/knowledge/ddd-modeling.md#ファクトリ名の選択)に対応しています。DP の `of` は値を返し、`parse` は同じ数値入力を検証して Result を返します。予約集約の生成は業務名の `reserve`、ES の復元は `restore` を使います。変換が必要になったときに `from` を追加します。
 
 リポジトリは予約ごとのイベント列を追記保存し、読み込み時に再生した集約を返します。取消ユースケースは集約でコマンドを実行し、生まれたイベントの保存が成功してから結果を返します。生成イベント・取消イベントはドメイン型のまま扱います。
 
@@ -34,11 +36,11 @@ npm run typecheck
 
 | 項目 | 結果 |
 |---|---|
-| 修正後の確認日時 | 2026-10-04 14:55 JST |
+| 修正後の確認日時 | 2026-10-04 16:03 JST |
 | テスト | 26件成功、失敗0件 |
 | 型検査 | npm run typecheck 成功 |
 | DDD lint | 指摘0件、判定不能0件 |
-| 検査した規約 | [c71f32d](https://github.com/ideo-plus/takt-workflows/tree/c71f32d2a46912adc2f4f76d066afdfc00ddca33) |
+| 検査した規約 | [c41914f](https://github.com/ideo-plus/takt-workflows/tree/c41914f72bbad8cb20721852890c02ca8d67662b) |
 
 ## 元の生成記録
 
