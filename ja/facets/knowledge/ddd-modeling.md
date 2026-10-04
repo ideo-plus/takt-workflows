@@ -432,7 +432,11 @@ packages/command/billing-domain/src/
 
 ## 集約ごとの二軸
 
-このワークフローの永続化方式は Event Sourcing に統一する。State Sourcing のコード例・保存経路を混在させない。
+このワークフローの永続化方式は Event Sourcing に統一する。
+
+リポジトリの公開境界は集約である。`findById`（Rust は `find_by_id`）は履歴を内部で replay した集約を `Result<Aggregate | undefined, RepositoryError>`（Rust は `Result<Option<Aggregate>, RepositoryError>`）で返す。`store` は集約IDと今回のドメインイベントを受け取り、追記成功を `Result<void, RepositoryError>`（Rust は `Result<(), RepositoryError>`）で返す。`loadEvents` をリポジトリポートへ公開したり、ユースケースで履歴を replay したりしない。これを計画時のAPI・受入条件にも宣言する。
+
+State Sourcing のコード例・保存経路を混在させない。
 
 実行モデルと永続化は独立した選択であり、どちらも TypeScript のコード表現とは独立している。
 

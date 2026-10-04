@@ -432,7 +432,11 @@ Once the concepts grow and the root no longer shows how the domain is organized,
 
 ## Two Axes per Aggregate
 
-This workflow standardizes persistence on Event Sourcing. Keep State Sourcing examples and storage routes out of the standard knowledge.
+This workflow standardizes persistence on Event Sourcing.
+
+The repository public boundary is the aggregate. findById (Rust: find_by_id) returns a replayed aggregate as Result<Aggregate | undefined, RepositoryError> (Rust: Result<Option<Aggregate>, RepositoryError>). store receives the aggregate ID and the newly produced domain event and returns Result<void, RepositoryError> (Rust: Result<(), RepositoryError>) after appending it. Keep loadEvents and history replay inside the adapter. Declare this boundary in the plan API and acceptance conditions.
+
+ Keep State Sourcing examples and storage routes out of the standard knowledge.
 
 Execution model and persistence are independent choices, and both are independent of the TypeScript code representation.
 

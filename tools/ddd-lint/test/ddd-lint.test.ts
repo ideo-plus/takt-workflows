@@ -456,6 +456,12 @@ describe("sample builds", () => {
 
 describe("Event Sourcing repository contract", () => {
   for (const sample of [eventTypeScriptSample(), eventRustSample()]) {
+    test(`${sample.name} keeps loadEvents outside the repository port`, () => {
+      const rust = sample.name.includes("rust");
+      const path = rust ? "packages/command/billing-use-case/src/invoice_repository.rs" : "packages/command/billing-use-case/src/invoice-repository.ts";
+      const result = lint(sample.files, (files) => replace(files, path, rust ? "find_by_id" : "findById", rust ? "load_events" : "loadEvents"));
+      expect(result.findings.some((finding) => finding.rule_id === "repository-result-contract")).toBe(true);
+    });
     test(`${sample.name} returns an aggregate rather than exposing history`, () => {
       const path = sample.name.includes("typescript") ? "packages/command/billing-use-case/src/invoice-repository.ts" : "packages/command/billing-use-case/src/invoice_repository.rs";
       const result = lint(sample.files, (files) => replace(files, path, sample.name.includes("typescript") ? "Result<Invoice | undefined, RepositoryError>" : "Result<Option<Invoice>, RepositoryError>", sample.name.includes("typescript") ? "Result<readonly InvoiceEvent[] | undefined, RepositoryError>" : "Result<Option<Vec<InvoiceEvent>>, RepositoryError>"));
