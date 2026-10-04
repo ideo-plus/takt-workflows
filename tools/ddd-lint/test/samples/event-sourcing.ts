@@ -2,12 +2,17 @@
 import { classInvoice, parentModuleFile, specifiersFor, typeScriptSample, type Layout } from "./typescript.ts";
 import { RUST_INVOICE, rustParentModuleFile, rustSample, type RustLayout } from "./rust.ts";
 
+type ModelYaml = {
+  parse(text: string): unknown;
+  stringify(value: unknown): string;
+};
+
 function change(text: string, before: string, after: string): string {
   if (!text.includes(before)) throw new Error(`Missing example text: ${before}`);
   return text.replace(before, after);
 }
 
-export function eventTypeScriptSample(layout: Layout = "named-file") {
+export function eventTypeScriptSample(layout: Layout = "named-file", yaml: ModelYaml = Bun.YAML) {
   const sample = typeScriptSample("class", layout);
   const files = { ...sample.files };
   let invoice = classInvoice(specifiersFor(layout));
@@ -107,11 +112,11 @@ export class InMemoryInvoiceRepository implements InvoiceRepository {
   }
 }
 `;
-  models(files, false);
+  models(files, false, yaml);
   return { ...sample, name: `event-typescript-${layout}`, files };
 }
 
-export function eventRustSample(layout: RustLayout = "file") {
+export function eventRustSample(layout: RustLayout = "file", yaml: ModelYaml = Bun.YAML) {
   const sample = rustSample(layout);
   const files = { ...sample.files };
   let invoice = RUST_INVOICE.replaceAll('CorruptInvoiceState', 'CorruptInvoiceHistory');
@@ -236,19 +241,19 @@ impl InvoiceRepository for InMemoryInvoiceRepository {
     }
 }
 `;
-  models(files, true);
+  models(files, true, yaml);
   return { ...sample, name: `event-rust-${layout}`, files };
 }
 
-function models(files: Record<string, string>, rust: boolean) {
-  const model: any = Bun.YAML.parse(files['docs/ddd/domain-model.yaml']!);
+function models(files: Record<string, string>, rust: boolean, yaml: ModelYaml) {
+  const model: any = yaml.parse(files['docs/ddd/domain-model.yaml']!);
   const agg = model.bounded_contexts[0].aggregates[0];
   agg.events.unshift({ element_id: 'event.invoice.opened', name: 'Opened', aggregate:'aggregate.invoice',produced_by:'factory.invoice.open' });
-  files['docs/ddd/domain-model.yaml'] = Bun.YAML.stringify(model);
-  const mapping: any = Bun.YAML.parse(files['docs/ddd/aggregate-mapping.yaml']!);
+  files['docs/ddd/domain-model.yaml'] = yaml.stringify(model);
+  const mapping: any = yaml.parse(files['docs/ddd/aggregate-mapping.yaml']!);
   const mapped = mapping.aggregate_mappings[0];
   mapped.persistence_method = 'event-sourcing';
   mapped.replay_methods = ['opened','line-added','issued'].map((name) => ({event_ref:`event.invoice.${name}`,code:{method:name === 'opened' ? (rust ? 'from_opened' : 'fromOpened') : rust ? `apply_${name.replaceAll('-','_')}` : `apply${name.split('-').map(part=>part[0]!.toUpperCase()+part.slice(1)).join('')}`}}));
-  files['docs/ddd/aggregate-mapping.yaml'] = Bun.YAML.stringify(mapping);
+  files['docs/ddd/aggregate-mapping.yaml'] = yaml.stringify(mapping);
   files['docs/ddd/layer-structure.yaml'] = files['docs/ddd/layer-structure.yaml']!.replace('via: stored-instance','via: event-replay').replace('store_semantics: upsert','store_semantics: append-only');
 }
