@@ -28,6 +28,8 @@ code_representation = "class"     # または "companion"
 
 ### ドメインモデル宣言
 
+属性の `type` は、言語に依存しないスカラー `string`、`integer`、`decimal`、`boolean`、`date`、`datetime`、またはモデル要素の ID を使う。整数の識別子は `integer` とする。TypeScript の `number` や Rust の `u64` など、実装言語の型名をここに書かない。実装上の型・配置・メソッドは集約写像に宣言する。
+
 ```yaml
 bounded_contexts:
 - element_id: bc.billing

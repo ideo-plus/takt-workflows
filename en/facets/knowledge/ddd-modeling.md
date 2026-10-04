@@ -28,6 +28,8 @@ Keep only the tables of the languages listed. `file` and `named-file` are the us
 
 ### Domain model declaration
 
+An attribute's `type` is a language-independent scalar (`string`, `integer`, `decimal`, `boolean`, `date`, or `datetime`) or a model element ID. Use `integer` for integer identifiers. Do not use implementation-language types such as TypeScript `number` or Rust `u64` here; declare code types, locations, and methods in the aggregate mapping.
+
 ```yaml
 bounded_contexts:
 - element_id: bc.billing
@@ -436,7 +438,7 @@ This workflow standardizes persistence on Event Sourcing.
 
 The repository public boundary is the aggregate. findById (Rust: find_by_id) returns a replayed aggregate as Result<Aggregate | undefined, RepositoryError> (Rust: Result<Option<Aggregate>, RepositoryError>). store receives the aggregate ID and the newly produced domain event and returns Result<void, RepositoryError> (Rust: Result<(), RepositoryError>) after appending it. Keep loadEvents and history replay inside the adapter. Declare this boundary in the plan API and acceptance conditions.
 
- Keep State Sourcing examples and storage routes out of the standard knowledge.
+Keep State Sourcing examples and storage routes out of the standard knowledge.
 
 Execution model and persistence are independent choices, and both are independent of the TypeScript code representation.
 
