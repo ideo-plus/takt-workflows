@@ -8,6 +8,7 @@ import { parentModuleFile, typeScriptSample, typeScriptSamples } from "./samples
 import { loadAggregateMapping } from "../lib/aggregate-mapping/index.ts";
 import { loadDomainModelSource } from "../lib/schema/loader.ts";
 import { serializedMemoryExamples } from "./samples/serialized-memory.ts";
+import { eventRustSample, eventTypeScriptSample } from "./samples/event-sourcing.ts";
 
 const CLI = resolve(import.meta.dir, "../ddd-lint.ts");
 const scratch = mkdtempSync(join(tmpdir(), "ddd-lint-"));
@@ -280,6 +281,46 @@ fn of_rejects_an_invalid_money_increment() { Money::of(1); }
 
 describe("in-memory aggregate storage", () => {
   for (const sample of [...typeScriptSamples(), ...rustSamples()]) {
+    test(`${sample.name} rejects storing a wrapper even without restoration`, () => {
+      const result = lint(sample.files, (files) => {
+        const rust = sample.name.startsWith("rust");
+        const path = rust ? "packages/command/billing-interface-adapter/src/in_memory_invoice_repository.rs" : "packages/command/billing-interface-adapter/src/in-memory-invoice-repository.ts";
+        if (rust) {
+          replace(files, path, "HashMap<String, Invoice>", "HashMap<String, StoredInvoice>");
+          replace(files, path, "self.stored.get(invoice_id).cloned()", "self.stored.get(invoice_id).map(|stored| stored.invoice.clone())");
+          replace(files, path, "self.stored.insert(invoice_id.to_string(), invoice)", "self.stored.insert(invoice_id.to_string(), StoredInvoice { invoice })");
+          files[path] += '\nstruct StoredInvoice { invoice: Invoice }\n';
+        } else {
+          replace(files, path, "Map<string, Invoice>", "Map<string, StoredInvoice>");
+          replace(files, path, "this.#stored.get(invoiceId)", "this.#stored.get(invoiceId)?.invoice");
+          replace(files, path, "this.#stored.set(invoiceId, invoice)", "this.#stored.set(invoiceId, { invoice })");
+          files[path] += '\ntype StoredInvoice = { readonly invoice: Invoice };\n';
+        }
+      });
+      expect(result.findings.some((entry) => entry.rule_id === "in-memory-restoration" && entry.message.includes("stores StoredInvoice"))).toBe(true);
+    });
+    test(`${sample.name} keeps event streams outside the state storage rule`, () => {
+      const result = lint(sample.files, (files) => {
+        const rust = sample.name.startsWith("rust");
+        const path = rust ? "packages/command/billing-interface-adapter/src/in_memory_invoice_repository.rs" : "packages/command/billing-interface-adapter/src/in-memory-invoice-repository.ts";
+        replace(files, "docs/ddd/aggregate-mapping.yaml", "persistence_method: state-sourcing", "persistence_method: event-sourcing");
+        replace(files, "docs/ddd/layer-structure.yaml", "via: stored-instance", "via: event-replay");
+        replace(files, path, rust ? "HashMap<String, Invoice>" : "Map<string, Invoice>", rust ? "HashMap<String, Vec<InvoiceIssued>>" : "Map<string, readonly InvoiceIssued[]>");
+        files[path] = (rust ? "use billing_domain::invoice::InvoiceIssued;\n" : 'import type { InvoiceIssued } from "@acme/billing-domain";\n') + files[path];
+      });
+      expect(result.findings.filter((entry) => ["in-memory-restoration", "event-sourcing-storage", "repository-result-contract"].includes(entry.rule_id) || entry.rule_id.startsWith("layer-declaration."))).toEqual([]);
+    });
+    test(`${sample.name} rejects aggregate state storage declared as Event Sourcing`, () => {
+      const result = lint(sample.files, (files) => {
+        replace(files, "docs/ddd/aggregate-mapping.yaml", "persistence_method: state-sourcing", "persistence_method: event-sourcing");
+        replace(files, "docs/ddd/layer-structure.yaml", "via: stored-instance", "via: event-replay");
+      });
+      expect(result.findings.some((entry) => entry.rule_id === "event-sourcing-storage")).toBe(true);
+    });
+    test(`${sample.name} requires event replay for Event Sourcing`, () => {
+      const result = lint(sample.files, (files) => replace(files, "docs/ddd/aggregate-mapping.yaml", "persistence_method: state-sourcing", "persistence_method: event-sourcing"));
+      expect(result.findings.some((entry) => entry.rule_id === "layer-declaration.restoration-path" && entry.message.includes("event-replay"))).toBe(true);
+    });
     test(`${sample.name} rejects the former in-memory restoration declaration`, () => {
       const result = lint(sample.files, (files) =>
         replace(files, "docs/ddd/layer-structure.yaml", "via: stored-instance", "via: full-constructor"),
@@ -305,6 +346,12 @@ describe("in-memory aggregate storage", () => {
       expect(result.findings.filter((entry) => entry.rule_id === "in-memory-restoration")).toEqual([]);
     });
   }
+});
+
+for (const sample of typeScriptSamples()) test(`${sample.name} rejects a wrapper in explicit Map initializer arguments`, () => {
+  const path = "packages/command/billing-interface-adapter/src/in-memory-invoice-repository.ts";
+  const result = lint(sample.files, (files) => replace(files, path, "readonly #stored: Map<string, Invoice>;", "readonly #stored = new Map<string, StoredInvoice>();"));
+  expect(result.findings.some((entry) => entry.rule_id === "in-memory-restoration" && entry.message.includes("stores StoredInvoice"))).toBe(true);
 });
 
 describe("repository Result contracts", () => {
@@ -393,10 +440,100 @@ describe("Rust sample aggregate mapping", () => {
 });
 
 describe("sample builds", () => {
+  for (const layout of ["named-file", "index-file"] as const) {
+    test(`Event Sourcing TypeScript ${layout} passes lint`, () => expect(lint(eventTypeScriptSample(layout).files).findings).toEqual([]));
+    test(`Event Sourcing TypeScript ${layout} builds`, () => expect(buildTypeScriptSample(eventTypeScriptSample(layout).files)).toBe(0));
+  }
+  for (const layout of ["file", "mod-rs"] as const) {
+    test(`Event Sourcing Rust ${layout} passes lint`, () => expect(lint(eventRustSample(layout).files).findings).toEqual([]));
+    test(`Event Sourcing Rust ${layout} builds`, () => expect(buildRustSample(eventRustSample(layout).files)).toBe(0));
+  }
   for (const sample of typeScriptSamples())
     test(`${sample.name} builds with TypeScript`, () => expect(buildTypeScriptSample(sample.files)).toBe(0));
   for (const sample of rustSamples())
     test(`${sample.name} builds with Cargo`, () => expect(buildRustSample(sample.files)).toBe(0));
+});
+
+describe("Event Sourcing repository contract", () => {
+  for (const sample of [eventTypeScriptSample(), eventRustSample()]) {
+    test(`${sample.name} rejects primitive values as event streams`, () => {
+      const rust = sample.name.includes("rust");
+      const path = rust ? "packages/command/billing-interface-adapter/src/in_memory_invoice_repository.rs" : "packages/command/billing-interface-adapter/src/in-memory-invoice-repository.ts";
+      const aliased = lint(sample.files, (files) => {
+        replace(files, path, rust ? "use billing_domain::invoice::{Invoice, InvoiceEvent};" : 'import type { InvoiceEvent } from "@acme/billing-domain";', rust ? "use billing_domain::invoice::Invoice;\nuse billing_domain::money::Money as InvoiceEvent;" : 'import type { Money as InvoiceEvent } from "@acme/billing-domain";');
+      });
+      expect(aliased.findings.some((finding) => finding.rule_id === "event-sourcing-storage")).toBe(true);
+    });
+    test(`${sample.name} keeps loadEvents outside the repository port`, () => {
+      const rust = sample.name.includes("rust");
+      const path = rust ? "packages/command/billing-use-case/src/invoice_repository.rs" : "packages/command/billing-use-case/src/invoice-repository.ts";
+      const result = lint(sample.files, (files) => replace(files, path, rust ? "find_by_id" : "findById", rust ? "load_events" : "loadEvents"));
+      expect(result.findings.some((finding) => finding.rule_id === "repository-result-contract")).toBe(true);
+    });
+    test(`${sample.name} returns an aggregate rather than exposing history`, () => {
+      const path = sample.name.includes("typescript") ? "packages/command/billing-use-case/src/invoice-repository.ts" : "packages/command/billing-use-case/src/invoice_repository.rs";
+      const result = lint(sample.files, (files) => replace(files, path, sample.name.includes("typescript") ? "Result<Invoice | undefined, RepositoryError>" : "Result<Option<Invoice>, RepositoryError>", sample.name.includes("typescript") ? "Result<readonly InvoiceEvent[] | undefined, RepositoryError>" : "Result<Option<Vec<InvoiceEvent>>, RepositoryError>"));
+      expect(result.findings.some((finding) => finding.rule_id === "repository-result-contract")).toBe(true);
+    });
+    test(`${sample.name} rejects a creation event attributed to a primitive parser`, () => {
+      const result = lint(sample.files, (files) => replace(files, "docs/ddd/domain-model.yaml", "produced_by: factory.invoice.open", "produced_by: factory.invoice.parse-money"));
+      expect(result.findings.some((finding) => finding.rule_id === "schema.creation-event-producer")).toBe(true);
+    });
+  }
+  test("TypeScript retains event history and replays it inside the repository", () => {
+    const dir = writeProject(eventTypeScriptSample().files, "ddd-es-runtime-");
+    try {
+      const scope = join(dir,"node_modules/@acme"); mkdirSync(scope,{recursive:true});
+      for(const [name,relative] of [["language-extensions","packages/infrastructure/language-extensions"],["billing-domain","packages/command/billing-domain"],["billing-use-case","packages/command/billing-use-case"],["billing-interface-adapter","packages/command/billing-interface-adapter"]]) symlinkSync(join(dir,relative!),join(scope,name!),"dir");
+      const code = `import assert from 'node:assert/strict';
+import {Invoice,CustomerId,InvoiceLine,InvoiceLines,Money} from '@acme/billing-domain';
+import {IssueInvoiceUseCase} from '@acme/billing-use-case';
+import {InMemoryInvoiceRepository} from '@acme/billing-interface-adapter';
+const initial=Invoice.open('i1',CustomerId.of('C000001'),InvoiceLines.of([InvoiceLine.of(Money.of(100))]));
+assert.equal(initial.ok,true); if(!initial.ok)throw Error('open');
+const repository=new InMemoryInvoiceRepository();
+assert.deepEqual(repository.findById('missing'),{ok:true,value:undefined});
+assert.equal(repository.store('i1',initial.value.openedEvent()).ok,true);
+const loaded=repository.findById('i1'); assert.equal(loaded.ok,true); if(!loaded.ok||!loaded.value)throw Error('load');
+assert.notStrictEqual(loaded.value,initial.value);
+const added=loaded.value.addLine('c1',InvoiceLine.of(Money.of(100))); if(!added.ok||added.value.kind!=='applied')throw Error('add');
+assert.equal(repository.findById('i1').value.lines().length,1);
+assert.equal(repository.store('i1',added.value.event).ok,true);
+assert.equal(repository.findById('i1').value.lines().length,2);
+assert.equal(repository.findById('i1').value.addLine('c1',InvoiceLine.of(Money.of(100))).value.kind,'duplicate');
+assert.equal(new IssueInvoiceUseCase(repository).execute('i1').ok,true);
+assert.equal(new IssueInvoiceUseCase(repository).execute('i1').ok,false);
+assert.equal(repository.findById('i1').value.lines().length,2);
+assert.equal(repository.store('wrong',initial.value.openedEvent()).ok,false);
+assert.throws(()=>Invoice.restore('i1',[initial.value.openedEvent(),initial.value.openedEvent()]));`;
+      const result=spawnSync("bun",["-e",code],{cwd:dir,encoding:"utf8"});
+      if(result.status!==0)throw Error(result.stderr+result.stdout); expect(result.status).toBe(0);
+    } finally {rmSync(dir,{recursive:true,force:true});}
+  });
+  test("Rust retains events while mutation of a loaded aggregate stays local", () => {
+    const dir=writeProject(eventRustSample().files,"ddd-es-rust-runtime-");
+    try {
+      const path=join(dir,"packages/command/billing-interface-adapter/tests/history.rs");mkdirSync(dirname(path),{recursive:true});
+      writeFileSync(path,`use billing_domain::{customer_id::CustomerId,invoice::{Invoice,InvoiceEvent,line::InvoiceLine,lines::InvoiceLines},money::Money};
+use billing_use_case::{invoice_repository::InvoiceRepository,issue_invoice::IssueInvoiceUseCase};
+use billing_interface_adapter::in_memory_invoice_repository::InMemoryInvoiceRepository;
+#[test] fn history_replays_and_only_persisted_events_change_loaded_state() {
+ let initial=Invoice::open("i1",CustomerId::of("C000001"),InvoiceLines::of(vec![InvoiceLine::of(Money::of(100))])).unwrap();
+ let mut repository=InMemoryInvoiceRepository::new();
+ assert!(repository.find_by_id("missing").unwrap().is_none());
+ repository.store("i1",InvoiceEvent::Opened(initial.opened_event())).unwrap();
+ let mut loaded=repository.find_by_id("i1").unwrap().unwrap();
+ let issued=loaded.issue().unwrap();
+ assert!(repository.find_by_id("i1").unwrap().unwrap().issue().is_ok());
+ repository.store("i1",InvoiceEvent::Issued(issued)).unwrap();
+ assert!(IssueInvoiceUseCase::new(&mut repository).execute("i1").is_err());
+ assert_eq!(repository.find_by_id("i1").unwrap().unwrap().lines().to_vec().len(),1);
+ assert!(repository.store("wrong",InvoiceEvent::Opened(initial.opened_event())).is_err());
+ assert!(Invoice::restore("i1",&[InvoiceEvent::Opened(initial.opened_event()),InvoiceEvent::Opened(initial.opened_event())]).is_err());
+}`);
+      const result=spawnSync("cargo",["test","--workspace"],{cwd:dir,encoding:"utf8"});if(result.status!==0)throw Error(result.stderr+result.stdout);expect(result.status).toBe(0);
+    } finally {rmSync(dir,{recursive:true,force:true});}
+  });
 });
 
 describe("TypeScript", () => {
@@ -967,11 +1104,9 @@ describe("knowledge examples are the samples", () => {
   for (const lang of ["en", "ja"]) {
     test(`${lang} ddd-typescript`, () => {
       const examples = blocks(`${lang}/facets/knowledge/ddd-typescript.md`);
-      const classSample = typeScriptSample("class", "named-file").files;
-      const companionSample = typeScriptSample("companion", "named-file").files;
+      const classSample = eventTypeScriptSample("named-file").files;
       expect(examples).toContain(classSample[parentModuleFile("named-file")]);
-      expect(examples).toContain(companionSample[parentModuleFile("named-file")]);
-      expect(examples).toContain(typeScriptSample("class", "index-file").files["packages/command/billing-domain/src/index.ts"]);
+      expect(examples).toContain(eventTypeScriptSample("index-file").files["packages/command/billing-domain/src/index.ts"]);
       for (const path of [
         "packages/command/billing-domain/src/customer-id.ts",
         "packages/command/billing-domain/src/invoice/line.ts",
@@ -986,7 +1121,7 @@ describe("knowledge examples are the samples", () => {
     });
     test(`${lang} ddd-rust`, () => {
       const examples = blocks(`${lang}/facets/knowledge/ddd-rust.md`);
-      const files = rustSample("file").files;
+      const files = eventRustSample("file").files;
       expect(examples).toContain(files[rustParentModuleFile("file")]);
       for (const path of ["customer_id.rs", "invoice/line.rs", "invoice/lines.rs", "money.rs"])
         expect(examples).toContain(files[`packages/command/billing-domain/src/${path}`]);
@@ -995,7 +1130,7 @@ describe("knowledge examples are the samples", () => {
       const [model, mapping, layers] = [...readFileSync(resolve(import.meta.dir, "../../..", `${lang}/facets/knowledge/ddd-modeling.md`), "utf8").matchAll(/```yaml\n([\s\S]*?)```/g)].map(
         (match) => match[1],
       );
-      const result = lint(typeScriptSample("class", "named-file").files, (files) => {
+      const result = lint(eventTypeScriptSample("named-file").files, (files) => {
         files["docs/ddd/domain-model.yaml"] = model ?? "";
         files["docs/ddd/aggregate-mapping.yaml"] = mapping ?? "";
         files["docs/ddd/layer-structure.yaml"] = layers ?? "";

@@ -1,27 +1,32 @@
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TimeSlot {
-    start: i64,
-    end: i64,
-}
+use std::time::SystemTime;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum TimeSlotError {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CreateTimeSlotError {
     EndNotAfterStart,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TimeSlot {
+    start: SystemTime,
+    end: SystemTime,
+}
+
 impl TimeSlot {
-    pub fn new(start: i64, end: i64) -> Result<Self, TimeSlotError> {
+    pub fn create(start: SystemTime, end: SystemTime) -> Result<Self, CreateTimeSlotError> {
         if end <= start {
-            return Err(TimeSlotError::EndNotAfterStart);
+            return Err(CreateTimeSlotError::EndNotAfterStart);
         }
         Ok(Self { start, end })
     }
 
-    pub fn start(&self) -> i64 {
-        self.start
+    pub fn start(&self) -> &SystemTime {
+        &self.start
     }
 
-    pub fn end(&self) -> i64 {
-        self.end
+    pub fn end(&self) -> &SystemTime {
+        &self.end
     }
 }
+
+#[cfg(test)]
+mod tests;

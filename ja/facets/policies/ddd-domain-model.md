@@ -1,5 +1,7 @@
 # DDD ドメインモデルポリシー
 
+集約の生成イベントは、同じ集約のルートを完全に初期化するファクトリを `produced_by` に宣言する。DP のパーサーや別集約のファクトリを生成イベントの発生元にしない。
+
 `docs/ddd/` の宣言（ドメインモデル、集約写像、層構造）に何を書くかと、宣言とコードの順序を定める。コードが宣言と一致するかはドメイン層ポリシーが判定する。
 
 ## ドメインモデル（`docs/ddd/domain-model.yaml`）
@@ -15,7 +17,7 @@
 | `retention: last-one` のコマンドに、古いコマンドが新しいコマンドの後に再送されない理由（`C1 → C2 → C1 の再送`）を書いた `rationale` がない | REJECT。再送され得るなら `multiple` か `time-window` を選ぶ |
 | Domain Primitive が基本データ型より狭いドメインの不変条件と、その全条件を `preconditions` に含める `parse` ファクトリ規則を持たない | REJECT。DP は不変条件に基づいて初期化する。基本型の値域だけで足りる場合は DP を作らない |
 | 要素の属性が、他の集約の要素を ID ではなく型として持っている | REJECT。他の集約は ID で参照する |
-| 要素 ID を改名した、廃止後に再利用した、または `<kind>.<segments>` の形式に従っていない | REJECT。改名は `name` だけを変える |
+| 受理済みモデルの要素 ID を改名した、廃止後に再利用した、または `<kind>.<segments>` の形式に従っていない | REJECT。業務上の改名は `name` だけを変える。未受理の計画や今回の生成物の不正な ID は、全参照とともに正しい形式へ訂正し、旧 ID の互換経路を残さない |
 | 分割・統合・廃止が `lineage` に記録されていない | REJECT |
 | モデルがモジュール、パッケージ、ポート、リポジトリ、ユースケースの手順を決めている | REJECT。集約写像と層構造に書く |
 
@@ -24,7 +26,7 @@
 | 基準 | 判定 |
 |------|------|
 | モデルの集約に写像の行がない | REJECT |
-| 集約が `programming_model`（`actor` か `class`）と `persistence_method`（`state-sourcing` か `event-sourcing`）を宣言していない | REJECT |
+| 集約が `programming_model`（`actor` か `class`）と `persistence_method`（このワークフローでは `event-sourcing`）を宣言していない | REJECT |
 | コマンドやファクトリ規則にメソッドとエラー型がない、コマンドに `success_type` がない、またはドメインエラーに case がない | REJECT |
 | イベントソーシングの集約が、イベントを適用するメソッドを `replay_methods` に宣言していない | REJECT |
 | ドメインのコードを置くパッケージやモジュール、またはその親の階層が `domain_packages` にない | REJECT |

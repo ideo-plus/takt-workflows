@@ -3,9 +3,10 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "exports": { ".": "./src/index.ts" },
+  "exports": "./src/index.ts",
   "dependencies": {
     "@acme/reservation-domain": "1.0.0",
-    "@acme/reservation-use-case": "1.0.0"
+    "@acme/reservation-use-case": "1.0.0",
+    "@acme/language-extensions": "1.0.0"
   }
 }

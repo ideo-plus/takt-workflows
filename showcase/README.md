@@ -1,20 +1,22 @@
-# ワークフローが生成したコード
+# DDD ワークフローのコード例
 
-会議室の予約を題材に、DDD ワークフローを実プロバイダで動かして得たコードです。集約、予約を取り消すユースケース、保存と復元のポート、インメモリのアダプタを含みます。
+会議室の予約を題材にした Rust・TypeScript の実装例です。実プロバイダで生成したコードを、ユーザーの指示に従って直接修正し、両方を Event Sourcing に統一しています。
 
-| ワークフロー | 生成コード・条件・検証結果 | テストの実行 |
+| 言語 | コード・条件・検証結果 | テストの実行 |
 |---|---|---|
-| `ddd-typescript-default` | [TypeScript 版](ddd-typescript-default/README.md) | 対象ディレクトリで `node --test` |
-| `ddd-rust-default` | [Rust 版](ddd-rust-default/README.md) | 対象ディレクトリで `cargo test` |
+| TypeScript | [TypeScript 版](ddd-typescript-default/README.md) | 対象ディレクトリで `node --test` |
+| Rust | [Rust 版](ddd-rust-default/README.md) | 対象ディレクトリで `cargo test` |
 
-タスク文には業務要件とパッケージの配置だけを指定しました。DDD の規約はワークフローの facet が与えています。請求書を題材にしたナレッジのコード例とは、別の題材です。
+予約ID・会員ID・会議室IDの値域は1以上の整数です。DP の `parse` は域外入力を操作固有のエラーで返し、`of` は同じ検証を通して、域外なら panic／throw します。
 
-## 生成時点のコードを保存する
+リポジトリの読み込みは `Result<Reservation | undefined, RepositoryError>`、保存は `Result<void, RepositoryError>` を返します。Rust はそれぞれ `Option<Reservation>`、`()` を成功値にします。読み込み時に履歴から集約を復元し、保存時に集約IDとドメインイベントを受け取って追記します。インメモリでも保持するのはイベント列です。ユースケースは集約の操作と保存依頼を行います。
 
-各版に、与えたタスク文、生成に使ったバンドルのコミット、モデル設定、実行日、所要時間、検証結果を記録しています。今回は Codex のプロファイルで実行したため、リポジトリの `runtime.project.yaml` のモデル設定とは異なります。実行した設定は各版の `runtime.yaml` を参照してください。
+## 生成と直接修正の記録
 
-生成時は `scripts/use-lang.sh ja` でサンドボックスへバンドルを導入し、保存したモデル設定を適用して `takt workflow doctor` で確認しました。TAKT 0.67.0 の `takt --pipeline --skip-git -w <ワークフロー> -t <task.txt の内容>` を、TypeScript、Rust の順に1本ずつ実行しています。各実行の上限は10,800秒です。終了後は `scripts/sandbox-check.mjs verify --mode real` で経路・モデル割当・テスト・DDD 検査を確認し、保存先でもテストと DDD 検査を実行しました。
+元の生成は TAKT 0.67.0 と Codex のプロファイルで TypeScript、Rust の順に実行しました。元の業務要件・パッケージ配置は各版の `task.txt`、設定は `runtime.yaml` と `config.yaml` に保存しています。
 
-生成コードはスナップショットとして保存します。規約を更新するたびに書き換えず、大きな変更があったときに再生成します。CI はこのディレクトリに現行の ddd-lint をかけません。生成時の ddd-lint の結果は各版の README に記録しています。
+今回は、保存用の余分な型を廃止して両言語を ES に統一する指示を受け、生成済みコードを直接編集しました。集約・ポート・保存実装・宣言・テストを更新し、後方互換の別名や保存経路を削除しています。
 
-インストーラは `en/` または `ja/` のバンドルと ddd-lint を導入します。showcase は利用者のプロジェクトにコピーされません。
+`generation.json` の `original_generation` に元の生成記録、`manual_revision` と `standalone_verification` に直接修正と検証結果、`current_source_file_sha256` に現在のソースのハッシュを記録しています。テスト、TS の型検査、Rust の整形、両言語の DDD lint は修正後のコードで確認しました。
+
+保存された例は、記録した規約のバージョンを基準に扱います。CI は showcase に現行の DDD lint を適用しません。インストーラが利用者のプロジェクトへ導入するのは言語別のバンドルと linter です。

@@ -93,12 +93,12 @@ const HAPPY_PATH_RULES = {
 async function mockWrites(workflow) {
   const samples = join(dirname(new URL(import.meta.url).pathname), '..', 'tools', 'ddd-lint', 'test', 'samples');
   if (workflow === 'ddd-typescript-default') {
-    const { typeScriptSample } = await import(join(samples, 'typescript.ts'));
-    return Object.entries(typeScriptSample('class', 'named-file').files).map(([path, content]) => ({ path, content }));
+    const { eventTypeScriptSample } = await import(join(samples, 'event-sourcing.ts'));
+    return Object.entries(eventTypeScriptSample('named-file', YAML).files).map(([path, content]) => ({ path, content }));
   }
   if (workflow === 'ddd-rust-default') {
-    const { rustSample } = await import(join(samples, 'rust.ts'));
-    return Object.entries(rustSample('file').files).map(([path, content]) => ({ path, content }));
+    const { eventRustSample } = await import(join(samples, 'event-sourcing.ts'));
+    return Object.entries(eventRustSample('file', YAML).files).map(([path, content]) => ({ path, content }));
   }
   return [{ path: 'src/mock-change.mjs', content: 'export const mockChange = true;\n' }];
 }

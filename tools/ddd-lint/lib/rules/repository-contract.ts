@@ -52,6 +52,8 @@ export function repositoryContractProblem(
   const parts = resultArguments(returned);
   if (!parts) return undefined; // The existing repository-result rule reports non-Result returns.
   const [success, error] = parts;
+  if (method === "loadEvents" || method === "load_events")
+    return "the repository returns the replayed aggregate; keep event-history loading inside the adapter and expose findById/find_by_id";
   if (!/^(?:::)?(?:[\w$]+(?:::|\.))*RepositoryError$/.test(error))
     return "use the common RepositoryError as the Result error";
   if (method === "store" && success !== (language === "rust" ? "()" : "void"))

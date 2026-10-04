@@ -1,285 +1,173 @@
-{
-  "model_ref": "domain-model.yaml",
-  "aggregate_mappings": [
-    {
-      "aggregate_ref": "aggregate.reservation",
-      "programming_model": "class",
-      "persistence_method": "state-sourcing",
-      "reference_ids": [
-        "primitive.reservation-id"
-      ],
-      "code": {
-        "language": "rust",
-        "package": "reservation-domain",
-        "module": [
-          "reservation"
-        ],
-        "type": "Reservation"
-      },
-      "operations": [
-        {
-          "operation_ref": "factory.reservation.create",
-          "code": {
-            "method": "create",
-            "success_type": "Reservation",
-            "error_type": "CreateReservationError"
-          },
-          "errors": [
-            {
-              "error_ref": "error.reservation.create.end-not-after-start",
-              "code": {
-                "case": "EndNotAfterStart"
-              }
-            }
-          ]
-        },
-        {
-          "operation_ref": "factory.reservation.create-time-slot",
-          "code": {
-            "method": "new",
-            "error_type": "TimeSlotError"
-          },
-          "errors": [
-            {
-              "error_ref": "error.reservation.create-time-slot.end-not-after-start",
-              "code": {
-                "case": "EndNotAfterStart"
-              }
-            }
-          ]
-        },
-        {
-          "operation_ref": "command.reservation.reserve-room",
-          "code": {
-            "method": "reserve_room",
-            "success_type": "ReservationConfirmed",
-            "error_type": "ReservationConfirmationError"
-          },
-          "errors": [
-            {
-              "error_ref": "error.reservation.reserve-room.already-confirmed",
-              "code": {
-                "case": "AlreadyConfirmed"
-              }
-            },
-            {
-              "error_ref": "error.reservation.reserve-room.already-cancelled",
-              "code": {
-                "case": "AlreadyCancelled"
-              }
-            }
-          ]
-        },
-        {
-          "operation_ref": "command.reservation.cancel",
-          "code": {
-            "method": "cancel",
-            "success_type": "ReservationCancelled",
-            "error_type": "ReservationError"
-          },
-          "errors": [
-            {
-              "error_ref": "error.reservation.cancel.already-cancelled",
-              "code": {
-                "case": "AlreadyCancelled"
-              }
-            },
-            {
-              "error_ref": "error.reservation.cancel.not-confirmed",
-              "code": {
-                "case": "NotConfirmed"
-              }
-            }
-          ]
-        }
-      ]
-    }
-  ],
-  "domain_packages": [
-    {
-      "term": "会議室予約",
-      "model_refs": [
-        "bc.reservation"
-      ],
-      "rationale": "予約の状態と不変条件を所有する",
-      "code": {
-        "language": "rust",
-        "package": "reservation-domain",
-        "module": []
-      }
-    },
-    {
-      "term": "会議室予約",
-      "model_refs": [
-        "aggregate.reservation",
-        "factory.reservation.create",
-        "command.reservation.reserve-room",
-        "command.reservation.cancel"
-      ],
-      "rationale": "検証済み実体の生成、同じ実体の確定と取消、全属性復元を所有する",
-      "code": {
-        "language": "rust",
-        "package": "reservation-domain",
-        "module": [
-          "reservation"
-        ]
-      }
-    },
-    {
-      "term": "予約ID",
-      "model_refs": [
-        "primitive.reservation-id"
-      ],
-      "rationale": "予約IDを所有する",
-      "code": {
-        "language": "rust",
-        "package": "reservation-domain",
-        "module": [
-          "reservation",
-          "reservation_id"
-        ]
-      }
-    },
-    {
-      "term": "会員ID",
-      "model_refs": [
-        "primitive.member-id"
-      ],
-      "rationale": "会員IDを所有する",
-      "code": {
-        "language": "rust",
-        "package": "reservation-domain",
-        "module": [
-          "member_id"
-        ]
-      }
-    },
-    {
-      "term": "会議室ID",
-      "model_refs": [
-        "primitive.room-id"
-      ],
-      "rationale": "会議室IDを所有する",
-      "code": {
-        "language": "rust",
-        "package": "reservation-domain",
-        "module": [
-          "room_id"
-        ]
-      }
-    },
-    {
-      "term": "予約時間枠",
-      "model_refs": [
-        "vo.time-slot"
-      ],
-      "rationale": "予約時間枠を所有する",
-      "code": {
-        "language": "rust",
-        "package": "reservation-domain",
-        "module": [
-          "reservation",
-          "time_slot"
-        ]
-      }
-    },
-    {
-      "term": "予約確定の事実",
-      "model_refs": [
-        "event.reservation.confirmed"
-      ],
-      "rationale": "予約確定の事実を所有する",
-      "code": {
-        "language": "rust",
-        "package": "reservation-domain",
-        "module": [
-          "reservation",
-          "reservation_confirmed"
-        ]
-      }
-    },
-    {
-      "term": "予約取消の事実",
-      "model_refs": [
-        "event.reservation.cancelled"
-      ],
-      "rationale": "予約取消の事実を所有する",
-      "code": {
-        "language": "rust",
-        "package": "reservation-domain",
-        "module": [
-          "reservation",
-          "reservation_cancelled"
-        ]
-      }
-    },
-    {
-      "term": "予約取消",
-      "model_refs": [
-        "bc.reservation",
-        "command.reservation.cancel"
-      ],
-      "rationale": "予約取消を所有する",
-      "code": {
-        "language": "rust",
-        "package": "reservation-use-case",
-        "module": []
-      }
-    },
-    {
-      "term": "予約取消",
-      "model_refs": [
-        "command.reservation.cancel"
-      ],
-      "rationale": "読込、集約操作、拒否結果の変換、成功後の保存を接続する",
-      "code": {
-        "language": "rust",
-        "package": "reservation-use-case",
-        "module": [
-          "cancel_reservation"
-        ]
-      }
-    },
-    {
-      "term": "予約保存",
-      "model_refs": [
-        "aggregate.reservation"
-      ],
-      "rationale": "予約保存を所有する",
-      "code": {
-        "language": "rust",
-        "package": "reservation-use-case",
-        "module": [
-          "reservation_repository"
-        ]
-      }
-    },
-    {
-      "term": "予約保存",
-      "model_refs": [
-        "bc.reservation",
-        "aggregate.reservation"
-      ],
-      "rationale": "予約保存を所有する",
-      "code": {
-        "language": "rust",
-        "package": "reservation-interface-adapter",
-        "module": []
-      }
-    },
-    {
-      "term": "メモリ内予約保存",
-      "model_refs": [
-        "aggregate.reservation"
-      ],
-      "rationale": "全属性を保存し、完全コンストラクタで現在状態を復元する",
-      "code": {
-        "language": "rust",
-        "package": "reservation-interface-adapter",
-        "module": [
-          "in_memory_reservation_repository"
-        ]
-      }
-    }
-  ]
-}
+model_ref: domain-model.yaml
+aggregate_mappings:
+- aggregate_ref: aggregate.reservation
+  programming_model: class
+  persistence_method: event-sourcing
+  reference_ids:
+  - entity.reservation
+  - primitive.reservation-id
+  - primitive.member-id
+  - primitive.room-id
+  - vo.time-slot
+  code:
+    language: rust
+    package: reservation-domain
+    module:
+    - reservation
+    type: Reservation
+  operations:
+  - operation_ref: factory.reservation.parse-reservation-id
+    code:
+      method: parse
+      error_type: ParseReservationIdError
+    errors:
+    - error_ref: error.reservation.parse-reservation-id.not-positive
+      code:
+        case: NotPositive
+  - operation_ref: factory.reservation.parse-member-id
+    code:
+      method: parse
+      error_type: ParseMemberIdError
+    errors:
+    - error_ref: error.reservation.parse-member-id.not-positive
+      code:
+        case: NotPositive
+  - operation_ref: factory.reservation.parse-room-id
+    code:
+      method: parse
+      error_type: ParseRoomIdError
+    errors:
+    - error_ref: error.reservation.parse-room-id.not-positive
+      code:
+        case: NotPositive
+  - operation_ref: factory.reservation.create-time-slot
+    code:
+      method: create
+      error_type: CreateTimeSlotError
+    errors:
+    - error_ref: error.reservation.create-time-slot.end-not-after-start
+      code:
+        case: EndNotAfterStart
+  - operation_ref: factory.reservation.reserve
+    code:
+      method: reserve
+      error_type: ReserveReservationError
+    errors:
+    - error_ref: error.reservation.reserve.invalid-time-slot
+      code:
+        case: InvalidTimeSlot
+  - operation_ref: command.reservation.cancel
+    code:
+      method: cancel
+      success_type: ReservationCancelled
+      error_type: CancelReservationError
+    errors:
+    - error_ref: error.reservation.cancel.already-cancelled
+      code:
+        case: AlreadyCancelled
+  replay_methods:
+  - event_ref: event.reservation.reserved
+    code:
+      method: from_reserved
+  - event_ref: event.reservation.cancelled
+    code:
+      method: apply_cancelled
+domain_packages:
+- term: 会議室予約
+  model_refs:
+  - bc.reservation
+  rationale: 予約の業務概念を公開する
+  code:
+    language: rust
+    package: reservation-domain
+    module: []
+- term: 予約
+  model_refs:
+  - aggregate.reservation
+  rationale: 予約の状態と取消規則を所有する
+  code:
+    language: rust
+    package: reservation-domain
+    module:
+    - reservation
+- term: 予約ID
+  model_refs:
+  - primitive.reservation-id
+  rationale: 予約を識別する
+  code:
+    language: rust
+    package: reservation-domain
+    module:
+    - reservation
+    - reservation_id
+- term: 予約時間枠
+  model_refs:
+  - vo.time-slot
+  rationale: 予約の開始と終了を検証する
+  code:
+    language: rust
+    package: reservation-domain
+    module:
+    - reservation
+    - time_slot
+- term: 会員ID
+  model_refs:
+  - primitive.member-id
+  rationale: 予約した会員を識別する
+  code:
+    language: rust
+    package: reservation-domain
+    module:
+    - member_id
+- term: 部屋ID
+  model_refs:
+  - primitive.room-id
+  rationale: 予約する会議室を識別する
+  code:
+    language: rust
+    package: reservation-domain
+    module:
+    - room_id
+- term: 予約手続き
+  model_refs:
+  - aggregate.reservation
+  rationale: 予約操作の手順とポートを公開する
+  code:
+    language: rust
+    package: reservation-use-case
+    module: []
+- term: 予約の保管
+  model_refs:
+  - aggregate.reservation
+  rationale: 予約の読込と保存を抽象化する
+  code:
+    language: rust
+    package: reservation-use-case
+    module:
+    - reservation_repository
+- term: 予約取消手続き
+  model_refs:
+  - command.reservation.cancel
+  rationale: 読込と取消と保存を順に実行する
+  code:
+    language: rust
+    package: reservation-use-case
+    module:
+    - cancel_reservation
+- term: 予約の保存先
+  model_refs:
+  - aggregate.reservation
+  rationale: 予約保存ポートの実装を公開する
+  code:
+    language: rust
+    package: reservation-interface-adapter
+    module: []
+- term: メモリ内の予約保管
+  model_refs:
+  - aggregate.reservation
+  rationale: 予約ごとのイベント列を追記保存し、再生して集約を返す
+  code:
+    language: rust
+    package: reservation-interface-adapter
+    module:
+    - in_memory_reservation_repository

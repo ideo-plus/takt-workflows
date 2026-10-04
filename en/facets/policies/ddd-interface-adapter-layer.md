@@ -17,9 +17,7 @@ Judges the code of the interface adapter layer (repository implementations, exch
 
 ## Persistence
 
-An in-memory state repository retains aggregates directly in Map<Id, Aggregate>/HashMap<Id, Aggregate>. Do not decompose them into Record/Snapshot data. TypeScript returns immutable aggregates; Rust returns clones to protect saved aggregates. Database/file adapters with persisted representations own record conversion and parse/restore.
-
-Do not add version envelopes or persistence DTOs solely for concurrency the request does not require. State the actual concurrent-update requirement before introducing its mechanism.
+The standard is Event Sourcing. Store append-only event sequences by aggregate ID and declare via: event-replay. The public repository loads aggregates and stores their domain events; the adapter owns history replay. Memory implementations retain events directly in Map<Id, readonly DomainEvent[]> / HashMap<Id, Vec<DomainEvent>>.
 
 | Criterion | Judgment |
 |-----------|----------|

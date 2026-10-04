@@ -11,7 +11,7 @@ A collection of [TAKT](https://github.com/nrslib/takt) workflows, facets, and ha
 
 More workflows will be added to this collection over time.
 
-See the [generated-code showcase](showcase/README.md) for meeting-room reservation code produced by the TypeScript and Rust DDD workflows, with the task, model configuration, and verification results.
+See the [code showcase](showcase/README.md) for meeting-room reservation examples based on TypeScript and Rust DDD workflow output, directly revised to use Event Sourcing. Each example records its original generation conditions and verification after the corrections.
 
 ## Highlights
 - **Install into the project you work in.** A one-line installer copies a bundle into the project's `.takt/`. No clone inside your repository.
@@ -129,7 +129,7 @@ provider:
 To switch T0 to a DGX Spark later, change only the two `t0-*` profiles.
 
 ## ddd-rust-default / ddd-typescript-default
-The builtin `default` workflow for code that follows domain-driven design conventions, in Rust or TypeScript. The conventions: an always-valid domain model, state changed only by declared commands, business failures returned as `Result` with an error type per operation, use cases that only orchestrate, repositories per aggregate, command and query sides kept apart, and packages named by the ubiquitous language.
+The builtin `default` workflow for code that follows domain-driven design conventions, in Rust or TypeScript. The conventions: an always-valid domain model, state changed only by declared commands, business failures returned as `Result` with an error type per operation, use cases that only orchestrate, repositories per aggregate, command and query sides kept apart, and packages named by the ubiquitous language. The standard knowledge uses Event Sourcing: repositories return replayed aggregates and append domain events; Domain Primitives validate the same invariants before initialization in both `of` and `parse`.
 
 | Step | What changes |
 |---|---|

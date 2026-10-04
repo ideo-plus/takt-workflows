@@ -1,232 +1,195 @@
 {
   "workflow": "ddd-rust-default",
-  "bundle_commit": "ddd4a8d603d79ef27856f3804612d2302565ede0",
-  "bundle_language": "ja",
-  "task_sha256": "ee6182dd4d45ba9e50c9dbb5689ce9529bc261f1ba3effbf5a5456b4287e0529",
-  "execution": {
-    "exit_code": 0,
-    "elapsed_seconds": 9128,
-    "takt_version": "0.67.0",
-    "started_at": "2026-10-03T16:36:30.930718+00:00",
-    "finished_at": "2026-10-03T19:08:39.083599+00:00"
-  },
-  "execution_attempts": [
-    {
+  "showcase_variant": "event-sourcing",
+  "artifact_kind": "manually-revised-generated-example",
+  "generated_source_unmodified": false,
+  "original_generation": {
+    "workflow": "ddd-rust-default",
+    "bundle_commit": "aadf55743a82400c21f7134736cb3a6188463dc4",
+    "bundle_language": "ja",
+    "execution": {
       "exit_code": 0,
-      "elapsed_seconds": 9128,
+      "elapsed_seconds": 2507,
       "takt_version": "0.67.0",
-      "started_at": "2026-10-03T16:36:30.930718+00:00",
-      "finished_at": "2026-10-03T19:08:39.083599+00:00"
-    }
-  ],
-  "elapsed_seconds_total": 9128,
-  "providers_and_models": [
-    {
-      "workflow": "development-core",
-      "step": "plan",
-      "provider": "codex",
-      "model": "gpt-6.1-sol"
+      "started_at": "2026-10-04T00:31:50.313125+00:00",
+      "finished_at": "2026-10-04T01:13:37.269275+00:00"
     },
-    {
-      "workflow": "development-core",
-      "step": "write_tests",
-      "provider": "codex",
-      "model": "gpt-5.6-sol"
+    "sandbox_verification": {
+      "pass": true,
+      "checks_passed": 25,
+      "checks_failed": 0
     },
-    {
-      "workflow": "ddd-implement",
-      "step": "implement",
-      "provider": "codex",
-      "model": "gpt-6.1-sol"
+    "generated_file_sha256": {
+      "Cargo.toml": "b4e4ef954cc69edd7dc2b7983c7f75c56128a82f9a72bf8f029bbbed593ed21f",
+      "Cargo.lock": "0568fd741c4d5d91e363d9c63523c59f8c2e15b11594f99022dbbd4bc53d3519",
+      ".ddd.toml": "e72b3a506a3db23660fd9dc481bacd7821940f3e0f075f1d767947033f39b9e9",
+      ".gitignore": "54d812f808766fdd595bdd77352a4d5496a66fb636bb28634e214d86d4bcf47f",
+      "packages/command/reservation-domain/Cargo.toml": "b09e94b7ed4cd71eca16441af5891832d437ba54e44929ddba8b452b8996da09",
+      "packages/command/reservation-interface-adapter/Cargo.toml": "7263d4e799e0f31db00e696208c128c03df91ab0aa84c30606bffc14d4bdb924",
+      "packages/command/reservation-use-case/Cargo.toml": "435c3814953660a282f19487bb1289b4a524a64ab9ff21415d048dd2087770d4",
+      "packages/command/reservation-use-case/src/cancel_reservation.rs": "d226f715c8a21f55fb3ba7b1287727b0014dad1876e3712e53c92793b6713798",
+      "packages/command/reservation-use-case/src/lib.rs": "641d19e8b29f9fec7b37278b31209949d8be2aced2282fa0bc998bc1ea6aff14",
+      "packages/command/reservation-use-case/src/reservation_repository.rs": "c100ea70807ff8bbc437c28f65c23df5999ba731d53fdb9b7381277568bc037c",
+      "packages/command/reservation-use-case/src/cancel_reservation/tests.rs": "2b229a80a4c55f2022b502ffb4caaad83052774ec41ec1a718618356faaa6935",
+      "packages/command/reservation-interface-adapter/tests/cancel_reservation.rs": "e927d07ba3a7cab459157abdbf7a73e3c43491374f6ce9ec288dea6c9fe1ca11",
+      "packages/command/reservation-interface-adapter/src/in_memory_reservation_repository.rs": "eafd804fc48d37c6e974b3b85e1236283816d32d71640c0caaabed394c677cdc",
+      "packages/command/reservation-interface-adapter/src/lib.rs": "d72d0e55088eee814f164de63f16738f1a7c30ae86dff7dab44eedd650f17cc9",
+      "packages/command/reservation-interface-adapter/src/in_memory_reservation_repository/tests.rs": "c28d0572ee9fb30474effc0c9c294ef9e2b97806d402860aee2e68e4bc02029d",
+      "packages/command/reservation-domain/src/room_id.rs": "7538627c49ae1886abdb89cdd54e9dd7641df6fe4578ab9ac59742d241e541bf",
+      "packages/command/reservation-domain/src/member_id.rs": "59d708eb4dbb98d12907b2362c025bf3ecc10a4a159ce84e270402393beae765",
+      "packages/command/reservation-domain/src/lib.rs": "51ec988f8d557d6a265c0b2d56de0b7debddf8d3c93b91023f9d9c297b01119d",
+      "packages/command/reservation-domain/src/reservation.rs": "f6c13fb17f497f829160eba7caf1c1b9941aa996e98779ffb2c77f07b64590d5",
+      "packages/command/reservation-domain/src/member_id/tests.rs": "f5934c7a26f36a3d177a285170c9151f4f3f0834e33169b789094c3033dff19c",
+      "packages/command/reservation-domain/src/reservation/time_slot.rs": "d95601e3371483885d20f9d5cda3d37918d33378686797ddff32a6b7dd59e07d",
+      "packages/command/reservation-domain/src/reservation/tests.rs": "b373ec1f677ecb6e20857addbc15295dd05e46d28fb6ceaa78dfa273c4d2c11c",
+      "packages/command/reservation-domain/src/reservation/reservation_id.rs": "766410a7c90c6ac876636648deed204a63ff62d0dd2cf3c07c15a95a9aabd85c",
+      "packages/command/reservation-domain/src/room_id/tests.rs": "b715ce70e6fd9f6afe755e11bb187b3aa6f2bd1deb46c451e9c440129903b1a8",
+      "packages/command/reservation-domain/src/reservation/reservation_id/tests.rs": "9646969fbfcc5b442a210277bb87bd8369ca32493c0c001a29f2c79f50ced64e",
+      "packages/command/reservation-domain/src/reservation/time_slot/tests.rs": "46dcfb058147e25467873514416ea16c192711d445ed41f635cb7987fcb748d5",
+      "docs/ddd/aggregate-mapping.yaml": "7b6a926185919d9c03cb58bedb5acdad80c742a0ab81c100cf4481b3cdafa319",
+      "docs/ddd/domain-model.yaml": "20d22bfc090a6ffc284c1ec12d51b31d7e2044110e7765c2820aa8502aed8408",
+      "docs/ddd/layer-structure.yaml": "ea6743407b0f46e3cedaaeb90870c02a59e58626cd12d533169d4a83bcc13863"
     },
-    {
-      "step": "implement",
-      "agent": "testing-review-companion",
-      "provider": "codex",
-      "model": "gpt-6-astra"
+    "generation_mode": "real",
+    "task_sha256": "2bdd77f37c78d4844eaac66ac6bb090cdcba201272923a46c8b67b510489245e",
+    "providers_and_models": [
+      {
+        "workflow": "development-core",
+        "step": "plan",
+        "provider": "codex",
+        "model": "gpt-6.1-sol"
+      },
+      {
+        "workflow": "development-core",
+        "step": "write_tests",
+        "provider": "codex",
+        "model": "gpt-5.6-sol"
+      },
+      {
+        "workflow": "ddd-implement",
+        "step": "implement",
+        "provider": "codex",
+        "model": "gpt-6.1-sol"
+      },
+      {
+        "step": "implement",
+        "agent": "ai-antipattern-review-companion",
+        "provider": "codex",
+        "model": "gpt-6-astra"
+      },
+      {
+        "step": "implement",
+        "agent": "testing-review-companion",
+        "provider": "codex",
+        "model": "gpt-6-astra"
+      },
+      {
+        "step": "implement",
+        "agent": "review-companion-moderator",
+        "provider": "codex",
+        "model": "gpt-6-astra"
+      },
+      {
+        "workflow": "ddd-review",
+        "step": "review",
+        "provider": "codex",
+        "model": "gpt-6.1-sol"
+      },
+      {
+        "workflow": "peer-review",
+        "step": "review-adjudication",
+        "provider": "codex",
+        "model": "gpt-6.1-sol"
+      },
+      {
+        "workflow": "peer-review",
+        "step": "final-gate",
+        "provider": "codex",
+        "model": "gpt-6.1-sol"
+      }
+    ]
+  },
+  "manual_revision": {
+    "basis": "Explicit user instruction: remove ReservationSnapshot directly without TAKT; unify both showcases on Event Sourcing; retain no backward compatibility.",
+    "started_at": "2026-10-04T05:46:34.820720+00:00",
+    "validation_bundle_commit": "c71f32d2a46912adc2f4f76d066afdfc00ddca33",
+    "finished_at": "2026-10-04T05:55:19.424661+00:00",
+    "versions": {
+      "node": "v24.19.0",
+      "bun": "1.4.2",
+      "cargo": "cargo 1.95.0 (f2d3ce0bd 2026-03-21)"
     },
-    {
-      "step": "implement",
-      "agent": "ai-antipattern-review-companion",
-      "provider": "codex",
-      "model": "gpt-6-astra"
-    },
-    {
-      "workflow": "development-core",
-      "step": "replan",
-      "provider": "codex",
-      "model": "gpt-6.1-sol"
-    },
-    {
-      "step": "implement",
-      "agent": "review-companion-moderator",
-      "provider": "codex",
-      "model": "gpt-6-astra"
-    },
-    {
-      "workflow": "ddd-review",
-      "step": "review",
-      "provider": "codex",
-      "model": "gpt-6.1-sol"
-    },
-    {
-      "workflow": "peer-review",
-      "step": "review-adjudication",
-      "provider": "codex",
-      "model": "gpt-6.1-sol"
-    },
-    {
-      "workflow": "ddd-remediation",
-      "step": "fix-plan",
-      "provider": "codex",
-      "model": "gpt-6.1-sol"
-    },
-    {
-      "workflow": "ddd-remediation",
-      "step": "fix",
-      "provider": "codex",
-      "model": "gpt-6.1-sol"
-    },
-    {
-      "step": "fix",
-      "agent": "testing-review-companion",
-      "provider": "codex",
-      "model": "gpt-6-astra"
-    },
-    {
-      "step": "fix",
-      "agent": "ai-antipattern-review-companion",
-      "provider": "codex",
-      "model": "gpt-6-astra"
-    },
-    {
-      "workflow": "ddd-remediation",
-      "step": "fix-verifier",
-      "provider": "codex",
-      "model": "gpt-6.1-sol"
-    },
-    {
-      "workflow": "peer-review",
-      "step": "final-gate",
-      "provider": "codex",
-      "model": "gpt-6.1-sol"
-    }
-  ],
-  "generated_file_sha256": {
-    "Cargo.toml": "ef9060e0ecbbadc0e26692aedb0feee1ba7a80017e19d8a16334307e975d9207",
+    "changed_files": [
+      "docs/ddd/aggregate-mapping.yaml",
+      "docs/ddd/domain-model.yaml",
+      "docs/ddd/layer-structure.yaml",
+      "packages/command/reservation-domain/src/member_id.rs",
+      "packages/command/reservation-domain/src/member_id/tests.rs",
+      "packages/command/reservation-domain/src/reservation.rs",
+      "packages/command/reservation-domain/src/reservation/reservation_id.rs",
+      "packages/command/reservation-domain/src/reservation/reservation_id/tests.rs",
+      "packages/command/reservation-domain/src/reservation/tests.rs",
+      "packages/command/reservation-domain/src/room_id.rs",
+      "packages/command/reservation-domain/src/room_id/tests.rs",
+      "packages/command/reservation-interface-adapter/src/in_memory_reservation_repository.rs",
+      "packages/command/reservation-interface-adapter/src/in_memory_reservation_repository/tests.rs",
+      "packages/command/reservation-interface-adapter/tests/cancel_reservation.rs",
+      "packages/command/reservation-use-case/src/cancel_reservation.rs",
+      "packages/command/reservation-use-case/src/cancel_reservation/tests.rs",
+      "packages/command/reservation-use-case/src/reservation_repository.rs"
+    ]
+  },
+  "identifier_domain_assumption": {
+    "rule": "Reservation, member, and room IDs are positive integers starting at 1.",
+    "basis": "Confirmed by the user."
+  },
+  "current_source_file_sha256": {
+    "Cargo.toml": "b4e4ef954cc69edd7dc2b7983c7f75c56128a82f9a72bf8f029bbbed593ed21f",
     "Cargo.lock": "0568fd741c4d5d91e363d9c63523c59f8c2e15b11594f99022dbbd4bc53d3519",
     ".ddd.toml": "e72b3a506a3db23660fd9dc481bacd7821940f3e0f075f1d767947033f39b9e9",
     ".gitignore": "54d812f808766fdd595bdd77352a4d5496a66fb636bb28634e214d86d4bcf47f",
-    "packages/command/reservation-domain/Cargo.toml": "740010d36ab7d62acaa3f178fae8d50d29bf7da164ae0f3a9c15b5ac2e42fdae",
-    "packages/command/reservation-interface-adapter/Cargo.toml": "56ace5343ab6e2e6a2ab956188cae2748a7312956e2b38f32877ebf60d3318ed",
-    "packages/command/reservation-use-case/Cargo.toml": "a93770ee5cb4130a2b821db2108e6f40bc7d96a725310fcc195e5ae60343bb34",
-    "packages/command/reservation-use-case/tests/cancel_reservation.rs": "51de68555ec841e643e03f125edfe7bbaaadefdc1bfa6bb6029c40835c2e469e",
-    "packages/command/reservation-use-case/src/cancel_reservation.rs": "d64a5a15c6bdc8d3460f5e4e6364b79310dbf7702d818bc78a7d2353245afaf1",
-    "packages/command/reservation-use-case/src/lib.rs": "09d32c435600d0161a70011c136071e1dbb3e37105b3c6e32b844fc917940f00",
-    "packages/command/reservation-use-case/src/reservation_repository.rs": "575e7d49a36b435fab4e82653f34a30ada4dca959f12c45ca40dfd711a8dc0a8",
-    "packages/command/reservation-interface-adapter/tests/cancel_reservation.rs": "9b87d2f1c55329b8d4aef70857d3016d337230bea473f3758ef3340305db1f4c",
-    "packages/command/reservation-interface-adapter/src/in_memory_reservation_repository.rs": "d629f0aba95568aeaa95ecd253cb69a460d9cebe351ba389e4ca4c0178f9ddca",
-    "packages/command/reservation-interface-adapter/src/lib.rs": "2abcb628430f8fff7ef507d746a238ef7571b9c93c313b346f2b7d6a68de3f89",
-    "packages/command/reservation-domain/tests/reservation.rs": "142863fb6c47f1042f7ae87316a29ce427ca12c4be82a344a7edf1e373182892",
-    "packages/command/reservation-domain/src/room_id.rs": "1face674dd2c2a19e2a7ab6ab0e70230828903257bcb7dbd2a64031aa269bfa0",
-    "packages/command/reservation-domain/src/member_id.rs": "b6b17b964abd346961d65939a12463a21ab36df4835ddafea10cc32da5af9c1b",
-    "packages/command/reservation-domain/src/lib.rs": "55111398b23004be74394a3a786873ac002db08e0a869f640804bb69bac38cc0",
-    "packages/command/reservation-domain/src/reservation.rs": "03ef611e033aa3489a51b9e62a39ba6488717ddc4f7d2d0d154550dcafc4c3cb",
-    "packages/command/reservation-domain/src/reservation/reservation_cancelled.rs": "9d18e811e5047fafa5453a6a08255403cde5d24f310e252f67658bd131b95959",
-    "packages/command/reservation-domain/src/reservation/reservation_confirmed.rs": "a7938f1df0fd5b8d58ed9a539950b964b8f98adcb5ea4313d18294f6e7d9a7f7",
-    "packages/command/reservation-domain/src/reservation/time_slot.rs": "d08dfee92192f5112b01a1a3112e23841d1ec96750c5e19d1ce960b5d9edee6c",
-    "packages/command/reservation-domain/src/reservation/reservation_id.rs": "d01847b873861b90efe57e011ef612c68ed52f85fc513c79ec83d7fdee855613",
-    "docs/ddd/aggregate-mapping.yaml": "cb80fe6f81b5bc5504a2df6b6652dcaccbceba0fb24769719987d7c92bd2a8d3",
-    "docs/ddd/domain-model.yaml": "f3c0470b091e580934fa9c15df160aa208d545e8063d16efa4623553f6241bff",
-    "docs/ddd/layer-structure.yaml": "0b8e4f4add8dc4c82712997e95d06ef3c4a7030ab8f4ddd6fc13623e915a3da6"
+    "packages/command/reservation-domain/Cargo.toml": "b09e94b7ed4cd71eca16441af5891832d437ba54e44929ddba8b452b8996da09",
+    "packages/command/reservation-interface-adapter/Cargo.toml": "7263d4e799e0f31db00e696208c128c03df91ab0aa84c30606bffc14d4bdb924",
+    "packages/command/reservation-use-case/Cargo.toml": "435c3814953660a282f19487bb1289b4a524a64ab9ff21415d048dd2087770d4",
+    "packages/command/reservation-use-case/src/cancel_reservation.rs": "92f59031d9d63fd4021d9421d20ca19956246c75c30e5e68c532a62f99bd5fd1",
+    "packages/command/reservation-use-case/src/lib.rs": "641d19e8b29f9fec7b37278b31209949d8be2aced2282fa0bc998bc1ea6aff14",
+    "packages/command/reservation-use-case/src/reservation_repository.rs": "41f71f088862c83f2176942031ae2974ee83851b6f6f48f8a6280ad788a1cc81",
+    "packages/command/reservation-use-case/src/cancel_reservation/tests.rs": "e5bbd18ee2e4af6d9b37262591234c9d764618cb86580aa7d741af240d7e687c",
+    "packages/command/reservation-interface-adapter/tests/cancel_reservation.rs": "f4499120e2833560504934ae0c81d987df78fb68daebfb2a320928ca1b820665",
+    "packages/command/reservation-interface-adapter/src/in_memory_reservation_repository.rs": "457bf1e790da2f5bc3370ab1b4c2bbe63d562c6f70b1467ca59e43f7f8a15045",
+    "packages/command/reservation-interface-adapter/src/lib.rs": "d72d0e55088eee814f164de63f16738f1a7c30ae86dff7dab44eedd650f17cc9",
+    "packages/command/reservation-interface-adapter/src/in_memory_reservation_repository/tests.rs": "137a47c3c59b19a095dd0fb2aa2835ff211be42ddbbb3e4e3d88ee9af885d47f",
+    "packages/command/reservation-domain/src/room_id.rs": "e9730c838f76b7948aeb2035f26f65e7957a827227deae1b63b9beb79778aeaa",
+    "packages/command/reservation-domain/src/member_id.rs": "52b902af60f34d385c5baacd159f9525a4ea1ed2dfceb0921ecb5b1b832ca283",
+    "packages/command/reservation-domain/src/lib.rs": "51ec988f8d557d6a265c0b2d56de0b7debddf8d3c93b91023f9d9c297b01119d",
+    "packages/command/reservation-domain/src/reservation.rs": "164374a738f979874b57edd672ac3d8bf8299915d902d5f17105104b6746b0c8",
+    "packages/command/reservation-domain/src/member_id/tests.rs": "c8ad01698b4fdc5eeb1e1fac7195db1efd51b8b5783025e18c75bce0ac327e08",
+    "packages/command/reservation-domain/src/reservation/time_slot.rs": "d95601e3371483885d20f9d5cda3d37918d33378686797ddff32a6b7dd59e07d",
+    "packages/command/reservation-domain/src/reservation/tests.rs": "ab0e09c3b5df90f7825dc45e261b41a389f2b09d8d80758d0ec08b8e16ae2bc8",
+    "packages/command/reservation-domain/src/reservation/reservation_id.rs": "00da0461e0bfddef9ca1ffc8c2afdbe574c90c045a7dcda45f0b5d1b927c9638",
+    "packages/command/reservation-domain/src/room_id/tests.rs": "e4c06bb14c02994f3b87f6cfe05317adc499ae9bab23c72cc034969af7b6bb0c",
+    "packages/command/reservation-domain/src/reservation/reservation_id/tests.rs": "cd6bb44957e453c314420f218c5e97f24ed1c251c15744604cb2cef1141aeaf1",
+    "packages/command/reservation-domain/src/reservation/time_slot/tests.rs": "46dcfb058147e25467873514416ea16c192711d445ed41f635cb7987fcb748d5",
+    "docs/ddd/aggregate-mapping.yaml": "daca09ce5c2f34ffbd413f060f92b54c5e5980ad03a2f2cad98b437cc8236eb8",
+    "docs/ddd/domain-model.yaml": "7f2ee3102e6a18b57fe0931ad21591f7574164c47640f4d86ae99a731be31350",
+    "docs/ddd/layer-structure.yaml": "987c85c41774b0e96b26ed0ad5cb0b7f0280a15a6cd04d79911ef186deab62be"
   },
-  "runtime_override": "Existing local Codex profiles, replacing the template profiles; Claude fallback removed.",
-  "sandbox_verification": {
-    "pass": true,
-    "checks_passed": 44,
-    "checks_failed": 0
-  },
-  "takt_version": "0.67.0",
-  "node_version": "v24.19.0",
-  "bun_version": "1.4.2",
-  "cargo_version": "cargo 1.95.0 (f2d3ce0bd 2026-03-21)",
-  "codex_cli_version": "codex-cli 0.160.0",
   "standalone_verification": {
+    "pass": true,
     "tests": {
-      "exit_code": 0,
-      "pass": 25,
+      "pass": 34,
       "fail": 0,
-      "ignored": 0
-    },
-    "format": {
-      "exit_code": 0
+      "skipped": 0
     },
     "ddd_lint": {
-      "exit_code": 0,
-      "result": {
-        "pass": true,
-        "results": [
-          {
-            "check": "model",
-            "findings": []
-          },
-          {
-            "check": "mapping",
-            "findings": []
-          },
-          {
-            "check": "layers",
-            "findings": []
-          },
-          {
-            "check": "rust-domain",
-            "findings": [],
-            "note": "8 files outside domain; 8 non-target files skipped"
-          },
-          {
-            "check": "rust-use-case",
-            "findings": [],
-            "note": "13 files outside use-case; 13 non-target files skipped"
-          },
-          {
-            "check": "rust-interface-adapter",
-            "findings": [],
-            "note": "14 files outside interface-adapter/rmu; 14 non-target files skipped"
-          },
-          {
-            "check": "rust-module-layout",
-            "findings": [],
-            "note": "file; 3 crates"
-          }
-        ]
-      }
+      "pass": true,
+      "findings": 0,
+      "unavailable": 0
+    },
+    "typecheck": null,
+    "format": {
+      "pass": true,
+      "command": "cargo fmt --all -- --check"
     }
-  },
-  "generation_procedure": {
-    "install": [
-      "scripts/use-lang.sh",
-      "ja",
-      "<sandbox project>"
-    ],
-    "runtime_and_config": "Saved runtime.yaml and config.yaml applied to the sandbox .takt directory.",
-    "doctor": [
-      "takt",
-      "workflow",
-      "doctor",
-      "ddd-rust-default"
-    ],
-    "command": [
-      "timeout",
-      "10800",
-      "takt",
-      "--pipeline",
-      "--skip-git",
-      "-w",
-      "ddd-rust-default",
-      "-t",
-      "<contents of task.txt>"
-    ],
-    "timeout_seconds": 10800,
-    "verification": "scripts/sandbox-check.mjs verify --mode real, then standalone tests and DDD lint in the saved snapshot."
   }
 }

@@ -71,6 +71,7 @@ export interface DomainEvent {
   element_id: string;
   name: string;
   aggregate: string;
+  /** A state-changing command, or the root factory for the aggregate's creation event. */
   produced_by: string;
 }
 

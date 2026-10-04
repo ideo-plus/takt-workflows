@@ -1,6 +1,6 @@
 # DDD ユースケース層ポリシー
 
-単一集約のリポジトリポートは、読込を `Result<Aggregate | undefined, RepositoryError>`（Rust は `Result<Option<Aggregate>, RepositoryError>`）、保存を `Result<void, RepositoryError>`（Rust は `Result<(), RepositoryError>`）で表す。単なる別名の `Store…Result`／`Find…Result`、保存用DTO、余計な戻り値ラッパーを作らない。必要な再利用はジェネリックな共通型で表し、インフラの失敗は操作別のエラー型へ分けず `RepositoryError` で伝える。
+標準は Event Sourcing。リポジトリの読込は `Result<Aggregate | undefined, RepositoryError>`（Rust は `Result<Option<Aggregate>, RepositoryError>`）、保存は `Result<void, RepositoryError>`（Rust は `Result<(), RepositoryError>`）を返す。保存の入力は集約IDとコマンドが生んだドメインイベント。イベント履歴の取得と replay はリポジトリ内部に置き、ユースケースは取得した集約でコマンドを実行し、イベントの保存成功後に結果を返す。操作別 Result の単なる別名や余計な戻り値ラッパーを作らない。再利用する型はジェネリックにし、インフラの失敗は共通の `RepositoryError` で返す。
 
 ユースケース層のコードを判定する。ユースケースは読み込み、ドメインの操作を呼び、保存する調整役である。扱うのは、ユースケースの形、再実行と公開、複数の集約、読み取りモデルでの判断である。判断の置き場所とコマンド ID の記憶はドメイン層ポリシー、依存してよい先は層の依存ポリシーが持つ。
 

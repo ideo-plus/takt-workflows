@@ -1,5 +1,7 @@
 # DDD Domain Model Policy
 
+A creation event declares the factory that completely initializes its own aggregate root in produced_by. A primitive parser or another aggregate's factory cannot produce this creation event.
+
 Defines what the declarations under `docs/ddd/` (domain model, aggregate mapping, layer structure) contain, and the order of declarations and code. Whether code agrees with the declarations is judged by the domain layer policy.
 
 ## Domain Model (`docs/ddd/domain-model.yaml`)
@@ -15,7 +17,7 @@ Defines what the declarations under `docs/ddd/` (domain model, aggregate mapping
 | A command with `retention: last-one` has no `rationale` stating why an older command is never resent after a newer one (`C1 → C2 → retry C1`) | REJECT. Choose `multiple` or `time-window` when it can be |
 | A Domain Primitive lacks a domain invariant narrower than the backing type or a parse factory rule whose preconditions include all its invariants | REJECT. Initialize DP values from their invariants; use the backing type directly when it alone expresses the domain |
 | An element attribute holds an element of another aggregate as its type instead of its ID | REJECT. Refer to other aggregates by ID |
-| An element ID is renamed, reused after retirement, or does not follow `<kind>.<segments>` | REJECT. A rename changes only `name` |
+| An accepted model's element ID is renamed, an ID is reused after retirement, or an ID does not follow `<kind>.<segments>` | REJECT. A business rename changes only `name`. Correct invalid IDs and all references in an unaccepted plan or an artifact generated in this task; retain no compatibility path for the invalid IDs |
 | A split, merge, or deprecation is not recorded in `lineage` | REJECT |
 | The model decides modules, packages, ports, repositories, or use-case procedures | REJECT. Write them in the aggregate mapping and the layer structure |
 
@@ -24,7 +26,7 @@ Defines what the declarations under `docs/ddd/` (domain model, aggregate mapping
 | Criterion | Judgment |
 |-----------|----------|
 | An aggregate of the model has no mapping row | REJECT |
-| An aggregate does not declare `programming_model` (`actor` or `class`) and `persistence_method` (`state-sourcing` or `event-sourcing`) | REJECT |
+| An aggregate does not declare `programming_model` (`actor` or `class`) and `persistence_method` (`event-sourcing` in this workflow) | REJECT |
 | A command or factory rule has no method and error type, a command has no `success_type`, or a domain error has no case | REJECT |
 | An event-sourced aggregate does not declare the methods that apply its events in `replay_methods` | REJECT |
 | A package or module that holds domain code, or one of its parent levels, is missing from `domain_packages` | REJECT |
