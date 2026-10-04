@@ -24,6 +24,8 @@ Rust の ID は `u64` を受け取り、0を拒否します。 `parse` は不正
 
 ## テストを実行する
 
+基本コンストラクタは、各ドメイン型の非公開の `new` です。DP の `of → parse → new`、時間帯の `create → new`、予約の `reserve → from_reserved → new` と `restore → from_reserved → new` が、唯一の基本経路へ到達します。`Self(...)` と構造体リテラルの直接初期化は基本経路だけに置いています。[基本コンストラクタの規約](../../ja/facets/policies/ddd-domain-layer.md#基本コンストラクタと補助の生成経路)を参照してください。
+
 このディレクトリで実行します。
 
 ```sh
@@ -35,11 +37,11 @@ cargo fmt --all -- --check
 
 | 項目 | 結果 |
 |---|---|
-| 修正後の確認日時 | 2026-10-04 16:03 JST |
+| 修正後の確認日時 | 2026-10-04 16:49 JST |
 | テスト | 34件成功、失敗0件 |
 | 整形 | cargo fmt 成功 |
 | DDD lint | 指摘0件、判定不能0件 |
-| 検査した規約 | [c41914f](https://github.com/ideo-plus/takt-workflows/tree/c41914f72bbad8cb20721852890c02ca8d67662b) |
+| 検査した規約 | [871d0d8](https://github.com/ideo-plus/takt-workflows/tree/871d0d866516c9264f4f10dbd77126a117ae4af6) |
 
 ## 元の生成記録
 

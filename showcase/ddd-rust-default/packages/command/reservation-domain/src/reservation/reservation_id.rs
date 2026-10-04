@@ -7,6 +7,10 @@ pub enum ParseReservationIdError {
 pub struct ReservationId(u64);
 
 impl ReservationId {
+    fn new(value: u64) -> Self {
+        Self(value)
+    }
+
     pub fn of(value: u64) -> Self {
         Self::parse(value).expect("ReservationIdは1以上の整数である必要があります")
     }
@@ -20,7 +24,7 @@ impl ReservationId {
         if value < 1 {
             return Err(ParseReservationIdError::NotPositive);
         }
-        Ok(Self(value))
+        Ok(Self::new(value))
     }
 }
 

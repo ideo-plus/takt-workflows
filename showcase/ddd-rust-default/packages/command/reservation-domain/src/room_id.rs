@@ -7,6 +7,10 @@ pub enum ParseRoomIdError {
 pub struct RoomId(u64);
 
 impl RoomId {
+    fn new(value: u64) -> Self {
+        Self(value)
+    }
+
     pub fn of(value: u64) -> Self {
         Self::parse(value).expect("RoomIdは1以上の整数である必要があります")
     }
@@ -20,7 +24,7 @@ impl RoomId {
         if value < 1 {
             return Err(ParseRoomIdError::NotPositive);
         }
-        Ok(Self(value))
+        Ok(Self::new(value))
     }
 
     pub fn value(&self) -> u64 {

@@ -216,8 +216,8 @@
   "manual_revision": {
     "basis": "Explicit user instruction: remove ReservationSnapshot directly without TAKT; unify both showcases on Event Sourcing; retain no backward compatibility.",
     "started_at": "2026-10-04T05:46:34.699206+00:00",
-    "validation_bundle_commit": "c41914f72bbad8cb20721852890c02ca8d67662b",
-    "finished_at": "2026-10-04T07:03:40.845172+00:00",
+    "validation_bundle_commit": "871d0d866516c9264f4f10dbd77126a117ae4af6",
+    "finished_at": "2026-10-04T07:49:05.032104+00:00",
     "versions": {
       "node": "v24.19.0",
       "bun": "1.4.2",
@@ -244,6 +244,12 @@
       "typed_primitive_input": "number",
       "rule": "factory-naming",
       "verified_at": "2026-10-04T07:03:40.845172+00:00"
+    },
+    "primary_constructor_update": {
+      "basis": "User approved one primary constructor with direct or auxiliary delegation and requested manual rule/linter/showcase updates.",
+      "rule": "primary-constructor",
+      "construction_path": "of -> parse -> private constructor",
+      "verified_at": "2026-10-04T07:49:05.032104+00:00"
     }
   },
   "identifier_domain_assumption": {
@@ -307,6 +313,11 @@
       "artifact_commit": "c55b26d216d3db44b1e144f6b44f2b3bc38ee837",
       "validation_bundle_commit": "c71f32d2a46912adc2f4f76d066afdfc00ddca33",
       "verified_at": "2026-10-04T05:55:19.412309+00:00"
+    },
+    {
+      "artifact_commit": "00977635cf6d9b586d36ab976b67dffd22f70015",
+      "validation_bundle_commit": "c41914f72bbad8cb20721852890c02ca8d67662b",
+      "verified_at": "2026-10-04T07:03:40.845172+00:00"
     }
   ]
 }

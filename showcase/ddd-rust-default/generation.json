@@ -112,8 +112,8 @@
   "manual_revision": {
     "basis": "Explicit user instruction: remove ReservationSnapshot directly without TAKT; unify both showcases on Event Sourcing; retain no backward compatibility.",
     "started_at": "2026-10-04T05:46:34.820720+00:00",
-    "validation_bundle_commit": "c41914f72bbad8cb20721852890c02ca8d67662b",
-    "finished_at": "2026-10-04T07:03:40.845172+00:00",
+    "validation_bundle_commit": "871d0d866516c9264f4f10dbd77126a117ae4af6",
+    "finished_at": "2026-10-04T07:49:05.032104+00:00",
     "versions": {
       "node": "v24.19.0",
       "bun": "1.4.2",
@@ -129,6 +129,7 @@
       "packages/command/reservation-domain/src/reservation/reservation_id.rs",
       "packages/command/reservation-domain/src/reservation/reservation_id/tests.rs",
       "packages/command/reservation-domain/src/reservation/tests.rs",
+      "packages/command/reservation-domain/src/reservation/time_slot.rs",
       "packages/command/reservation-domain/src/room_id.rs",
       "packages/command/reservation-domain/src/room_id/tests.rs",
       "packages/command/reservation-interface-adapter/src/in_memory_reservation_repository.rs",
@@ -143,6 +144,13 @@
       "typed_primitive_input": "u64",
       "rule": "factory-naming",
       "verified_at": "2026-10-04T07:03:40.845172+00:00"
+    },
+    "primary_constructor_update": {
+      "basis": "User approved one primary constructor with direct or auxiliary delegation and requested manual rule/linter/showcase updates.",
+      "rule": "primary-constructor",
+      "construction_path": "of -> parse -> private new",
+      "native_protocol_version": 11,
+      "verified_at": "2026-10-04T07:49:05.032104+00:00"
     }
   },
   "identifier_domain_assumption": {
@@ -165,14 +173,14 @@
     "packages/command/reservation-interface-adapter/src/in_memory_reservation_repository.rs": "457bf1e790da2f5bc3370ab1b4c2bbe63d562c6f70b1467ca59e43f7f8a15045",
     "packages/command/reservation-interface-adapter/src/lib.rs": "d72d0e55088eee814f164de63f16738f1a7c30ae86dff7dab44eedd650f17cc9",
     "packages/command/reservation-interface-adapter/src/in_memory_reservation_repository/tests.rs": "137a47c3c59b19a095dd0fb2aa2835ff211be42ddbbb3e4e3d88ee9af885d47f",
-    "packages/command/reservation-domain/src/room_id.rs": "e9730c838f76b7948aeb2035f26f65e7957a827227deae1b63b9beb79778aeaa",
-    "packages/command/reservation-domain/src/member_id.rs": "52b902af60f34d385c5baacd159f9525a4ea1ed2dfceb0921ecb5b1b832ca283",
+    "packages/command/reservation-domain/src/room_id.rs": "8978302434fc3288101270c505416ea558ec23bd8d1da77ed753c58b9f3e197b",
+    "packages/command/reservation-domain/src/member_id.rs": "a35baef0835767c9a3479dd6a4713d1b1df5a176011aae456a530172a846851e",
     "packages/command/reservation-domain/src/lib.rs": "51ec988f8d557d6a265c0b2d56de0b7debddf8d3c93b91023f9d9c297b01119d",
     "packages/command/reservation-domain/src/reservation.rs": "164374a738f979874b57edd672ac3d8bf8299915d902d5f17105104b6746b0c8",
     "packages/command/reservation-domain/src/member_id/tests.rs": "c8ad01698b4fdc5eeb1e1fac7195db1efd51b8b5783025e18c75bce0ac327e08",
-    "packages/command/reservation-domain/src/reservation/time_slot.rs": "d95601e3371483885d20f9d5cda3d37918d33378686797ddff32a6b7dd59e07d",
+    "packages/command/reservation-domain/src/reservation/time_slot.rs": "48f79a5969c94d3bd7477596814f1a6fb9f51c06583900b092d509ba8e654fd8",
     "packages/command/reservation-domain/src/reservation/tests.rs": "ab0e09c3b5df90f7825dc45e261b41a389f2b09d8d80758d0ec08b8e16ae2bc8",
-    "packages/command/reservation-domain/src/reservation/reservation_id.rs": "00da0461e0bfddef9ca1ffc8c2afdbe574c90c045a7dcda45f0b5d1b927c9638",
+    "packages/command/reservation-domain/src/reservation/reservation_id.rs": "a958214f05088eb7bf8115717624708e1b98004bba937ff450253704ee383b4a",
     "packages/command/reservation-domain/src/room_id/tests.rs": "e4c06bb14c02994f3b87f6cfe05317adc499ae9bab23c72cc034969af7b6bb0c",
     "packages/command/reservation-domain/src/reservation/reservation_id/tests.rs": "cd6bb44957e453c314420f218c5e97f24ed1c251c15744604cb2cef1141aeaf1",
     "packages/command/reservation-domain/src/reservation/time_slot/tests.rs": "46dcfb058147e25467873514416ea16c192711d445ed41f635cb7987fcb748d5",
@@ -203,6 +211,11 @@
       "artifact_commit": "c55b26d216d3db44b1e144f6b44f2b3bc38ee837",
       "validation_bundle_commit": "c71f32d2a46912adc2f4f76d066afdfc00ddca33",
       "verified_at": "2026-10-04T05:55:19.424661+00:00"
+    },
+    {
+      "artifact_commit": "00977635cf6d9b586d36ab976b67dffd22f70015",
+      "validation_bundle_commit": "c41914f72bbad8cb20721852890c02ca8d67662b",
+      "verified_at": "2026-10-04T07:03:40.845172+00:00"
     }
   ]
 }
