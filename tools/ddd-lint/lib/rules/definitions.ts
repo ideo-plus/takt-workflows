@@ -17,6 +17,24 @@ export interface RuleDefinition {
 
 export const RULES: readonly RuleDefinition[] = [
   {
+    rule_id: "repository-result-contract",
+    name: "simple-repository-result",
+    statement: "a repository wraps its Result without additional meaning, returns a persistence envelope, or uses a per-operation infrastructure error",
+    target_layers: ["use-case"],
+    requires_model: false,
+    facts: ["traits", "aliases"],
+    per_file: true,
+  },
+  {
+    rule_id: "in-memory-restoration",
+    name: "direct-in-memory-aggregate-storage",
+    statement: "an in-memory state-sourcing repository reconstructs an aggregate instead of retaining its object",
+    target_layers: ["interface-adapter"],
+    requires_model: true,
+    facts: ["calls", "layer-structure", "aggregate-mapping"],
+    per_file: true,
+  },
+  {
     rule_id: "primitive-initialization",
     name: "invariant-based-primitive-initialization",
     statement: "a Domain Primitive lacks checked parse and panicking of, or initializes outside its invariant guard",

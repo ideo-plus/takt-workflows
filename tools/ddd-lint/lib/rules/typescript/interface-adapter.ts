@@ -11,9 +11,11 @@
 import { join } from "node:path";
 import type { FindingInput } from "../../shared/findings.ts";
 import { containsMediaWord, toPascal } from "../lists.ts";
+import { inMemoryAggregates } from "../in-memory.ts";
+import { aggregateMappings } from "./aggregate-binding.ts";
 import { packageContaining, resolveSpecifier } from "./edges.ts";
 import { factsOf } from "./file-facts.ts";
-import { importedDomainType, isPortDeclaration, resolveConstructedType } from "./symbols.ts";
+import { importedDomainType, isPortDeclaration, resolveConstructedType, resolveTypeName } from "./symbols.ts";
 import type { TsInspection, TsTarget } from "./types.ts";
 
 // --- (l) query side domain / repository reference ------------------------------------------------
@@ -186,6 +188,23 @@ export function ruleN(inspection: TsInspection, target: TsTarget): FindingInput[
       message: `adapter constructs ${resolved.type.name} via ${site.kind} instead of a full constructor`,
       line: site.span.start_line,
     });
+  }
+  return findings;
+}
+
+/** A memory repository retains aggregate objects; it never decodes a persisted state record. */
+export function ruleInMemoryRestoration(inspection: TsInspection, target: TsTarget): FindingInput[] {
+  const references = inMemoryAggregates(inspection.run, target.pkg.name, "typescript");
+  if (!references.size) return [];
+  const facts = factsOf(inspection, target.file);
+  if (!facts.declarations.some((entry) => entry.kind === "class" && entry.name.endsWith("Repository"))) return [];
+  const aggregates = aggregateMappings(inspection).filter((entry) => references.has(entry.aggregate_ref) && entry.persistence_method === "state-sourcing");
+  const findings: FindingInput[] = [];
+  for (const call of facts.calls) {
+    if (call.kind !== "method-call" || call.callee_text !== "restore" || !call.receiver_text) continue;
+    const resolved = resolveTypeName(inspection.packages, inspection.symbols, target.file, facts, call.receiver_text);
+    if (resolved.kind !== "domain" || !aggregates.some((entry) => entry.type === resolved.type.name && entry.package === resolved.type.pkg.name)) continue;
+    findings.push({ rule_id: "in-memory-restoration", file: target.file, line: call.span.start_line, message: `in-memory repository reconstructs ${resolved.type.name}; retain the aggregate object directly instead of a persistence record` });
   }
   return findings;
 }

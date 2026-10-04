@@ -99,7 +99,7 @@ function checkDependencyDirection(report: LayerReport, structure: LayerStructure
   }
 }
 
-/** Every aggregate of the context is rebuilt through a constructor that takes all of its state. */
+/** Memory retains aggregate instances; external representations use the full-state constructor. */
 function checkRestorationPaths(
   report: LayerReport,
   structure: LayerStructure,
@@ -110,10 +110,11 @@ function checkRestorationPaths(
   if (context === undefined) return;
   for (const aggregate of context.aggregates) {
     const path = structure.restoration_paths.find((entry) => entry.aggregate_ref === aggregate.element_id);
-    if (path?.via !== "full-constructor")
+    const required = structure.persistence_backend === "in-memory" ? "stored-instance" : "full-constructor";
+    if (path?.via !== required)
       report.add(
         LAYER_RULES.restorationPath,
-        `${where}: the aggregate ${aggregate.element_id} has no full-constructor restoration path`,
+        `${where}: the aggregate ${aggregate.element_id} has no ${required} restoration path`,
       );
   }
 }

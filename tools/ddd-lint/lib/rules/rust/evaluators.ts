@@ -12,6 +12,8 @@ import { containsMediaWord, toPascal } from "../lists.ts";
 import type { DomainTypeSymbol, InspectionContext, InspectionTarget } from "../types.ts";
 import { evaluateDomainPackaging } from "./packaging.ts";
 import { rulePrimitiveInitialization } from "./primitives.ts";
+import { inMemoryAggregates } from "../in-memory.ts";
+import { repositoryContractProblem, resultArguments, expandGenericStoreResult } from "../repository-contract.ts";
 import { within as withinSpan } from "./program.ts";
 
 function within(span: Span, outer: Span): boolean {
@@ -477,7 +479,7 @@ function ruleRepositoryResult(target: InspectionTarget, context: InspectionConte
   for (const trait of declarationsOf(context, file).traits) {
     if (!trait.name.endsWith("Repository")) continue;
     for (const signature of trait.signatures) {
-      const returned = signature.return_type_text?.trim();
+      const returned = expandGenericStoreResult(signature.return_type_text?.trim(), declarationsOf(context, file).aliases);
       if (returned !== undefined && /^(?:::)?(?:\w+::)*Result\s*</.test(returned)) continue;
       out.push(
         finding(
@@ -683,6 +685,42 @@ function ruleN(target: InspectionTarget, context: InspectionContext): FindingInp
   return out;
 }
 
+function ruleRepositoryContract(target: InspectionTarget, context: InspectionContext): FindingInput[] {
+  if (!target.file) return [];
+  const facts = declarationsOf(context, target.file);
+  const ports = facts.traits.filter((entry) => entry.name.endsWith("Repository"));
+  if (!ports.length) return [];
+  const findings: FindingInput[] = [];
+  for (const port of ports) {
+    const aggregate = port.name.slice(0, -"Repository".length);
+    for (const method of port.signatures) {
+      const problem = repositoryContractProblem(method.name, expandGenericStoreResult(method.return_type_text, facts.aliases), aggregate, "rust");
+      if (problem) findings.push(finding("repository-result-contract", target.file, `${port.name}::${method.name}: ${problem}`, method.line));
+    }
+  }
+  for (const alias of facts.aliases.filter((entry) => !entry.generic)) {
+    const parts = resultArguments(alias.type_text);
+    if (parts && parts[1] === "RepositoryError") findings.push(finding("repository-result-contract", target.file, `${alias.name} only renames a repository Result; use Result directly or a reusable generic alias`));
+  }
+  return findings;
+}
+
+function ruleInMemoryRestoration(target: InspectionTarget, context: InspectionContext): FindingInput[] {
+  if (!target.file || !target.crate_name || context.rustMapping.kind !== "loaded") return [];
+  const references = inMemoryAggregates(context.run, target.crate_name, "rust");
+  if (!references.size) return [];
+  const facts = declarationsOf(context, target.file);
+  if (!facts.impls.some((entry) => entry.trait_text?.replace(/<.*$/, "").endsWith("Repository"))) return [];
+  const aggregates = context.rustMapping.view.aggregates.filter((entry) => references.has(entry.aggregate_ref) && entry.persistence_method === "state-sourcing");
+  const module = context.program.files.get(target.file)!.module;
+  return facts.constructions.flatMap((site) => {
+    if (site.kind !== "associated-call" || site.callee_text !== "restore") return [];
+    const type = context.program.resolveType(target.file!, module, site.type_text);
+    if (!type || !aggregates.some((entry) => entry.type === type.name && entry.crate.replace(/-/g, "_") === type.crate)) return [];
+    return [finding("in-memory-restoration", target.file!, `in-memory repository reconstructs ${type.name}; retain the aggregate object directly instead of a persistence record`, site.span.start_line)];
+  });
+}
+
 export const PER_FILE_EVALUATORS: Record<
   string,
   (target: InspectionTarget, context: InspectionContext) => FindingInput[]
@@ -701,9 +739,11 @@ export const PER_FILE_EVALUATORS: Record<
   "use-case-name": ruleUseCaseName,
   "repository-result": ruleRepositoryResult,
   "repository-mut-self": ruleRepositoryMutSelf,
+  "repository-result-contract": ruleRepositoryContract,
   l: ruleL,
   m: ruleM,
   n: ruleN,
+  "in-memory-restoration": ruleInMemoryRestoration,
 };
 
 export const CONTEXT_EVALUATORS: Record<

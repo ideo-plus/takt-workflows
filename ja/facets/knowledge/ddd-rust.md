@@ -375,50 +375,27 @@ impl<'a, R: InvoiceRepository> IssueInvoiceUseCase<'a, R> {
 }
 ```
 
-アダプタはポートを実装し、名前に保存媒体の接頭辞を付けてよい。集約は `restore`、顧客は `parse`、明細のコレクションは `of` で組み立て直す。記録がなければ `Ok(None)` を返し、保存媒体の失敗は `RepositoryError` にして返す（インメモリの実装は失敗しない）。
+インメモリのアダプタは集約オブジェクトを Map／HashMap に直接保持する。保存用の Record／Snapshot に分解せず、読込時に parse／restore で組み立て直さない。TypeScript は不変の集約を保持して返し、Rust は保存済みの集約を変更しないよう clone を返す。DB・ファイルなど保存表現を持つアダプタだけが、その表現から parse／restore を通して復元する。
 
 ```rust
 use std::collections::HashMap;
 
-use billing_domain::customer_id::CustomerId;
-use billing_domain::invoice::line::InvoiceLine;
-use billing_domain::invoice::lines::InvoiceLines;
 use billing_domain::invoice::Invoice;
-use billing_domain::money::Money;
 use billing_use_case::invoice_repository::{InvoiceRepository, RepositoryError};
 
-pub struct InvoiceRecord {
-    pub customer: String,
-    pub amounts: Vec<i64>,
-    pub issued: bool,
-    pub last_add_line_command_id: Option<String>,
-}
-
-/// The invoices stored here take precedence over the records they were first read from.
 pub struct InMemoryInvoiceRepository {
-    records: HashMap<String, InvoiceRecord>,
     stored: HashMap<String, Invoice>,
 }
 
 impl InMemoryInvoiceRepository {
-    pub fn new(records: HashMap<String, InvoiceRecord>) -> Self {
-        InMemoryInvoiceRepository { records, stored: HashMap::new() }
+    pub fn new() -> Self {
+        InMemoryInvoiceRepository { stored: HashMap::new() }
     }
 }
 
 impl InvoiceRepository for InMemoryInvoiceRepository {
     fn find_by_id(&self, invoice_id: &str) -> Result<Option<Invoice>, RepositoryError> {
-        if let Some(stored) = self.stored.get(invoice_id) {
-            return Ok(Some(stored.clone()));
-        }
-        let Some(record) = self.records.get(invoice_id) else {
-            return Ok(None);
-        };
-        let customer = CustomerId::parse(&record.customer).expect("corrupt invoice record: customer ID");
-        let lines = InvoiceLines::of(record.amounts.iter().map(|amount| InvoiceLine::of(Money::of(*amount))).collect());
-        let invoice = Invoice::restore(invoice_id, customer, lines, record.issued, record.last_add_line_command_id.clone())
-            .expect("corrupt invoice record");
-        Ok(Some(invoice))
+        Ok(self.stored.get(invoice_id).cloned())
     }
 
     fn store(&mut self, invoice_id: &str, invoice: Invoice) -> Result<(), RepositoryError> {
