@@ -230,7 +230,7 @@ export function extractFileFacts(api: CompilerApi, file: ts.SourceFile): TypeScr
   /** What only some kinds of declaration record: heritage, a type literal, a stated type, an initializer. */
   type DeclarationDetail = Pick<
     DeclarationFact,
-    "binding" | "heritage" | "type_literal" | "type_text" | "initializer" | "params"
+    "binding" | "heritage" | "type_literal" | "type_text" | "initializer" | "params" | "generic"
   >;
 
   function recordDeclaration(
@@ -389,7 +389,11 @@ export function extractFileFacts(api: CompilerApi, file: ts.SourceFile): TypeScr
       const aliased = statement.type;
       const literal = api.isTypeLiteralNode(aliased);
       const members = literal ? typeMembers(aliased.members) : [];
-      recordDeclaration(statement, statement, statement.name, "type-alias", members, { type_literal: literal });
+      recordDeclaration(statement, statement, statement.name, "type-alias", members, {
+        type_literal: literal,
+        type_text: aliased.getText(file),
+        generic: (statement.typeParameters?.length ?? 0) > 0,
+      });
     } else if (api.isEnumDeclaration(statement)) {
       const members = statement.members.flatMap((element) =>
         member(element, element.name, "enum-member", "public", unresolvedAt),

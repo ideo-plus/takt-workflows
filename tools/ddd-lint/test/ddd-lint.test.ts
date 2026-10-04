@@ -7,6 +7,7 @@ import { rustParentModuleFile, rustSample, rustSamples } from "./samples/rust.ts
 import { parentModuleFile, typeScriptSample, typeScriptSamples } from "./samples/typescript.ts";
 import { loadAggregateMapping } from "../lib/aggregate-mapping/index.ts";
 import { loadDomainModelSource } from "../lib/schema/loader.ts";
+import { serializedMemoryExamples } from "./samples/serialized-memory.ts";
 
 const CLI = resolve(import.meta.dir, "../ddd-lint.ts");
 const scratch = mkdtempSync(join(tmpdir(), "ddd-lint-"));
@@ -275,6 +276,82 @@ fn of_rejects_an_invalid_money_increment() { Money::of(1); }
       expect(result.status).toBe(0);
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
+});
+
+describe("in-memory aggregate storage", () => {
+  for (const sample of [...typeScriptSamples(), ...rustSamples()]) {
+    test(`${sample.name} rejects the former in-memory restoration declaration`, () => {
+      const result = lint(sample.files, (files) =>
+        replace(files, "docs/ddd/layer-structure.yaml", "via: stored-instance", "via: full-constructor"),
+      );
+      expect(result.findings.some((entry) => entry.rule_id === "layer-declaration.restoration-path")).toBe(true);
+    });
+    test(`${sample.name} rejects reconstructing a stored aggregate`, () => {
+      const result = lint(sample.files, (files) => {
+        const rust = sample.name.startsWith("rust");
+        const path = rust ? "packages/command/billing-interface-adapter/src/in_memory_invoice_repository.rs" : "packages/command/billing-interface-adapter/src/in-memory-invoice-repository.ts";
+        files[path] = rust ? serializedMemoryExamples.rust : serializedMemoryExamples.typescript;
+      });
+      expect(result.findings.some((entry) => entry.rule_id === "in-memory-restoration")).toBe(true);
+    });
+    test(`${sample.name} permits restoration from an external persisted representation`, () => {
+      const result = lint(sample.files, (files) => {
+        const rust = sample.name.startsWith("rust");
+        const path = rust ? "packages/command/billing-interface-adapter/src/in_memory_invoice_repository.rs" : "packages/command/billing-interface-adapter/src/in-memory-invoice-repository.ts";
+        files[path] = rust ? serializedMemoryExamples.rust : serializedMemoryExamples.typescript;
+        replace(files, "docs/ddd/layer-structure.yaml", "persistence_backend: in-memory", "persistence_backend: file");
+        replace(files, "docs/ddd/layer-structure.yaml", "via: stored-instance", "via: full-constructor");
+      });
+      expect(result.findings.filter((entry) => entry.rule_id === "in-memory-restoration")).toEqual([]);
+    });
+  }
+});
+
+describe("repository Result contracts", () => {
+  for (const sample of typeScriptSamples()) {
+    const path = "packages/command/billing-use-case/src/invoice-repository.ts";
+    test(`${sample.name} rejects a per-operation Result alias without additional meaning`, () => {
+      const result = lint(sample.files, (files) => { files[path] += '\nexport type StoreInvoiceResult = Result<void, RepositoryError>;\n'; });
+      expect(result.findings.some((entry) => entry.rule_id === "repository-result-contract")).toBe(true);
+    });
+    test(`${sample.name} accepts a reusable generic Result alias`, () => {
+      const result = lint(sample.files, (files) => {
+        replace(files, path, 'store(invoiceId: string, invoice: Invoice): Result<void, RepositoryError>', 'store(invoiceId: string, invoice: Invoice): StoreResult<RepositoryError>');
+        files[path] += '\nexport type StoreResult<E> = Result<void, E>;\n';
+      });
+      expect(result.findings).toEqual([]);
+    });
+    test(`${sample.name} rejects a persistence wrapper as the loaded aggregate`, () => {
+      const result = lint(sample.files, (files) => replace(files, path, 'Result<Invoice | undefined, RepositoryError>', 'Result<StoredInvoice | undefined, RepositoryError>'));
+      expect(result.findings.some((entry) => entry.rule_id === "repository-result-contract")).toBe(true);
+    });
+    test(`${sample.name} rejects a different repository error type`, () => {
+      const result = lint(sample.files, (files) => replace(files, path, 'Result<void, RepositoryError>', 'Result<void, StoreInvoiceError>'));
+      expect(result.findings.some((entry) => entry.rule_id === "repository-result-contract")).toBe(true);
+    });
+  }
+  for (const sample of rustSamples()) {
+    const path = "packages/command/billing-use-case/src/invoice_repository.rs";
+    test(`${sample.name} rejects a per-operation Result alias without additional meaning`, () => {
+      const result = lint(sample.files, (files) => { files[path] += '\npub type StoreInvoiceResult = Result<(), RepositoryError>;\n'; });
+      expect(result.findings.some((entry) => entry.rule_id === "repository-result-contract")).toBe(true);
+    });
+    test(`${sample.name} accepts a reusable generic Result alias`, () => {
+      const result = lint(sample.files, (files) => {
+        replace(files, path, 'fn store(&mut self, invoice_id: &str, invoice: Invoice) -> Result<(), RepositoryError>', 'fn store(&mut self, invoice_id: &str, invoice: Invoice) -> StoreResult<RepositoryError>');
+        files[path] += '\npub type StoreResult<E> = Result<(), E>;\n';
+      });
+      expect(result.findings).toEqual([]);
+    });
+    test(`${sample.name} rejects a persistence wrapper as the loaded aggregate`, () => {
+      const result = lint(sample.files, (files) => replace(files, path, 'Result<Option<Invoice>, RepositoryError>', 'Result<Option<StoredInvoice>, RepositoryError>'));
+      expect(result.findings.some((entry) => entry.rule_id === "repository-result-contract")).toBe(true);
+    });
+    test(`${sample.name} rejects a different repository error type`, () => {
+      const result = lint(sample.files, (files) => replace(files, path, 'Result<(), RepositoryError>', 'Result<(), StoreInvoiceError>'));
+      expect(result.findings.some((entry) => entry.rule_id === "repository-result-contract")).toBe(true);
+    });
+  }
 });
 
 describe("Rust sample domain model generation", () => {
@@ -783,7 +860,8 @@ describe("layer declaration", () => {
   test("a persistence-bearing structure with empty ports and repositories is rejected", () => {
     const files = aggregateOnlyProject();
     files["docs/ddd/layer-structure.yaml"] = aggregateOnlyLayers
-      .replace("persistence_backend: none", "persistence_backend: in-memory");
+      .replace("persistence_backend: none", "persistence_backend: in-memory")
+      .replace("via: full-constructor", "via: stored-instance");
     expect(layerFindings(files).map((entry) => `${entry.rule_id}: ${entry.message}`)).toEqual([
       "layer-declaration.required-items: layer_structures[bc.billing]: at least one of the dependencies, ports, repositories and restoration paths of the context is empty",
     ]);

@@ -9,6 +9,7 @@
  */
 
 import type { FindingInput } from "../../shared/findings.ts";
+import { repositoryContractProblem, resultArguments, expandGenericStoreResult } from "../repository-contract.ts";
 import type { MemberFact, ParamFact, TypeScriptFileFacts } from "../../typescript/domain-facts/index.ts";
 import { aggregateBinding } from "./aggregate-binding.ts";
 import { enclosingClass, factsOf, receiverType } from "./file-facts.ts";
@@ -194,10 +195,12 @@ function statesResult(returned: string): boolean {
  * `store` returns `void` leaves the use case no way to see that the state it changed was never kept.
  */
 export function ruleRepositoryResult(inspection: TsInspection, target: TsTarget): FindingInput[] {
-  return factsOf(inspection, target.file).declarations.flatMap((declaration) => {
+  const facts = factsOf(inspection, target.file);
+  return facts.declarations.flatMap((declaration) => {
     if (!isPortDeclaration(declaration) || !declaration.name.endsWith("Repository")) return [];
     return declaration.members.flatMap((member): FindingInput[] => {
-      const returned = statedReturn(member);
+      const stated = statedReturn(member);
+      const returned = stated === null ? null : expandGenericStoreResult(stated, facts.declarations);
       if (returned === null || (returned !== undefined && statesResult(returned))) return [];
       return [
         {
@@ -209,6 +212,27 @@ export function ruleRepositoryResult(inspection: TsInspection, target: TsTarget)
       ];
     });
   });
+}
+
+export function ruleRepositoryContract(inspection: TsInspection, target: TsTarget): FindingInput[] {
+  const facts = factsOf(inspection, target.file);
+  const ports = facts.declarations.filter((entry) => isPortDeclaration(entry) && entry.name.endsWith("Repository"));
+  if (!ports.length) return [];
+  const findings: FindingInput[] = [];
+  for (const port of ports) {
+    const aggregate = port.name.slice(0, -"Repository".length);
+    for (const member of port.members) {
+      const returned = statedReturn(member);
+      if (returned === null) continue;
+      const problem = repositoryContractProblem(member.name, expandGenericStoreResult(returned, facts.declarations), aggregate, "typescript");
+      if (problem) findings.push({ rule_id: "repository-result-contract", file: target.file, line: member.span.start_line, message: `${port.name}.${member.name}: ${problem}` });
+    }
+  }
+  for (const alias of facts.declarations.filter((entry) => entry.kind === "type-alias" && !entry.generic)) {
+    const parts = resultArguments(alias.type_text);
+    if (parts && parts[1] === "RepositoryError") findings.push({ rule_id: "repository-result-contract", file: target.file, line: alias.span.start_line, message: `${alias.name} only renames a repository Result; use Result directly or a reusable generic alias` });
+  }
+  return findings;
 }
 
 // --- (i) use case chaining -----------------------------------------------------------------------

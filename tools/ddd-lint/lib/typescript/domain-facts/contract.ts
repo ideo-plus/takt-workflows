@@ -112,6 +112,7 @@ export interface DeclarationFact {
   readonly type_literal?: boolean;
   /** The type a variable states; present on variables that state one. */
   readonly type_text?: string;
+  readonly generic?: boolean;
   /** How a variable is initialized; present on variables that have an initializer. */
   readonly initializer?: InitializerFact;
   /** The parameters of a function declaration; present on function declarations only. */

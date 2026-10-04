@@ -525,37 +525,19 @@ export type { InvoiceNotFound, IssueInvoiceFailure } from "./issue-invoice.ts";
 export { IssueInvoiceUseCase } from "./issue-invoice.ts";
 `;
 
-export const IN_MEMORY_INVOICE_REPOSITORY = `import { CustomerId, Invoice, InvoiceLine, InvoiceLines, Money } from "${DOMAIN_NAME}";
-import type { ParseCustomerIdError } from "${DOMAIN_NAME}";
+export const IN_MEMORY_INVOICE_REPOSITORY = `import type { Invoice } from "${DOMAIN_NAME}";
 import type { InvoiceRepository, RepositoryError } from "${USE_CASE_NAME}";
 import type { Result } from "${RESULT_NAME}";
 
-export type InvoiceRecord = {
-  readonly customer: string;
-  readonly amounts: readonly number[];
-  readonly issued: boolean;
-  readonly lastAddLineCommandId: string | undefined;
-};
-
 export class InMemoryInvoiceRepository implements InvoiceRepository {
-  readonly #records: ReadonlyMap<string, InvoiceRecord>;
   readonly #stored: Map<string, Invoice>;
 
-  constructor(records: ReadonlyMap<string, InvoiceRecord>) {
-    this.#records = records;
+  constructor() {
     this.#stored = new Map();
   }
 
   findById(invoiceId: string): Result<Invoice | undefined, RepositoryError> {
-    const stored: Invoice | undefined = this.#stored.get(invoiceId);
-    if (stored !== undefined) return { ok: true, value: stored };
-    const record: InvoiceRecord | undefined = this.#records.get(invoiceId);
-    if (record === undefined) return { ok: true, value: undefined };
-    const customer: Result<CustomerId, ParseCustomerIdError> = CustomerId.parse(record.customer);
-    if (!customer.ok) throw new Error("corrupt invoice record");
-    const lines: InvoiceLines = InvoiceLines.of(record.amounts.map((amount: number) => InvoiceLine.of(Money.of(amount))));
-    const invoice: Invoice = Invoice.restore(invoiceId, customer.value, lines, record.issued, record.lastAddLineCommandId);
-    return { ok: true, value: invoice };
+    return { ok: true, value: this.#stored.get(invoiceId) };
   }
 
   store(invoiceId: string, invoice: Invoice): Result<void, RepositoryError> {
@@ -565,8 +547,7 @@ export class InMemoryInvoiceRepository implements InvoiceRepository {
 }
 `;
 
-const INTERFACE_ADAPTER_INDEX = `export type { InvoiceRecord } from "./in-memory-invoice-repository.ts";
-export { InMemoryInvoiceRepository } from "./in-memory-invoice-repository.ts";
+const INTERFACE_ADAPTER_INDEX = `export { InMemoryInvoiceRepository } from "./in-memory-invoice-repository.ts";
 `;
 
 /** The domain model: `open` is a factory, `addLine` and `issue` are commands, each with its own errors. */
@@ -711,7 +692,7 @@ export const LAYER_STRUCTURE = [
   "    repositories:",
   "      - { name: InvoiceRepository, aggregate_ref: aggregate.invoice, io_unit: single, verbs: [findById, store], store_semantics: upsert }",
   "    restoration_paths:",
-  "      - { aggregate_ref: aggregate.invoice, via: full-constructor }",
+  "      - { aggregate_ref: aggregate.invoice, via: stored-instance }",
   "    persistence_backend: in-memory",
   "",
 ].join("\n");

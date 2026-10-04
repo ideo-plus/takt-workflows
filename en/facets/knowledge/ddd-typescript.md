@@ -435,40 +435,22 @@ export class IssueInvoiceUseCase {
 }
 ```
 
-The adapter implements the port, may prefix its name with the storage medium, and restores the aggregate through `restore`, the customer through `parse`, and the lines through `of`. It returns `undefined` when there is no record and reports a failure of the storage as `RepositoryError` (the in-memory implementation never fails).
+An in-memory adapter retains aggregate objects directly in Map/HashMap. It does not decompose them into Record/Snapshot data or reconstruct them through parse/restore on load. TypeScript retains and returns immutable aggregates; Rust returns a clone to protect saved aggregates. Database/file adapters with persisted representations own decoding and restoration.
 
 ```ts
-import { CustomerId, Invoice, InvoiceLine, InvoiceLines, Money } from "@acme/billing-domain";
-import type { ParseCustomerIdError } from "@acme/billing-domain";
+import type { Invoice } from "@acme/billing-domain";
 import type { InvoiceRepository, RepositoryError } from "@acme/billing-use-case";
 import type { Result } from "@acme/language-extensions";
 
-export type InvoiceRecord = {
-  readonly customer: string;
-  readonly amounts: readonly number[];
-  readonly issued: boolean;
-  readonly lastAddLineCommandId: string | undefined;
-};
-
 export class InMemoryInvoiceRepository implements InvoiceRepository {
-  readonly #records: ReadonlyMap<string, InvoiceRecord>;
   readonly #stored: Map<string, Invoice>;
 
-  constructor(records: ReadonlyMap<string, InvoiceRecord>) {
-    this.#records = records;
+  constructor() {
     this.#stored = new Map();
   }
 
   findById(invoiceId: string): Result<Invoice | undefined, RepositoryError> {
-    const stored: Invoice | undefined = this.#stored.get(invoiceId);
-    if (stored !== undefined) return { ok: true, value: stored };
-    const record: InvoiceRecord | undefined = this.#records.get(invoiceId);
-    if (record === undefined) return { ok: true, value: undefined };
-    const customer: Result<CustomerId, ParseCustomerIdError> = CustomerId.parse(record.customer);
-    if (!customer.ok) throw new Error("corrupt invoice record");
-    const lines: InvoiceLines = InvoiceLines.of(record.amounts.map((amount: number) => InvoiceLine.of(Money.of(amount))));
-    const invoice: Invoice = Invoice.restore(invoiceId, customer.value, lines, record.issued, record.lastAddLineCommandId);
-    return { ok: true, value: invoice };
+    return { ok: true, value: this.#stored.get(invoiceId) };
   }
 
   store(invoiceId: string, invoice: Invoice): Result<void, RepositoryError> {

@@ -141,6 +141,8 @@ export function validateLayerDraft(
       if (!first(restored, path.aggregate_ref))
         report.add(LAYER_RULES.duplicate, `${at}: the aggregate already has a restoration path`);
       resolveReference(report, index, path.aggregate_ref, `${at}.aggregate_ref`, AGGREGATE);
+      if (path.via === "stored-instance" && structure.persistence_backend !== "in-memory")
+        report.add(LAYER_RULES.restorationPath, `${at}: stored-instance requires the in-memory backend`);
     }
   }
   return report.findings;

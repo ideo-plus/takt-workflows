@@ -17,6 +17,10 @@ Judges the code of the interface adapter layer (repository implementations, exch
 
 ## Persistence
 
+An in-memory state repository retains aggregates directly in Map<Id, Aggregate>/HashMap<Id, Aggregate>. Do not decompose them into Record/Snapshot data. TypeScript returns immutable aggregates; Rust returns clones to protect saved aggregates. Database/file adapters with persisted representations own record conversion and parse/restore.
+
+Do not add version envelopes or persistence DTOs solely for concurrency the request does not require. State the actual concurrent-update requirement before introducing its mechanism.
+
 | Criterion | Judgment |
 |-----------|----------|
 | `store` overwrites unconditionally although concurrent updates are possible | REJECT. Use an expected version or an equivalent constraint |

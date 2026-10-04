@@ -31,11 +31,11 @@ import {
   ruleDomainPackaging,
 } from "./evaluators.ts";
 import { factsOf } from "./file-facts.ts";
-import { ruleL, ruleM, ruleN } from "./interface-adapter.ts";
+import { ruleL, ruleM, ruleN, ruleInMemoryRestoration } from "./interface-adapter.ts";
 import { ruleA } from "./state-hiding.ts";
 import { rulePrimitiveInitialization } from "./primitives.ts";
 import type { TsGate, TsInspection, TsTarget } from "./types.ts";
-import { ruleH, ruleI, ruleRepositoryResult, ruleUseCaseName } from "./use-case.ts";
+import { ruleH, ruleI, ruleRepositoryResult, ruleRepositoryContract, ruleUseCaseName } from "./use-case.ts";
 
 const DOMAIN: TsGate = {
   label: "domain",
@@ -122,6 +122,7 @@ export function evaluateTypeScriptUseCase(run: ProjectContext, api: CheckApi): C
       ...ruleD(inspection, target),
       ...ruleUseCaseName(inspection, target),
       ...ruleRepositoryResult(inspection, target),
+      ...ruleRepositoryContract(inspection, target),
     ],
     whole: (inspection) => ruleG(buildEdges(inspection)),
   });
@@ -133,6 +134,7 @@ export function evaluateTypeScriptInterfaceAdapter(run: ProjectContext, api: Che
       ...ruleL(inspection, target),
       ...ruleM(inspection, target),
       ...ruleN(inspection, target),
+      ...ruleInMemoryRestoration(inspection, target),
     ],
     whole: (inspection) => {
       const edges = buildEdges(inspection);

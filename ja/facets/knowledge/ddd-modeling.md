@@ -165,13 +165,15 @@ layer_structures:
     repositories:
       - { name: InvoiceRepository, aggregate_ref: aggregate.invoice, io_unit: single, verbs: [findById, store], store_semantics: upsert }
     restoration_paths:
-      - { aggregate_ref: aggregate.invoice, via: full-constructor }
+      - { aggregate_ref: aggregate.invoice, via: stored-instance }
     persistence_backend: in-memory
 ```
 
 `packages` はコンテキスト自身のパッケージを CQRS の側（`role`）とともに並べる。言語拡張（`@acme/language-extensions`）のようにコンテキストの外にある共有パッケージは、どの側にも立たないので `packages` に行を持たず、それを使うパッケージの `depends_on` にだけ書く。依存行には、そのパッケージの `package.json` や `Cargo.toml` が直接依存するパッケージをすべて書く。
 
 永続化を持たない集約だけのコンテキストでも、パッケージ、依存行、復元経路は宣言する。`ports: []`、`repositories: []`、`persistence_backend: none` は明示的に記述できる。
+
+インメモリの状態保存は集約オブジェクトを直接保持し、`restoration_paths` に `via: stored-instance` を宣言する。DB・ファイルなどの保存表現から集約を組み立て直す場合は `via: full-constructor` とし、`restore` で検証する。メモリ上の保存とシリアライズを混同しない。
 
 ## モデルの導き方
 
@@ -220,7 +222,7 @@ packages/command/billing-domain/src/
 |----|----|------|
 | `programming_model` | `class` | 集約はユースケースから呼ばれるオブジェクト |
 | | `actor` | 集約はメッセージを受け取る。複数集約のフローには Process Manager が要る |
-| `persistence_method` | `state-sourcing` | 現在の状態を保存する。`store` は期待バージョン付きで再永続化する |
+| `persistence_method` | `state-sourcing` | 現在の状態を保存する。同時更新があり得る場合は期待バージョンなどで守る |
 | | `event-sourcing` | イベントを追記する。状態は宣言した replay メソッドで再生して組み立てる |
 
 状態を変えるコマンドは、永続化の方式にかかわらず、生んだ 1 つのイベントを返す。イベントソーシングでは、コマンドは宣言した replay メソッドを通して状態を変え、復元は保存済みのイベントを同じメソッドで再生する。replay メソッドは何も判断しない。

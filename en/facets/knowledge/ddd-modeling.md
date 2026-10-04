@@ -165,13 +165,15 @@ layer_structures:
     repositories:
       - { name: InvoiceRepository, aggregate_ref: aggregate.invoice, io_unit: single, verbs: [findById, store], store_semantics: upsert }
     restoration_paths:
-      - { aggregate_ref: aggregate.invoice, via: full-constructor }
+      - { aggregate_ref: aggregate.invoice, via: stored-instance }
     persistence_backend: in-memory
 ```
 
 `packages` lists the context's own packages with the CQRS side each stands on (`role`). A shared package outside the context, such as the language extensions (`@acme/language-extensions`), stands on no side, so it has no `packages` row and appears only in the `depends_on` of the packages that use it. A dependency row lists every package its `package.json` or `Cargo.toml` depends on directly.
 
 An aggregate-only context with no persistence still declares its package, dependency row, and restoration path. It may explicitly declare `ports: []`, `repositories: []`, and `persistence_backend: none`.
+
+An in-memory state repository retains aggregate objects and declares `via: stored-instance`. A database or file adapter that reconstructs an aggregate from a persisted representation declares `via: full-constructor` and validates through restore. Memory storage does not require serialization.
 
 ## Deriving the Model
 
@@ -220,7 +222,7 @@ Execution model and persistence are independent choices, and both are independen
 |------|--------|---------|
 | `programming_model` | `class` | The aggregate is an object called by the use case |
 | | `actor` | The aggregate receives messages; multi-aggregate flows need a Process Manager |
-| `persistence_method` | `state-sourcing` | The current state is stored; `store` re-persists it with an expected version |
+| `persistence_method` | `state-sourcing` | The current state is stored; use expected versions or equivalent constraints when concurrent updates are possible |
 | | `event-sourcing` | Events are appended; state is rebuilt by replaying declared methods |
 
 Every command that changes state returns the one event it produced, whichever the persistence method. With event sourcing the command changes the state through a declared replay method, and restoring replays the stored events through the same method; the replay method decides nothing.
