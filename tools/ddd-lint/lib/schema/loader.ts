@@ -841,7 +841,10 @@ function validateAggregate(report: Report, index: ElementIndex, bc: BoundedConte
         `${where}.events: ${event.element_id}.aggregate must be ${aggregate.element_id}`,
       );
     }
-    requireRef(report, index, `${where}.events.${event.element_id}.produced_by`, event.produced_by, "command");
+    const creation = event.produced_by.startsWith("factory.");
+    requireRef(report, index, `${where}.events.${event.element_id}.produced_by`, event.produced_by, creation ? "factory" : "command");
+    if (creation && !aggregate.factory_rules.some((factory) => factory.element_id === event.produced_by && factory.target_element === aggregate.root_element))
+      report.add("schema.creation-event-producer", `${where}.events.${event.element_id}: a creation event must be produced by this aggregate root's factory`);
   }
 
   for (const transition of aggregate.transitions) {

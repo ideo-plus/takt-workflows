@@ -17,7 +17,7 @@ Judges the code of the domain layer (aggregates, Entities, value objects, Domain
 | Code of any layer builds an aggregate or Entity outside its type through a literal, a default value, a cast, or a public constructor | REJECT. Go through the full constructor that takes the whole state |
 | A factory builds an instance before validating its input, or builds an empty instance and fills it later | REJECT |
 | An `init`, `setup`, `initialize`, `reset`, or `configure` method completes construction | REJECT |
-| State is reconstructed from a database/file representation without a validating restore factory | REJECT. Validate and restore persisted representations. An aggregate retained in memory is returned directly (cloned in Rust), without reconstruction |
+| An aggregate is reconstructed from event history without validating history integrity | REJECT. Validate history and apply declared replay methods before returning the aggregate |
 | A restore factory rejects a corrupt state by throwing | OK. A corrupt state is not a business failure |
 | A factory the mapping binds to an operation returns the bare value although the operation has declared errors | REJECT |
 

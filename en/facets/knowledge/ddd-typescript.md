@@ -16,7 +16,7 @@ In the examples below the customer is the Domain Primitive `CustomerId`, the lin
 
 ### Class representation
 
-`open` validates and builds through the private constructor and returns `Result`. `restore` rebuilds a persisted invoice after validating the whole state and throws on a corrupt one, which is not a business failure. The commands `addLine` (`command.invoice.add-line`) and `issue` never change the invoice they are called on: each builds the changed state into a new invoice through the private constructor and returns it together with the one event it produced, as the named outcome type the mapping gives in `success_type` (`AddInvoiceLineOutcome`, `IssueInvoiceOutcome`). `addLine` remembers the ID of the last add-line command it applied (the model declares `retention: last-one`) and recognizes a resent command before any other check: it returns `kind: "duplicate"` with the unchanged invoice and no event, so the event is never published twice. Events (`InvoiceLineAdded`, `InvoiceIssued`) are read-only data types declared in the aggregate's module. Every `#` field is `readonly`. `total()` asks the line collection for the total, and `lines()` returns a copy of the lines.
+The standard is Event Sourcing. `open` validates inputs and creates a complete aggregate with its creation event. `addLine` and `issue` validate business rules and produce events. Commands build their next state through declared replay methods; `restore` validates history integrity and applies the same methods in order. Corrupt history is not a business rejection. A duplicate add-line command produces no event.
 
 ```ts
 import type { Result } from "@acme/language-extensions";
@@ -29,8 +29,11 @@ export type OpenInvoiceError = "negative-total";
 export type AddInvoiceLineError = "already-issued" | "negative-total";
 export type IssueInvoiceError = "already-issued" | "empty-lines";
 
-export type InvoiceLineAdded = { readonly invoiceId: string; readonly commandId: string; readonly line: InvoiceLine };
-export type InvoiceIssued = { readonly invoiceId: string };
+export type InvoiceOpened = { readonly kind: "opened"; readonly invoiceId: string; readonly customer: CustomerId; readonly lines: InvoiceLines };
+export type InvoiceEvent = InvoiceOpened | InvoiceLineAdded | InvoiceIssued;
+
+export type InvoiceLineAdded = { readonly kind: "line-added"; readonly invoiceId: string; readonly commandId: string; readonly line: InvoiceLine };
+export type InvoiceIssued = { readonly kind: "issued"; readonly invoiceId: string };
 
 export type AddInvoiceLineOutcome =
   | { readonly kind: "applied"; readonly invoice: Invoice; readonly event: InvoiceLineAdded }
@@ -38,21 +41,17 @@ export type AddInvoiceLineOutcome =
 export type IssueInvoiceOutcome = { readonly invoice: Invoice; readonly event: InvoiceIssued };
 
 export class Invoice {
+  readonly #opening: InvoiceOpened;
   readonly #id: string;
   readonly #customer: CustomerId;
   readonly #lines: InvoiceLines;
   readonly #issued: boolean;
   readonly #lastAddLineCommandId: string | undefined;
 
-  private constructor(
-    id: string,
-    customer: CustomerId,
-    lines: InvoiceLines,
-    issued: boolean,
-    lastAddLineCommandId: string | undefined,
-  ) {
-    this.#id = id;
-    this.#customer = customer;
+  private constructor(opening: InvoiceOpened, lines: InvoiceLines, issued: boolean, lastAddLineCommandId: string | undefined) {
+    this.#opening = opening;
+    this.#id = opening.invoiceId;
+    this.#customer = opening.customer;
     this.#lines = lines;
     this.#issued = issued;
     this.#lastAddLineCommandId = lastAddLineCommandId;
@@ -60,18 +59,45 @@ export class Invoice {
 
   static open(id: string, customer: CustomerId, lines: InvoiceLines): Result<Invoice, OpenInvoiceError> {
     if (lines.total().isNegative()) return { ok: false, error: "negative-total" };
-    return { ok: true, value: new Invoice(id, customer, lines, false, undefined) };
+    const event: InvoiceOpened = { kind: "opened", invoiceId: id, customer, lines };
+    return { ok: true, value: Invoice.fromOpened(event) };
   }
 
-  static restore(
-    id: string,
-    customer: CustomerId,
-    lines: InvoiceLines,
-    issued: boolean,
-    lastAddLineCommandId: string | undefined,
-  ): Invoice {
-    if ((issued && lines.isEmpty()) || lines.total().isNegative()) throw new Error("corrupt invoice state");
-    return new Invoice(id, customer, lines, issued, lastAddLineCommandId);
+  openedEvent(): InvoiceOpened {
+    return this.#opening;
+  }
+
+  static restore(id: string, events: readonly InvoiceEvent[]): Invoice {
+    const first = events[0];
+    if (!first || first.kind !== "opened" || first.invoiceId !== id || first.lines.total().isNegative()) throw new Error("corrupt invoice history");
+    let invoice = Invoice.fromOpened(first);
+    for (const event of events.slice(1)) {
+      if (event.invoiceId !== id) throw new Error("corrupt invoice history");
+      switch (event.kind) {
+        case "opened": throw new Error("corrupt invoice history");
+        case "line-added":
+          if (invoice.#issued || event.commandId === invoice.#lastAddLineCommandId || invoice.#lines.add(event.line).total().isNegative()) throw new Error("corrupt invoice history");
+          invoice = invoice.applyLineAdded(event);
+          break;
+        case "issued":
+          if (invoice.#issued || invoice.#lines.isEmpty()) throw new Error("corrupt invoice history");
+          invoice = invoice.applyIssued(event);
+          break;
+      }
+    }
+    return invoice;
+  }
+
+  private static fromOpened(event: InvoiceOpened): Invoice {
+    return new Invoice(event, event.lines, false, undefined);
+  }
+
+  private applyLineAdded(event: InvoiceLineAdded): Invoice {
+    return new Invoice(this.#opening, this.#lines.add(event.line), false, event.commandId);
+  }
+
+  private applyIssued(_event: InvoiceIssued): Invoice {
+    return new Invoice(this.#opening, this.#lines, true, this.#lastAddLineCommandId);
   }
 
   addLine(commandId: string, line: InvoiceLine): Result<AddInvoiceLineOutcome, AddInvoiceLineError> {
@@ -79,16 +105,16 @@ export class Invoice {
     if (this.#issued) return { ok: false, error: "already-issued" };
     const lines: InvoiceLines = this.#lines.add(line);
     if (lines.total().isNegative()) return { ok: false, error: "negative-total" };
-    const invoice: Invoice = new Invoice(this.#id, this.#customer, lines, false, commandId);
-    const event: InvoiceLineAdded = { invoiceId: this.#id, commandId, line };
+    const event: InvoiceLineAdded = { kind: "line-added", invoiceId: this.#id, commandId, line };
+    const invoice = this.applyLineAdded(event);
     return { ok: true, value: { kind: "applied", invoice, event } };
   }
 
   issue(): Result<IssueInvoiceOutcome, IssueInvoiceError> {
     if (this.#issued) return { ok: false, error: "already-issued" };
     if (this.#lines.isEmpty()) return { ok: false, error: "empty-lines" };
-    const invoice: Invoice = new Invoice(this.#id, this.#customer, this.#lines, true, this.#lastAddLineCommandId);
-    const event: InvoiceIssued = { invoiceId: this.#id };
+    const event: InvoiceIssued = { kind: "issued", invoiceId: this.#id };
+    const invoice = this.applyIssued(event);
     return { ok: true, value: { invoice, event } };
   }
 
@@ -108,84 +134,7 @@ export class Invoice {
 
 ### Companion representation
 
-The factory that takes the whole state (`restore`) is the full constructor: it validates, copies its input into the closure state, and writes the instance as a literal annotated with the type. `open` and the commands build through it, so a command returns a new instance and the closure state is never written. The readonly type is stated on the collection's own variable, and the state object is left unannotated.
-
-```ts
-import type { Result } from "@acme/language-extensions";
-import type { CustomerId } from "./customer-id.ts";
-import type { InvoiceLine } from "./invoice/line.ts";
-import type { InvoiceLines } from "./invoice/lines.ts";
-import type { Money } from "./money.ts";
-
-export type OpenInvoiceError = "negative-total";
-export type AddInvoiceLineError = "already-issued" | "negative-total";
-export type IssueInvoiceError = "already-issued" | "empty-lines";
-
-export type InvoiceLineAdded = { readonly invoiceId: string; readonly commandId: string; readonly line: InvoiceLine };
-export type InvoiceIssued = { readonly invoiceId: string };
-
-export type AddInvoiceLineOutcome =
-  | { readonly kind: "applied"; readonly invoice: Invoice; readonly event: InvoiceLineAdded }
-  | { readonly kind: "duplicate"; readonly invoice: Invoice };
-export type IssueInvoiceOutcome = { readonly invoice: Invoice; readonly event: InvoiceIssued };
-
-const brand: unique symbol = Symbol("Invoice");
-
-export type Invoice = {
-  readonly [brand]: true;
-  addLine(commandId: string, line: InvoiceLine): Result<AddInvoiceLineOutcome, AddInvoiceLineError>;
-  issue(): Result<IssueInvoiceOutcome, IssueInvoiceError>;
-  isBilledTo(customer: CustomerId): boolean;
-  total(): Money;
-  lines(): readonly InvoiceLine[];
-};
-
-export const Invoice = {
-  open(id: string, customer: CustomerId, lines: InvoiceLines): Result<Invoice, OpenInvoiceError> {
-    if (lines.total().isNegative()) return { ok: false, error: "negative-total" };
-    return { ok: true, value: Invoice.restore(id, customer, lines, false, undefined) };
-  },
-  restore(
-    id: string,
-    customer: CustomerId,
-    lines: InvoiceLines,
-    issued: boolean,
-    lastAddLineCommandId: string | undefined,
-  ): Invoice {
-    if ((issued && lines.isEmpty()) || lines.total().isNegative()) throw new Error("corrupt invoice state");
-    const state = { id, customer, lines, issued, lastAddLineCommandId };
-    const instance: Invoice = {
-      [brand]: true,
-      addLine(commandId: string, line: InvoiceLine): Result<AddInvoiceLineOutcome, AddInvoiceLineError> {
-        if (commandId === state.lastAddLineCommandId) return { ok: true, value: { kind: "duplicate", invoice: instance } };
-        if (state.issued) return { ok: false, error: "already-issued" };
-        const next: InvoiceLines = state.lines.add(line);
-        if (next.total().isNegative()) return { ok: false, error: "negative-total" };
-        const invoice: Invoice = Invoice.restore(state.id, state.customer, next, false, commandId);
-        const event: InvoiceLineAdded = { invoiceId: state.id, commandId, line };
-        return { ok: true, value: { kind: "applied", invoice, event } };
-      },
-      issue(): Result<IssueInvoiceOutcome, IssueInvoiceError> {
-        if (state.issued) return { ok: false, error: "already-issued" };
-        if (state.lines.isEmpty()) return { ok: false, error: "empty-lines" };
-        const invoice: Invoice = Invoice.restore(state.id, state.customer, state.lines, true, state.lastAddLineCommandId);
-        const event: InvoiceIssued = { invoiceId: state.id };
-        return { ok: true, value: { invoice, event } };
-      },
-      isBilledTo(customer: CustomerId): boolean {
-        return state.customer.equals(customer);
-      },
-      total(): Money {
-        return state.lines.total();
-      },
-      lines(): readonly InvoiceLine[] {
-        return state.lines.toArray();
-      },
-    };
-    return instance;
-  },
-};
-```
+The companion representation uses the same commands, events, replay methods and repository contract. Its full-constructor closure owns state, and commands and replay return new instances. The executable standard example below uses classes.
 
 ## Domain Primitives
 
@@ -363,6 +312,7 @@ export { Invoice } from "./invoice.ts";
 export { InvoiceLine } from "./invoice/line.ts";
 export { InvoiceLines } from "./invoice/lines.ts";
 export { Money } from "./money.ts";
+export type { InvoiceOpened, InvoiceEvent } from "./invoice.ts";
 ```
 
 Under `index-file`:
@@ -383,6 +333,7 @@ export { Invoice } from "./invoice/index.ts";
 export { InvoiceLine } from "./invoice/line.ts";
 export { InvoiceLines } from "./invoice/lines.ts";
 export { Money } from "./money.ts";
+export type { InvoiceOpened, InvoiceEvent } from "./invoice/index.ts";
 ```
 
 Module paths map to the `module` segments of the aggregate mapping: `src/index.ts` is `[]`, `src/invoice.ts` and `src/invoice/index.ts` are `[invoice]`, `src/invoice/line.ts` is `[invoice, line]`, `src/invoice/lines.ts` is `[invoice, lines]`, and `src/money.ts` is `[money]`.
@@ -392,14 +343,14 @@ Module paths map to the `module` segments of the aggregate mapping: `src/index.t
 The repository port is an `interface` named `<Aggregate>Repository`, declared in the use-case package and never in a domain package. Loading and storing reach outside the process and can fail, so every method returns `Result` and reports a failure as `RepositoryError`. `RepositoryError` is declared beside the port; it is an infrastructure failure, not a business error, so the per-operation error-type rules do not apply to it. The lookup does not treat a missing invoice as a failure and returns `undefined` (`Result<Invoice | undefined, RepositoryError>`); the store returns `Result<void, RepositoryError>`.
 
 ```ts
-import type { Invoice } from "@acme/billing-domain";
+import type { Invoice, InvoiceEvent } from "@acme/billing-domain";
 import type { Result } from "@acme/language-extensions";
 
-export type RepositoryError = { readonly kind: "repository-error"; readonly message: string };
+export type RepositoryError = { readonly message: string };
 
 export interface InvoiceRepository {
   findById(invoiceId: string): Result<Invoice | undefined, RepositoryError>;
-  store(invoiceId: string, invoice: Invoice): Result<void, RepositoryError>;
+  store(invoiceId: string, event: InvoiceEvent): Result<void, RepositoryError>;
 }
 ```
 
@@ -428,33 +379,38 @@ export class IssueInvoiceUseCase {
     const issued: Result<IssueInvoiceOutcome, IssueInvoiceError> = invoice.issue();
     if (!issued.ok) return issued;
     const outcome: IssueInvoiceOutcome = issued.value;
-    const stored: Result<void, RepositoryError> = this.#invoiceRepository.store(invoiceId, outcome.invoice);
+    const stored: Result<void, RepositoryError> = this.#invoiceRepository.store(invoiceId, outcome.event);
     if (!stored.ok) return stored;
     return { ok: true, value: outcome.event };
   }
 }
 ```
 
-An in-memory adapter retains aggregate objects directly in Map/HashMap. It does not decompose them into Record/Snapshot data or reconstruct them through parse/restore on load. TypeScript retains and returns immutable aggregates; Rust returns a clone to protect saved aggregates. Database/file adapters with persisted representations own decoding and restoration.
+The repository owns event history. `findById` replays it and returns the aggregate; `store` appends the domain event produced by a command. History loading and replay stay inside the repository. Keep existing events unchanged and use the domain events directly.
 
 ```ts
-import type { Invoice } from "@acme/billing-domain";
+import { Invoice } from "@acme/billing-domain";
+import type { InvoiceEvent } from "@acme/billing-domain";
 import type { InvoiceRepository, RepositoryError } from "@acme/billing-use-case";
 import type { Result } from "@acme/language-extensions";
 
 export class InMemoryInvoiceRepository implements InvoiceRepository {
-  readonly #stored: Map<string, Invoice>;
-
-  constructor() {
-    this.#stored = new Map();
-  }
+  readonly #events: Map<string, readonly InvoiceEvent[]> = new Map();
 
   findById(invoiceId: string): Result<Invoice | undefined, RepositoryError> {
-    return { ok: true, value: this.#stored.get(invoiceId) };
+    const events = this.#events.get(invoiceId);
+    if (events === undefined) return { ok: true, value: undefined };
+    try {
+      return { ok: true, value: Invoice.restore(invoiceId, events) };
+    } catch {
+      return { ok: false, error: { message: "corrupt invoice history" } };
+    }
   }
 
-  store(invoiceId: string, invoice: Invoice): Result<void, RepositoryError> {
-    this.#stored.set(invoiceId, invoice);
+  store(invoiceId: string, event: InvoiceEvent): Result<void, RepositoryError> {
+    if (event.invoiceId !== invoiceId) return { ok: false, error: { message: "event belongs to another invoice" } };
+    const previous = this.#events.get(invoiceId) ?? [];
+    this.#events.set(invoiceId, [...previous, event]);
     return { ok: true, value: undefined };
   }
 }

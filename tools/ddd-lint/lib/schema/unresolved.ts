@@ -40,7 +40,7 @@ export function collectUnresolved(model: DomainModel, index: ElementIndex): Unre
       }
       for (const event of aggregate.events) {
         check(event.aggregate, "aggregate");
-        check(event.produced_by, "command");
+        check(event.produced_by, event.produced_by.startsWith("factory.") ? "factory" : "command");
       }
       for (const transition of aggregate.transitions) {
         check(transition.aggregate, "aggregate");

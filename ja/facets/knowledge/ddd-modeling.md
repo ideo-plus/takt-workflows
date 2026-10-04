@@ -30,70 +30,153 @@ code_representation = "class"     # または "companion"
 
 ```yaml
 bounded_contexts:
-  - element_id: bc.billing
-    name: Billing
-    aggregates:
-      - element_id: aggregate.invoice
-        name: Invoice
-        bounded_context: bc.billing
-        root_element: entity.invoice
-        states: [draft, issued]
-        elements:
-          - { element_id: entity.invoice, kind: entity, name: Invoice, aggregate: aggregate.invoice }
-          - { element_id: vo.invoice-line, kind: value-object, name: InvoiceLine, aggregate: aggregate.invoice }
-          - { element_id: primitive.customer-id, kind: domain-primitive, name: CustomerId, aggregate: aggregate.invoice, attributes: [{ name: value, type: string, required: true }] }
-          - { element_id: primitive.money, kind: domain-primitive, name: Money, aggregate: aggregate.invoice, attributes: [{ name: value, type: decimal, required: true }] }
-        invariants:
-          - { element_id: invariant.invoice.money-increment, name: MoneyIncrement, aggregate: aggregate.invoice, element: primitive.money, statement: 金額は100単位刻みの有限な整数であり、値引きの負数と0も許可する }
-          - { element_id: invariant.invoice.customer-id-format, name: CustomerIdFormat, aggregate: aggregate.invoice, element: primitive.customer-id, statement: 顧客 ID は C に続く 6 桁の数字である }
-          - { element_id: invariant.invoice.total-not-negative, name: TotalNotNegative, aggregate: aggregate.invoice, statement: 明細の合計は負にならない }
-          - { element_id: invariant.invoice.issued-has-lines, name: IssuedHasLines, aggregate: aggregate.invoice, statement: 発行済みの請求書は明細を 1 件以上持つ }
-        commands:
-          - element_id: command.invoice.add-line
-            name: AddLine
-            aggregate: aggregate.invoice
-            effect: accumulation
-            state_effect: none
-            domain_errors:
-              - { element_id: error.invoice.add-line.already-issued, name: AlreadyIssued, operation: command.invoice.add-line, condition: 請求書は発行済みである }
-              - { element_id: error.invoice.add-line.negative-total, name: NegativeTotal, operation: command.invoice.add-line, condition: 追加すると合計が負になる }
-            event: event.invoice.line-added
-            idempotency: { strategy: command-id-memory, retention: last-one, rationale: "クライアントは前の明細追加の応答を受けてから次の明細追加を送るので、古い明細追加が新しい明細追加の後に再送されることはない" }
-          - element_id: command.invoice.issue
-            name: Issue
-            aggregate: aggregate.invoice
-            effect: transition
-            state_effect: transitions
-            transitions: [transition.invoice.issue]
-            domain_errors:
-              - { element_id: error.invoice.issue.already-issued, name: AlreadyIssued, operation: command.invoice.issue, condition: 請求書は発行済みである }
-              - { element_id: error.invoice.issue.empty-lines, name: EmptyLines, operation: command.invoice.issue, condition: 明細がない }
-            event: event.invoice.issued
-            idempotency: { strategy: none }
-        events:
-          - { element_id: event.invoice.line-added, name: LineAdded, aggregate: aggregate.invoice, produced_by: command.invoice.add-line }
-          - { element_id: event.invoice.issued, name: Issued, aggregate: aggregate.invoice, produced_by: command.invoice.issue }
-        transitions:
-          - { element_id: transition.invoice.issue, name: Issue, aggregate: aggregate.invoice, from_state: draft, to_state: issued, command: command.invoice.issue }
-        factory_rules:
-          - element_id: factory.invoice.open
-            name: Open
-            target_element: entity.invoice
-            preconditions: [invariant.invoice.total-not-negative]
-            domain_errors:
-              - { element_id: error.invoice.open.negative-total, name: NegativeTotal, operation: factory.invoice.open, condition: 明細の合計が負になる }
-          - element_id: factory.invoice.parse-customer-id
-            name: ParseCustomerId
-            target_element: primitive.customer-id
-            preconditions: [invariant.invoice.customer-id-format]
-            domain_errors:
-              - { element_id: error.invoice.parse-customer-id.invalid-format, name: InvalidFormat, operation: factory.invoice.parse-customer-id, condition: 値が C に続く 6 桁の数字ではない }
-          - element_id: factory.invoice.parse-money
-            name: ParseMoney
-            target_element: primitive.money
-            preconditions: [invariant.invoice.money-increment]
-            domain_errors:
-              - { element_id: error.invoice.parse-money.invalid-increment, name: InvalidIncrement, operation: factory.invoice.parse-money, condition: 金額が100単位刻みの有限な整数ではない }
+- element_id: bc.billing
+  name: Billing
+  aggregates:
+  - element_id: aggregate.invoice
+    name: Invoice
+    bounded_context: bc.billing
+    root_element: entity.invoice
+    states:
+    - draft
+    - issued
+    elements:
+    - element_id: entity.invoice
+      kind: entity
+      name: Invoice
+      aggregate: aggregate.invoice
+    - element_id: vo.invoice-line
+      kind: value-object
+      name: InvoiceLine
+      aggregate: aggregate.invoice
+    - element_id: primitive.customer-id
+      kind: domain-primitive
+      name: CustomerId
+      aggregate: aggregate.invoice
+      attributes:
+      - name: value
+        type: string
+        required: true
+    - element_id: primitive.money
+      kind: domain-primitive
+      name: Money
+      aggregate: aggregate.invoice
+      attributes:
+      - name: value
+        type: decimal
+        required: true
+    invariants:
+    - element_id: invariant.invoice.money-increment
+      name: MoneyIncrement
+      aggregate: aggregate.invoice
+      element: primitive.money
+      statement: monetary amounts are finite integer multiples of 100; negative discounts
+        and zero are permitted
+    - element_id: invariant.invoice.customer-id-format
+      name: CustomerIdFormat
+      aggregate: aggregate.invoice
+      element: primitive.customer-id
+      statement: a customer ID is C followed by six digits
+    - element_id: invariant.invoice.total-not-negative
+      name: TotalNotNegative
+      aggregate: aggregate.invoice
+      statement: the total of the lines is never negative
+    - element_id: invariant.invoice.issued-has-lines
+      name: IssuedHasLines
+      aggregate: aggregate.invoice
+      statement: an issued invoice has at least one line
+    commands:
+    - element_id: command.invoice.add-line
+      name: AddLine
+      aggregate: aggregate.invoice
+      effect: accumulation
+      state_effect: none
+      domain_errors:
+      - element_id: error.invoice.add-line.already-issued
+        name: AlreadyIssued
+        operation: command.invoice.add-line
+        condition: the invoice is issued
+      - element_id: error.invoice.add-line.negative-total
+        name: NegativeTotal
+        operation: command.invoice.add-line
+        condition: the line would make the total negative
+      event: event.invoice.line-added
+      idempotency:
+        strategy: command-id-memory
+        retention: last-one
+        rationale: a client sends the next add-line of an invoice only after the previous
+          one is acknowledged, so an older add-line is never resent after a newer
+          one
+    - element_id: command.invoice.issue
+      name: Issue
+      aggregate: aggregate.invoice
+      effect: transition
+      state_effect: transitions
+      transitions:
+      - transition.invoice.issue
+      domain_errors:
+      - element_id: error.invoice.issue.already-issued
+        name: AlreadyIssued
+        operation: command.invoice.issue
+        condition: the invoice is issued
+      - element_id: error.invoice.issue.empty-lines
+        name: EmptyLines
+        operation: command.invoice.issue
+        condition: the invoice has no line
+      event: event.invoice.issued
+      idempotency:
+        strategy: none
+    events:
+    - element_id: event.invoice.opened
+      name: Opened
+      aggregate: aggregate.invoice
+      produced_by: factory.invoice.open
+    - element_id: event.invoice.line-added
+      name: LineAdded
+      aggregate: aggregate.invoice
+      produced_by: command.invoice.add-line
+    - element_id: event.invoice.issued
+      name: Issued
+      aggregate: aggregate.invoice
+      produced_by: command.invoice.issue
+    transitions:
+    - element_id: transition.invoice.issue
+      name: Issue
+      aggregate: aggregate.invoice
+      from_state: draft
+      to_state: issued
+      command: command.invoice.issue
+    factory_rules:
+    - element_id: factory.invoice.open
+      name: Open
+      target_element: entity.invoice
+      preconditions:
+      - invariant.invoice.total-not-negative
+      domain_errors:
+      - element_id: error.invoice.open.negative-total
+        name: NegativeTotal
+        operation: factory.invoice.open
+        condition: the lines add up to a negative total
+    - element_id: factory.invoice.parse-customer-id
+      name: ParseCustomerId
+      target_element: primitive.customer-id
+      preconditions:
+      - invariant.invoice.customer-id-format
+      domain_errors:
+      - element_id: error.invoice.parse-customer-id.invalid-format
+        name: InvalidFormat
+        operation: factory.invoice.parse-customer-id
+        condition: the value is not C followed by six digits
+    - element_id: factory.invoice.parse-money
+      name: ParseMoney
+      target_element: primitive.money
+      preconditions:
+      - invariant.invoice.money-increment
+      domain_errors:
+      - element_id: error.invoice.parse-money.invalid-increment
+        name: InvalidIncrement
+        operation: factory.invoice.parse-money
+        condition: the amount is not a finite integer multiple of 100
 lineage: []
 ```
 
@@ -106,41 +189,132 @@ Domain Primitive（`kind: domain-primitive`）は属性を1つ包み、基本デ
 ```yaml
 model_ref: domain-model.yaml
 aggregate_mappings:
-  - aggregate_ref: aggregate.invoice
-    programming_model: class
-    persistence_method: state-sourcing
-    reference_ids: [entity.invoice]
-    code: { language: typescript, package: "@acme/billing-domain", module: [invoice], type: Invoice }
-    operations:
-      - operation_ref: factory.invoice.open
-        code: { method: open, error_type: OpenInvoiceError }
-        errors:
-          - { error_ref: error.invoice.open.negative-total, code: { case: negative-total } }
-      - operation_ref: factory.invoice.parse-customer-id
-        code: { method: parse, error_type: ParseCustomerIdError }
-        errors:
-          - { error_ref: error.invoice.parse-customer-id.invalid-format, code: { case: invalid-format } }
-      - operation_ref: factory.invoice.parse-money
-        code: { method: parse, error_type: ParseMoneyError }
-        errors:
-          - { error_ref: error.invoice.parse-money.invalid-increment, code: { case: invalid-increment } }
-      - operation_ref: command.invoice.add-line
-        code: { method: addLine, success_type: AddInvoiceLineOutcome, error_type: AddInvoiceLineError }
-        errors:
-          - { error_ref: error.invoice.add-line.already-issued, code: { case: already-issued } }
-          - { error_ref: error.invoice.add-line.negative-total, code: { case: negative-total } }
-      - operation_ref: command.invoice.issue
-        code: { method: issue, success_type: IssueInvoiceOutcome, error_type: IssueInvoiceError }
-        errors:
-          - { error_ref: error.invoice.issue.already-issued, code: { case: already-issued } }
-          - { error_ref: error.invoice.issue.empty-lines, code: { case: empty-lines } }
+- aggregate_ref: aggregate.invoice
+  programming_model: class
+  persistence_method: event-sourcing
+  reference_ids:
+  - entity.invoice
+  code:
+    language: typescript
+    package: '@acme/billing-domain'
+    module:
+    - invoice
+    type: Invoice
+  operations:
+  - operation_ref: factory.invoice.open
+    code:
+      method: open
+      error_type: OpenInvoiceError
+    errors:
+    - error_ref: error.invoice.open.negative-total
+      code:
+        case: negative-total
+  - operation_ref: factory.invoice.parse-customer-id
+    code:
+      method: parse
+      error_type: ParseCustomerIdError
+    errors:
+    - error_ref: error.invoice.parse-customer-id.invalid-format
+      code:
+        case: invalid-format
+  - operation_ref: factory.invoice.parse-money
+    code:
+      method: parse
+      error_type: ParseMoneyError
+    errors:
+    - error_ref: error.invoice.parse-money.invalid-increment
+      code:
+        case: invalid-increment
+  - operation_ref: command.invoice.add-line
+    code:
+      method: addLine
+      success_type: AddInvoiceLineOutcome
+      error_type: AddInvoiceLineError
+    errors:
+    - error_ref: error.invoice.add-line.already-issued
+      code:
+        case: already-issued
+    - error_ref: error.invoice.add-line.negative-total
+      code:
+        case: negative-total
+  - operation_ref: command.invoice.issue
+    code:
+      method: issue
+      success_type: IssueInvoiceOutcome
+      error_type: IssueInvoiceError
+    errors:
+    - error_ref: error.invoice.issue.already-issued
+      code:
+        case: already-issued
+    - error_ref: error.invoice.issue.empty-lines
+      code:
+        case: empty-lines
+  replay_methods:
+  - event_ref: event.invoice.opened
+    code:
+      method: fromOpened
+  - event_ref: event.invoice.line-added
+    code:
+      method: applyLineAdded
+  - event_ref: event.invoice.issued
+    code:
+      method: applyIssued
 domain_packages:
-  - { term: 請求, model_refs: [bc.billing], rationale: 請求の業務全体を持つ, code: { language: typescript, package: "@acme/billing-domain", module: [] } }
-  - { term: 請求書, model_refs: [aggregate.invoice], rationale: 請求書を作成し発行する, code: { language: typescript, package: "@acme/billing-domain", module: [invoice] } }
-  - { term: 請求書明細, model_refs: [vo.invoice-line], rationale: 請求書が合計する 1 件の金額, code: { language: typescript, package: "@acme/billing-domain", module: [invoice, line] } }
-  - { term: 請求書明細の並び, model_refs: [vo.invoice-line], rationale: 1 通の請求書の明細とその合計, code: { language: typescript, package: "@acme/billing-domain", module: [invoice, lines] } }
-  - { term: 顧客 ID, model_refs: [primitive.customer-id], rationale: 請求書の請求先の顧客を識別する, code: { language: typescript, package: "@acme/billing-domain", module: [customer-id] } }
-  - { term: 金額, model_refs: [primitive.money], rationale: 明細の金額と請求書の合計を表す, code: { language: typescript, package: "@acme/billing-domain", module: [money] } }
+- term: Billing
+  model_refs:
+  - bc.billing
+  rationale: owns the billing business
+  code:
+    language: typescript
+    package: '@acme/billing-domain'
+    module: []
+- term: Invoice
+  model_refs:
+  - aggregate.invoice
+  rationale: opens and issues invoices
+  code:
+    language: typescript
+    package: '@acme/billing-domain'
+    module:
+    - invoice
+- term: Invoice line
+  model_refs:
+  - vo.invoice-line
+  rationale: one amount an invoice adds up
+  code:
+    language: typescript
+    package: '@acme/billing-domain'
+    module:
+    - invoice
+    - line
+- term: Invoice lines
+  model_refs:
+  - vo.invoice-line
+  rationale: the lines of one invoice and their total
+  code:
+    language: typescript
+    package: '@acme/billing-domain'
+    module:
+    - invoice
+    - lines
+- term: Customer ID
+  model_refs:
+  - primitive.customer-id
+  rationale: identifies the customer an invoice bills
+  code:
+    language: typescript
+    package: '@acme/billing-domain'
+    module:
+    - customer-id
+- term: Money
+  model_refs:
+  - primitive.money
+  rationale: the amount of a line and the total of an invoice
+  code:
+    language: typescript
+    package: '@acme/billing-domain'
+    module:
+    - money
 ```
 
 `model_ref` は `docs/ddd` からの相対パスで書く。`success_type` はコマンドが成功時に返すものの型名である。TypeScript では新しいインスタンスとイベントを持つ成功値の型、Rust ではイベント、再送されたコマンドを認識するコマンドでは成功値の enum になる。ファクトリ規則の成功値は集約の型である。`module` はパッケージのルートより下の区切りを並べたもので、ルートは `[]` になる。ルートから下のすべての階層を宣言する。TypeScript では case の文字列がリテラルの union のメンバー（`already-issued`）になり、Rust では enum のバリアント（`AlreadyIssued`）になる。
@@ -150,30 +324,70 @@ domain_packages:
 ```yaml
 model_ref: domain-model.yaml
 layer_structures:
-  - context_ref: bc.billing
-    cqrs: false
-    packages:
-      - { role: command, code: { language: typescript, package: "@acme/billing-domain" } }
-      - { role: command, code: { language: typescript, package: "@acme/billing-use-case" } }
-      - { role: command, code: { language: typescript, package: "@acme/billing-interface-adapter" } }
-    dependencies:
-      - { code: { language: typescript, package: "@acme/billing-domain" }, depends_on: [{ language: typescript, package: "@acme/language-extensions" }] }
-      - { code: { language: typescript, package: "@acme/billing-use-case" }, depends_on: [{ language: typescript, package: "@acme/billing-domain" }, { language: typescript, package: "@acme/language-extensions" }] }
-      - { code: { language: typescript, package: "@acme/billing-interface-adapter" }, depends_on: [{ language: typescript, package: "@acme/billing-domain" }, { language: typescript, package: "@acme/billing-use-case" }, { language: typescript, package: "@acme/language-extensions" }] }
-    ports:
-      - { name: InvoiceRepository, kind: repository, verbs: [findById, store] }
-    repositories:
-      - { name: InvoiceRepository, aggregate_ref: aggregate.invoice, io_unit: single, verbs: [findById, store], store_semantics: upsert }
-    restoration_paths:
-      - { aggregate_ref: aggregate.invoice, via: stored-instance }
-    persistence_backend: in-memory
+- context_ref: bc.billing
+  cqrs: false
+  packages:
+  - role: command
+    code:
+      language: typescript
+      package: '@acme/billing-domain'
+  - role: command
+    code:
+      language: typescript
+      package: '@acme/billing-use-case'
+  - role: command
+    code:
+      language: typescript
+      package: '@acme/billing-interface-adapter'
+  dependencies:
+  - code:
+      language: typescript
+      package: '@acme/billing-domain'
+    depends_on:
+    - language: typescript
+      package: '@acme/language-extensions'
+  - code:
+      language: typescript
+      package: '@acme/billing-use-case'
+    depends_on:
+    - language: typescript
+      package: '@acme/billing-domain'
+    - language: typescript
+      package: '@acme/language-extensions'
+  - code:
+      language: typescript
+      package: '@acme/billing-interface-adapter'
+    depends_on:
+    - language: typescript
+      package: '@acme/billing-domain'
+    - language: typescript
+      package: '@acme/billing-use-case'
+    - language: typescript
+      package: '@acme/language-extensions'
+  ports:
+  - name: InvoiceRepository
+    kind: repository
+    verbs:
+    - findById
+    - store
+  repositories:
+  - name: InvoiceRepository
+    aggregate_ref: aggregate.invoice
+    io_unit: single
+    verbs:
+    - findById
+    - store
+    store_semantics: append-only
+  restoration_paths:
+  - aggregate_ref: aggregate.invoice
+    via: event-replay
+  persistence_backend: in-memory
 ```
 
 `packages` はコンテキスト自身のパッケージを CQRS の側（`role`）とともに並べる。言語拡張（`@acme/language-extensions`）のようにコンテキストの外にある共有パッケージは、どの側にも立たないので `packages` に行を持たず、それを使うパッケージの `depends_on` にだけ書く。依存行には、そのパッケージの `package.json` や `Cargo.toml` が直接依存するパッケージをすべて書く。
 
 永続化を持たない集約だけのコンテキストでも、パッケージ、依存行、復元経路は宣言する。`ports: []`、`repositories: []`、`persistence_backend: none` は明示的に記述できる。
 
-インメモリの状態保存は集約オブジェクトを直接保持し、`restoration_paths` に `via: stored-instance` を宣言する。DB・ファイルなどの保存表現から集約を組み立て直す場合は `via: full-constructor` とし、`restore` で検証する。メモリ上の保存とシリアライズを混同しない。
 
 Event Sourcing は保存媒体にかかわらず `via: event-replay` を宣言する。リポジトリが保持するのは順序付きの追記専用ドメインイベント列であり、集約に宣言した replay メソッドで復元する。インメモリの Map／HashMap もイベント列を保持し、集約の現在状態やその保存ラッパーを格納しない。
 
@@ -218,14 +432,17 @@ packages/command/billing-domain/src/
 
 ## 集約ごとの二軸
 
+このワークフローの永続化方式は Event Sourcing に統一する。State Sourcing のコード例・保存経路を混在させない。
+
 実行モデルと永続化は独立した選択であり、どちらも TypeScript のコード表現とは独立している。
 
 | 軸 | 値 | 意味 |
 |----|----|------|
 | `programming_model` | `class` | 集約はユースケースから呼ばれるオブジェクト |
 | | `actor` | 集約はメッセージを受け取る。複数集約のフローには Process Manager が要る |
-| `persistence_method` | `state-sourcing` | 現在の状態を保存する。同時更新があり得る場合は期待バージョンなどで守る |
-| | `event-sourcing` | イベントを追記する。状態は宣言した replay メソッドで再生して組み立てる |
+| `persistence_method` | `event-sourcing` | イベントを追記する。状態は宣言した replay メソッドで再生して組み立てる |
+
+集約を生成するファクトリは、すべての不変条件を検証してから、生成イベントと完全な集約を一度に組み立てる。生成イベントの `produced_by` は集約ルートのファクトリを参照する。ファクトリは集約を返し、生成イベントは集約の読み取り専用の操作で取得する。復元の最初の生成イベントも同じ replay ファクトリを通す。初期化を後から完成させる空の集約は作らない。
 
 状態を変えるコマンドは、永続化の方式にかかわらず、生んだ 1 つのイベントを返す。イベントソーシングでは、コマンドは宣言した replay メソッドを通して状態を変え、復元は保存済みのイベントを同じメソッドで再生する。replay メソッドは何も判断しない。
 

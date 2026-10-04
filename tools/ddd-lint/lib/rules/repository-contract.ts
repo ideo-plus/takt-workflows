@@ -48,14 +48,12 @@ export function repositoryContractProblem(
   returned: string | undefined,
   aggregate: string,
   language: "rust" | "typescript",
-  stateSourcing: boolean,
 ): string | undefined {
   const parts = resultArguments(returned);
   if (!parts) return undefined; // The existing repository-result rule reports non-Result returns.
   const [success, error] = parts;
   if (!/^(?:::)?(?:[\w$]+(?:::|\.))*RepositoryError$/.test(error))
     return "use the common RepositoryError as the Result error";
-  if (!stateSourcing) return undefined;
   if (method === "store" && success !== (language === "rust" ? "()" : "void"))
     return "store returns no payload; use Result<void, RepositoryError> (Rust: Result<(), RepositoryError>)";
   const loadedAggregate =

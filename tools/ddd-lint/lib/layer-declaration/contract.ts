@@ -26,7 +26,7 @@ type PortKind = (typeof PORT_KINDS)[number];
 export const IO_UNITS = ["single", "collection", "partial"] as const;
 type IoUnit = (typeof IO_UNITS)[number];
 
-export const STORE_SEMANTICS = ["upsert", "insert-only", "unknown"] as const;
+export const STORE_SEMANTICS = ["upsert", "insert-only", "append-only", "unknown"] as const;
 type StoreSemantics = (typeof STORE_SEMANTICS)[number];
 
 export const RESTORATION_ROUTES = ["full-constructor", "stored-instance", "event-replay"] as const;

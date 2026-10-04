@@ -1,5 +1,7 @@
 # DDD Domain Model Policy
 
+A creation event declares the factory that completely initializes its own aggregate root in produced_by. A primitive parser or another aggregate's factory cannot produce this creation event.
+
 Defines what the declarations under `docs/ddd/` (domain model, aggregate mapping, layer structure) contain, and the order of declarations and code. Whether code agrees with the declarations is judged by the domain layer policy.
 
 ## Domain Model (`docs/ddd/domain-model.yaml`)
@@ -24,7 +26,7 @@ Defines what the declarations under `docs/ddd/` (domain model, aggregate mapping
 | Criterion | Judgment |
 |-----------|----------|
 | An aggregate of the model has no mapping row | REJECT |
-| An aggregate does not declare `programming_model` (`actor` or `class`) and `persistence_method` (`state-sourcing` or `event-sourcing`) | REJECT |
+| An aggregate does not declare `programming_model` (`actor` or `class`) and `persistence_method` (`event-sourcing` in this workflow) | REJECT |
 | A command or factory rule has no method and error type, a command has no `success_type`, or a domain error has no case | REJECT |
 | An event-sourced aggregate does not declare the methods that apply its events in `replay_methods` | REJECT |
 | A package or module that holds domain code, or one of its parent levels, is missing from `domain_packages` | REJECT |

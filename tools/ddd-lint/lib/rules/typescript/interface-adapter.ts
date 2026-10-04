@@ -11,7 +11,7 @@
 import { join } from "node:path";
 import type { FindingInput } from "../../shared/findings.ts";
 import { containsMediaWord, toPascal } from "../lists.ts";
-import { inMemoryAggregates, storedMapValue } from "../in-memory.ts";
+import { inMemoryAggregates, storedMapValue, eventStreamElement } from "../in-memory.ts";
 import { aggregateMappings } from "./aggregate-binding.ts";
 import { packageContaining, resolveSpecifier } from "./edges.ts";
 import { factsOf } from "./file-facts.ts";
@@ -216,9 +216,13 @@ function inMemoryStorage(inspection: TsInspection, target: TsTarget, rule: "in-m
     for (const field of repository.members.filter((entry) => entry.kind === "property")) {
       const values = new Set([field.type_text, field.initializer_type_text].map(storedMapValue).filter((entry): entry is string => entry !== undefined));
       for (const value of values) {
-        const resolved = resolveTypeName(inspection.packages, inspection.symbols, target.file, facts, value);
+        const element = state ? value : eventStreamElement(value, "typescript");
+        const resolved = resolveTypeName(inspection.packages, inspection.symbols, target.file, facts, element ?? value);
         const direct = resolved.kind === "domain" && owned.some((entry) => entry.type === resolved.type.name && entry.package === resolved.type.pkg.name);
-        if (state === direct) continue;
+        const imported = element === undefined ? undefined : facts.imports.find((entry) => entry.bindings.some((binding) => binding.name === element.split(".")[0]));
+        const eventPackage = imported ? resolveSpecifier(inspection.packages, target.pkg, join(inspection.packages.workspaceRoot, target.file), imported.specifier) : undefined;
+        const domainEvent = eventPackage?.kind === "package" && owned.some((entry) => entry.package === eventPackage.pkg.name);
+        if (state ? direct : element !== undefined && domainEvent && !direct) continue;
         findings.push({ rule_id: rule, file: target.file, line: field.span.start_line, message: `${repository.name}.${field.name} stores ${value}; ${state ? "its map must retain the aggregate directly" : "Event Sourcing stores event streams rather than aggregate state"}` });
       }
     }

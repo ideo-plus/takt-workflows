@@ -2,6 +2,12 @@ import { join } from "node:path";
 import { loadLayerDeclaration } from "../layer-declaration/index.ts";
 import type { ProjectContext } from "../project/context.ts";
 
+/** A stored event stream explicitly states its element type. */
+export function eventStreamElement(text: string, language: "rust" | "typescript"): string | undefined {
+  if (language === "rust") return /^(?:::)?(?:\w+::)*Vec<(.+)>$/.exec(text)?.[1];
+  return /^(?:readonly)?(.+)\[\]$/.exec(text)?.[1] ?? /^(?:[\w$]+\.)*(?:ReadonlyArray|Array)<(.+)>$/.exec(text)?.[1];
+}
+
 /** The value argument of an explicitly spelled Map/HashMap, including qualified names. */
 export function storedMapValue(text: string | undefined): string | undefined {
   if (!text) return undefined;

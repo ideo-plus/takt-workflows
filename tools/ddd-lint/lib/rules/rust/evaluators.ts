@@ -12,7 +12,7 @@ import { containsMediaWord, toPascal } from "../lists.ts";
 import type { DomainTypeSymbol, InspectionContext, InspectionTarget } from "../types.ts";
 import { evaluateDomainPackaging } from "./packaging.ts";
 import { rulePrimitiveInitialization } from "./primitives.ts";
-import { inMemoryAggregates, storedMapValue } from "../in-memory.ts";
+import { inMemoryAggregates, storedMapValue, eventStreamElement } from "../in-memory.ts";
 import { repositoryContractProblem, resultArguments, expandGenericStoreResult } from "../repository-contract.ts";
 import { within as withinSpan } from "./program.ts";
 
@@ -508,7 +508,7 @@ function ruleRepositoryMutSelf(target: InspectionTarget, context: InspectionCont
     if (!trait.name.endsWith("Repository")) continue;
     if (trait.supertraits.some((bound) => /(?:^|::)Sync$/.test(bound.trim()))) continue;
     for (const signature of trait.signatures) {
-      if (!/^(?:store|delete)/.test(signature.name) || signature.receiver === "mut-self") continue;
+      if (!/^(?:store|append|delete)/.test(signature.name) || signature.receiver === "mut-self") continue;
       out.push(
         finding(
           "repository-mut-self",
@@ -694,8 +694,7 @@ function ruleRepositoryContract(target: InspectionTarget, context: InspectionCon
   for (const port of ports) {
     const aggregate = port.name.slice(0, -"Repository".length);
     for (const method of port.signatures) {
-      const stateSourcing = context.rustMapping.kind === "loaded" && context.rustMapping.view.aggregates.some((entry) => entry.type === aggregate && entry.persistence_method === "state-sourcing");
-      const problem = repositoryContractProblem(method.name, expandGenericStoreResult(method.return_type_text, facts.aliases), aggregate, "rust", stateSourcing);
+      const problem = repositoryContractProblem(method.name, expandGenericStoreResult(method.return_type_text, facts.aliases), aggregate, "rust");
       if (problem) findings.push(finding("repository-result-contract", target.file, `${port.name}::${method.name}: ${problem}`, method.line));
     }
   }
@@ -732,9 +731,11 @@ function inMemoryStorage(target: InspectionTarget, context: InspectionContext, r
     for (const field of repository.fields) {
       const value = storedMapValue(field.type_text);
       if (value === undefined) continue;
-      const type = context.program.resolveType(target.file, [...module, ...repository.module], value);
+      const element = state ? value : eventStreamElement(value, "rust");
+      const type = context.program.resolveType(target.file, [...module, ...repository.module], element ?? value);
       const direct = Boolean(type && owned.some((entry) => entry.type === type.name && entry.crate.replace(/-/g, "_") === type.crate));
-      if (state === direct) continue;
+      const domainEvent = Boolean(type && owned.some((entry) => entry.crate.replace(/-/g, "_") === type.crate));
+      if (state ? direct : element !== undefined && domainEvent && !direct) continue;
       findings.push(finding(rule, target.file, `${repository.name}.${field.name} stores ${value}; ${state ? "its map must retain the aggregate directly" : "Event Sourcing stores event streams rather than aggregate state"}`, field.line));
     }
   }

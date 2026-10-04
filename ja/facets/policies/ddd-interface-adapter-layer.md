@@ -8,7 +8,7 @@
 |------|------|
 | リポジトリポートの名前が `<Aggregate>Repository` でない、または保存媒体（`Postgres`、`Dynamo`、`InMemory`、`Http` など）を含む | REJECT |
 | リポジトリの実装が媒体名の接頭辞を持ち、ポート名で終わる（`PostgresInvoiceRepository`） | OK |
-| 理由なく、State Sourcing のリポジトリポートに基本の動詞 `find_by_id`、`store`、`delete_by_id`（言語の表記に合わせる）がない | REJECT |
+| 理由なく、リポジトリポートに基本の動詞 `find_by_id`、`store`、`delete_by_id`（言語の表記に合わせる）がない | REJECT |
 | リポジトリポートのメソッドが `Result` を返さない（`store` が `void` や `()` を返す） | REJECT。読み込みと保存は失敗しうるので、`Result<…, RepositoryError>` を返す。`RepositoryError` はポートの隣に宣言するインフラの失敗であり、業務上のエラーではない |
 | 検索が、見つからないことをポートの失敗として返している | REJECT。`undefined`（Rust は `None`）を成功として返し、見つからないことはユースケースが自分のエラーにする |
 | リポジトリポートが画面向けの検索を提供している | REJECT。クエリ側に置く |
@@ -17,14 +17,11 @@
 
 ## 永続化
 
-Event Sourcing のリポジトリは順序付きのドメインイベント列を読み込み、イベントを追記する。集約の現在状態を上書きしない。インメモリのイベントストアも集約IDごとにイベント列を保持する。宣言した replay メソッドで復元し、`via: event-replay` とする。`stored-instance` は State Sourcing のインメモリ保存に使う。
-
-インメモリの状態保存は、集約を `Map<Id, Aggregate>`／`HashMap<Id, Aggregate>` に直接保持する。保存用の Record／Snapshot に分解しない。TypeScript は不変の集約を返し、Rust は保存済みの集約を守るため clone を返す。保存レコードの変換と `parse`／`restore` による復元は、DB・ファイルなど保存表現を持つ媒体のアダプタに置く。
+標準は Event Sourcing。イベント履歴は集約IDごとの追記専用の列として保存し、`via: event-replay` を宣言する。リポジトリの公開APIは集約の読込とドメインイベントの保存。読込時のイベント再生はアダプタ内部で行う。インメモリ実装も `Map<Id, readonly DomainEvent[]>`／`HashMap<Id, Vec<DomainEvent>>` にイベントをそのまま保持する。
 
 | 基準 | 判定 |
 |------|------|
 | 同時更新があり得るのに、`store` が無条件に上書きしている | REJECT。期待バージョンや同等の制約を使う |
-| インメモリの状態保存で集約を保存DTOへ分解し、読込時に組み立て直している | REJECT。集約オブジェクトを直接保持する |
 | 要求にない同時更新対策のためだけにバージョン包み型や保存用DTOを追加している | REJECT。必要な並行更新の条件を明示し、余計な型を作らない |
 | イベントソーシングの永続化が既存のイベントを書き換える、または消している | REJECT |
 | 一意性を、保存先の制約ではなく先に読んで確かめることで決めている | REJECT |

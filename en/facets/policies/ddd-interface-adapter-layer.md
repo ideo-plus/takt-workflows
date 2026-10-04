@@ -8,7 +8,7 @@ Judges the code of the interface adapter layer (repository implementations, exch
 |-----------|----------|
 | A repository port is not named `<Aggregate>Repository`, or its name contains a storage medium (`Postgres`, `Dynamo`, `InMemory`, `Http`, and so on) | REJECT |
 | A repository implementation is prefixed by its medium and ends with the port name (`PostgresInvoiceRepository`) | OK |
-| A State Sourcing repository port lacks the baseline verbs `find_by_id`, `store`, `delete_by_id` (in the language's spelling) without a stated reason | REJECT |
+| A repository port lacks the baseline verbs `find_by_id`, `store`, `delete_by_id` (in the language's spelling) without a stated reason | REJECT |
 | A method of a repository port does not return `Result` (`store` returns `void` or `()`) | REJECT. Loading and storing can fail; return `Result<…, RepositoryError>`. `RepositoryError` is an infrastructure failure declared beside the port, not a business error |
 | The lookup reports a missing aggregate as a failure of the port | REJECT. Return `undefined` (`None` in Rust) as a success; the use case turns the absence into its own error |
 | A repository port offers screen-oriented searches | REJECT. Put them on the query side |
@@ -17,11 +17,7 @@ Judges the code of the interface adapter layer (repository implementations, exch
 
 ## Persistence
 
-Event Sourcing repositories load ordered domain event streams and append events; they do not overwrite aggregate state. An in-memory event store keeps event sequences per aggregate ID. Restore by declared replay methods and declare `via: event-replay`; `stored-instance` applies to State Sourcing memory storage.
-
-An in-memory state repository retains aggregates directly in Map<Id, Aggregate>/HashMap<Id, Aggregate>. Do not decompose them into Record/Snapshot data. TypeScript returns immutable aggregates; Rust returns clones to protect saved aggregates. Database/file adapters with persisted representations own record conversion and parse/restore.
-
-Do not add version envelopes or persistence DTOs solely for concurrency the request does not require. State the actual concurrent-update requirement before introducing its mechanism.
+The standard is Event Sourcing. Store append-only event sequences by aggregate ID and declare via: event-replay. The public repository loads aggregates and stores their domain events; the adapter owns history replay. Memory implementations retain events directly in Map<Id, readonly DomainEvent[]> / HashMap<Id, Vec<DomainEvent>>.
 
 | Criterion | Judgment |
 |-----------|----------|

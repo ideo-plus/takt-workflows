@@ -1,5 +1,7 @@
 # DDD ドメインモデルポリシー
 
+集約の生成イベントは、同じ集約のルートを完全に初期化するファクトリを `produced_by` に宣言する。DP のパーサーや別集約のファクトリを生成イベントの発生元にしない。
+
 `docs/ddd/` の宣言（ドメインモデル、集約写像、層構造）に何を書くかと、宣言とコードの順序を定める。コードが宣言と一致するかはドメイン層ポリシーが判定する。
 
 ## ドメインモデル（`docs/ddd/domain-model.yaml`）
@@ -24,7 +26,7 @@
 | 基準 | 判定 |
 |------|------|
 | モデルの集約に写像の行がない | REJECT |
-| 集約が `programming_model`（`actor` か `class`）と `persistence_method`（`state-sourcing` か `event-sourcing`）を宣言していない | REJECT |
+| 集約が `programming_model`（`actor` か `class`）と `persistence_method`（このワークフローでは `event-sourcing`）を宣言していない | REJECT |
 | コマンドやファクトリ規則にメソッドとエラー型がない、コマンドに `success_type` がない、またはドメインエラーに case がない | REJECT |
 | イベントソーシングの集約が、イベントを適用するメソッドを `replay_methods` に宣言していない | REJECT |
 | ドメインのコードを置くパッケージやモジュール、またはその親の階層が `domain_packages` にない | REJECT |
