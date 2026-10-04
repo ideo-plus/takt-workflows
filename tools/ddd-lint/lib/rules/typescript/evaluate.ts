@@ -31,7 +31,7 @@ import {
   ruleDomainPackaging,
 } from "./evaluators.ts";
 import { factsOf } from "./file-facts.ts";
-import { ruleL, ruleM, ruleN, ruleInMemoryRestoration } from "./interface-adapter.ts";
+import { ruleL, ruleM, ruleN, ruleInMemoryRestoration, ruleEventSourcingStorage } from "./interface-adapter.ts";
 import { ruleA } from "./state-hiding.ts";
 import { rulePrimitiveInitialization } from "./primitives.ts";
 import type { TsGate, TsInspection, TsTarget } from "./types.ts";
@@ -135,6 +135,7 @@ export function evaluateTypeScriptInterfaceAdapter(run: ProjectContext, api: Che
       ...ruleM(inspection, target),
       ...ruleN(inspection, target),
       ...ruleInMemoryRestoration(inspection, target),
+      ...ruleEventSourcingStorage(inspection, target),
     ],
     whole: (inspection) => {
       const edges = buildEdges(inspection);

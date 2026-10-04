@@ -280,6 +280,47 @@ fn of_rejects_an_invalid_money_increment() { Money::of(1); }
 
 describe("in-memory aggregate storage", () => {
   for (const sample of [...typeScriptSamples(), ...rustSamples()]) {
+    test(`${sample.name} rejects storing a wrapper even without restoration`, () => {
+      const result = lint(sample.files, (files) => {
+        const rust = sample.name.startsWith("rust");
+        const path = rust ? "packages/command/billing-interface-adapter/src/in_memory_invoice_repository.rs" : "packages/command/billing-interface-adapter/src/in-memory-invoice-repository.ts";
+        if (rust) {
+          replace(files, path, "HashMap<String, Invoice>", "HashMap<String, StoredInvoice>");
+          replace(files, path, "self.stored.get(invoice_id).cloned()", "self.stored.get(invoice_id).map(|stored| stored.invoice.clone())");
+          replace(files, path, "self.stored.insert(invoice_id.to_string(), invoice)", "self.stored.insert(invoice_id.to_string(), StoredInvoice { invoice })");
+          files[path] += '\nstruct StoredInvoice { invoice: Invoice }\n';
+        } else {
+          replace(files, path, "Map<string, Invoice>", "Map<string, StoredInvoice>");
+          replace(files, path, "this.#stored.get(invoiceId)", "this.#stored.get(invoiceId)?.invoice");
+          replace(files, path, "this.#stored.set(invoiceId, invoice)", "this.#stored.set(invoiceId, { invoice })");
+          files[path] += '\ntype StoredInvoice = { readonly invoice: Invoice };\n';
+        }
+      });
+      expect(result.findings.some((entry) => entry.rule_id === "in-memory-restoration" && entry.message.includes("stores StoredInvoice"))).toBe(true);
+    });
+    test(`${sample.name} keeps event streams outside the state storage rule`, () => {
+      const result = lint(sample.files, (files) => {
+        const rust = sample.name.startsWith("rust");
+        const path = rust ? "packages/command/billing-interface-adapter/src/in_memory_invoice_repository.rs" : "packages/command/billing-interface-adapter/src/in-memory-invoice-repository.ts";
+        replace(files, "docs/ddd/aggregate-mapping.yaml", "persistence_method: state-sourcing", "persistence_method: event-sourcing");
+        replace(files, "docs/ddd/layer-structure.yaml", "via: stored-instance", "via: event-replay");
+        replace(files, path, rust ? "HashMap<String, Invoice>" : "Map<string, Invoice>", rust ? "HashMap<String, Vec<InvoiceIssued>>" : "Map<string, readonly InvoiceIssued[]>");
+        const port = rust ? "packages/command/billing-use-case/src/invoice_repository.rs" : "packages/command/billing-use-case/src/invoice-repository.ts";
+        replace(files, port, rust ? "Result<Option<Invoice>, RepositoryError>" : "Result<Invoice | undefined, RepositoryError>", rust ? "Result<Option<Vec<InvoiceIssued>>, RepositoryError>" : "Result<readonly InvoiceIssued[] | undefined, RepositoryError>");
+      });
+      expect(result.findings.filter((entry) => ["in-memory-restoration", "event-sourcing-storage", "repository-result-contract"].includes(entry.rule_id) || entry.rule_id.startsWith("layer-declaration."))).toEqual([]);
+    });
+    test(`${sample.name} rejects aggregate state storage declared as Event Sourcing`, () => {
+      const result = lint(sample.files, (files) => {
+        replace(files, "docs/ddd/aggregate-mapping.yaml", "persistence_method: state-sourcing", "persistence_method: event-sourcing");
+        replace(files, "docs/ddd/layer-structure.yaml", "via: stored-instance", "via: event-replay");
+      });
+      expect(result.findings.some((entry) => entry.rule_id === "event-sourcing-storage")).toBe(true);
+    });
+    test(`${sample.name} requires event replay for Event Sourcing`, () => {
+      const result = lint(sample.files, (files) => replace(files, "docs/ddd/aggregate-mapping.yaml", "persistence_method: state-sourcing", "persistence_method: event-sourcing"));
+      expect(result.findings.some((entry) => entry.rule_id === "layer-declaration.restoration-path" && entry.message.includes("event-replay"))).toBe(true);
+    });
     test(`${sample.name} rejects the former in-memory restoration declaration`, () => {
       const result = lint(sample.files, (files) =>
         replace(files, "docs/ddd/layer-structure.yaml", "via: stored-instance", "via: full-constructor"),
@@ -305,6 +346,12 @@ describe("in-memory aggregate storage", () => {
       expect(result.findings.filter((entry) => entry.rule_id === "in-memory-restoration")).toEqual([]);
     });
   }
+});
+
+for (const sample of typeScriptSamples()) test(`${sample.name} rejects a wrapper in explicit Map initializer arguments`, () => {
+  const path = "packages/command/billing-interface-adapter/src/in-memory-invoice-repository.ts";
+  const result = lint(sample.files, (files) => replace(files, path, "readonly #stored: Map<string, Invoice>;", "readonly #stored = new Map<string, StoredInvoice>();"));
+  expect(result.findings.some((entry) => entry.rule_id === "in-memory-restoration" && entry.message.includes("stores StoredInvoice"))).toBe(true);
 });
 
 describe("repository Result contracts", () => {

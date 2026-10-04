@@ -11,7 +11,7 @@
 import type { FindingInput } from "../../shared/findings.ts";
 import { repositoryContractProblem, resultArguments, expandGenericStoreResult } from "../repository-contract.ts";
 import type { MemberFact, ParamFact, TypeScriptFileFacts } from "../../typescript/domain-facts/index.ts";
-import { aggregateBinding } from "./aggregate-binding.ts";
+import { aggregateBinding, aggregateMappings } from "./aggregate-binding.ts";
 import { enclosingClass, factsOf, receiverType } from "./file-facts.ts";
 import { isNamedType, isPortDeclaration, passedType, resolveDeclaredType, resolveTypeName, typeNamesIn } from "./symbols.ts";
 import type { TsDomainType, TsInspection, TsTarget } from "./types.ts";
@@ -221,10 +221,11 @@ export function ruleRepositoryContract(inspection: TsInspection, target: TsTarge
   const findings: FindingInput[] = [];
   for (const port of ports) {
     const aggregate = port.name.slice(0, -"Repository".length);
+    const mapping = aggregateMappings(inspection).find((entry) => entry.type === aggregate);
     for (const member of port.members) {
       const returned = statedReturn(member);
       if (returned === null) continue;
-      const problem = repositoryContractProblem(member.name, expandGenericStoreResult(returned, facts.declarations), aggregate, "typescript");
+      const problem = repositoryContractProblem(member.name, expandGenericStoreResult(returned, facts.declarations), aggregate, "typescript", mapping?.persistence_method === "state-sourcing");
       if (problem) findings.push({ rule_id: "repository-result-contract", file: target.file, line: member.span.start_line, message: `${port.name}.${member.name}: ${problem}` });
     }
   }

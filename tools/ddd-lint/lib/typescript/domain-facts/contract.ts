@@ -51,6 +51,8 @@ export interface MemberFact {
   readonly computed_key?: string;
   /** The type the member states: a property's annotation, a parameter property's parameter type. */
   readonly type_text?: string;
+  /** Explicit type arguments of a property's new expression, without type inference. */
+  readonly initializer_type_text?: string;
   /** The parameters of a method, a method signature or a constructor. */
   readonly params?: readonly ParamFact[];
   /** The return type a method or a method signature states. */

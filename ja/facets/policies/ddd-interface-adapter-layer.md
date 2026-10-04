@@ -8,7 +8,7 @@
 |------|------|
 | リポジトリポートの名前が `<Aggregate>Repository` でない、または保存媒体（`Postgres`、`Dynamo`、`InMemory`、`Http` など）を含む | REJECT |
 | リポジトリの実装が媒体名の接頭辞を持ち、ポート名で終わる（`PostgresInvoiceRepository`） | OK |
-| 理由なく、リポジトリポートに基本の動詞 `find_by_id`、`store`、`delete_by_id`（言語の表記に合わせる）がない | REJECT |
+| 理由なく、State Sourcing のリポジトリポートに基本の動詞 `find_by_id`、`store`、`delete_by_id`（言語の表記に合わせる）がない | REJECT |
 | リポジトリポートのメソッドが `Result` を返さない（`store` が `void` や `()` を返す） | REJECT。読み込みと保存は失敗しうるので、`Result<…, RepositoryError>` を返す。`RepositoryError` はポートの隣に宣言するインフラの失敗であり、業務上のエラーではない |
 | 検索が、見つからないことをポートの失敗として返している | REJECT。`undefined`（Rust は `None`）を成功として返し、見つからないことはユースケースが自分のエラーにする |
 | リポジトリポートが画面向けの検索を提供している | REJECT。クエリ側に置く |
@@ -16,6 +16,8 @@
 | 外部のモデルを、採用するか変換するかを明示せずにドメインの中で使っている | REJECT |
 
 ## 永続化
+
+Event Sourcing のリポジトリは順序付きのドメインイベント列を読み込み、イベントを追記する。集約の現在状態を上書きしない。インメモリのイベントストアも集約IDごとにイベント列を保持する。宣言した replay メソッドで復元し、`via: event-replay` とする。`stored-instance` は State Sourcing のインメモリ保存に使う。
 
 インメモリの状態保存は、集約を `Map<Id, Aggregate>`／`HashMap<Id, Aggregate>` に直接保持する。保存用の Record／Snapshot に分解しない。TypeScript は不変の集約を返し、Rust は保存済みの集約を守るため clone を返す。保存レコードの変換と `parse`／`restore` による復元は、DB・ファイルなど保存表現を持つ媒体のアダプタに置く。
 

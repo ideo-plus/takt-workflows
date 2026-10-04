@@ -12,7 +12,7 @@ import { containsMediaWord, toPascal } from "../lists.ts";
 import type { DomainTypeSymbol, InspectionContext, InspectionTarget } from "../types.ts";
 import { evaluateDomainPackaging } from "./packaging.ts";
 import { rulePrimitiveInitialization } from "./primitives.ts";
-import { inMemoryAggregates } from "../in-memory.ts";
+import { inMemoryAggregates, storedMapValue } from "../in-memory.ts";
 import { repositoryContractProblem, resultArguments, expandGenericStoreResult } from "../repository-contract.ts";
 import { within as withinSpan } from "./program.ts";
 
@@ -694,7 +694,8 @@ function ruleRepositoryContract(target: InspectionTarget, context: InspectionCon
   for (const port of ports) {
     const aggregate = port.name.slice(0, -"Repository".length);
     for (const method of port.signatures) {
-      const problem = repositoryContractProblem(method.name, expandGenericStoreResult(method.return_type_text, facts.aliases), aggregate, "rust");
+      const stateSourcing = context.rustMapping.kind === "loaded" && context.rustMapping.view.aggregates.some((entry) => entry.type === aggregate && entry.persistence_method === "state-sourcing");
+      const problem = repositoryContractProblem(method.name, expandGenericStoreResult(method.return_type_text, facts.aliases), aggregate, "rust", stateSourcing);
       if (problem) findings.push(finding("repository-result-contract", target.file, `${port.name}::${method.name}: ${problem}`, method.line));
     }
   }
@@ -706,19 +707,44 @@ function ruleRepositoryContract(target: InspectionTarget, context: InspectionCon
 }
 
 function ruleInMemoryRestoration(target: InspectionTarget, context: InspectionContext): FindingInput[] {
+  return inMemoryStorage(target, context, "in-memory-restoration");
+}
+
+function ruleEventSourcingStorage(target: InspectionTarget, context: InspectionContext): FindingInput[] {
+  return inMemoryStorage(target, context, "event-sourcing-storage");
+}
+
+function inMemoryStorage(target: InspectionTarget, context: InspectionContext, rule: "in-memory-restoration" | "event-sourcing-storage"): FindingInput[] {
   if (!target.file || !target.crate_name || context.rustMapping.kind !== "loaded") return [];
   const references = inMemoryAggregates(context.run, target.crate_name, "rust");
   if (!references.size) return [];
   const facts = declarationsOf(context, target.file);
   if (!facts.impls.some((entry) => entry.trait_text?.replace(/<.*$/, "").endsWith("Repository"))) return [];
-  const aggregates = context.rustMapping.view.aggregates.filter((entry) => references.has(entry.aggregate_ref) && entry.persistence_method === "state-sourcing");
+  const state = rule === "in-memory-restoration";
+  const aggregates = context.rustMapping.view.aggregates.filter((entry) => references.has(entry.aggregate_ref) && entry.persistence_method === (state ? "state-sourcing" : "event-sourcing"));
+  if (!aggregates.length) return [];
   const module = context.program.files.get(target.file)!.module;
-  return facts.constructions.flatMap((site) => {
+  const findings: FindingInput[] = [];
+  const repositories = facts.impls.filter((entry) => entry.trait_text?.replace(/<.*$/, "").endsWith("Repository"));
+  for (const repository of facts.types) {
+    const owned = aggregates.filter((entry) => repositories.some((port) => port.target_type_text === repository.name && port.trait_text?.split("::").pop() === `${entry.type}Repository`));
+    if (!owned.length) continue;
+    for (const field of repository.fields) {
+      const value = storedMapValue(field.type_text);
+      if (value === undefined) continue;
+      const type = context.program.resolveType(target.file, [...module, ...repository.module], value);
+      const direct = Boolean(type && owned.some((entry) => entry.type === type.name && entry.crate.replace(/-/g, "_") === type.crate));
+      if (state === direct) continue;
+      findings.push(finding(rule, target.file, `${repository.name}.${field.name} stores ${value}; ${state ? "its map must retain the aggregate directly" : "Event Sourcing stores event streams rather than aggregate state"}`, field.line));
+    }
+  }
+  if (!state) return findings;
+  return [...findings, ...facts.constructions.flatMap((site) => {
     if (site.kind !== "associated-call" || site.callee_text !== "restore") return [];
     const type = context.program.resolveType(target.file!, module, site.type_text);
     if (!type || !aggregates.some((entry) => entry.type === type.name && entry.crate.replace(/-/g, "_") === type.crate)) return [];
     return [finding("in-memory-restoration", target.file!, `in-memory repository reconstructs ${type.name}; retain the aggregate object directly instead of a persistence record`, site.span.start_line)];
-  });
+  })];
 }
 
 export const PER_FILE_EVALUATORS: Record<
@@ -744,6 +770,7 @@ export const PER_FILE_EVALUATORS: Record<
   m: ruleM,
   n: ruleN,
   "in-memory-restoration": ruleInMemoryRestoration,
+  "event-sourcing-storage": ruleEventSourcingStorage,
 };
 
 export const CONTEXT_EVALUATORS: Record<

@@ -175,6 +175,8 @@ An aggregate-only context with no persistence still declares its package, depend
 
 An in-memory state repository retains aggregate objects and declares `via: stored-instance`. A database or file adapter that reconstructs an aggregate from a persisted representation declares `via: full-constructor` and validates through restore. Memory storage does not require serialization.
 
+Event Sourcing declares `via: event-replay` regardless of the storage medium. Its repository keeps ordered, append-only domain events, and reconstruction calls the aggregate's declared replay methods. The memory map contains event streams, not aggregate state objects or state-storage wrappers.
+
 ## Deriving the Model
 
 The model is derived from behavior, not from data tables: stories give past-tense domain events, each event has the command and actor that produce it, events that change the same state group into an aggregate, and the aggregate's invariant explains why they belong together.

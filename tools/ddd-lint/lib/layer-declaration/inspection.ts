@@ -105,12 +105,18 @@ function checkRestorationPaths(
   structure: LayerStructure,
   model: DomainModel,
   where: string,
+  persistenceMethods: ReadonlyMap<string, string>,
 ): void {
   const context = model.bounded_contexts.find((candidate) => candidate.element_id === structure.context_ref);
   if (context === undefined) return;
   for (const aggregate of context.aggregates) {
     const path = structure.restoration_paths.find((entry) => entry.aggregate_ref === aggregate.element_id);
-    const required = structure.persistence_backend === "in-memory" ? "stored-instance" : "full-constructor";
+    const method = persistenceMethods.get(aggregate.element_id);
+    if (method === undefined) {
+      report.add(LAYER_RULES.restorationPath, `${where}: the aggregate ${aggregate.element_id} has no declared persistence method`);
+      continue;
+    }
+    const required = method === "event-sourcing" ? "event-replay" : structure.persistence_backend === "in-memory" ? "stored-instance" : "full-constructor";
     if (path?.via !== required)
       report.add(
         LAYER_RULES.restorationPath,
@@ -128,6 +134,7 @@ export function inspectLayerDeclaration(
   model: DomainModel,
   file: string,
   domainPackages: readonly PackageIdentity[],
+  persistenceMethods: ReadonlyMap<string, string>,
 ): readonly FindingInput[] {
   const report = new LayerReport(file);
   const domainPackageKeys = new Set(domainPackages.map(identityKey));
@@ -138,7 +145,7 @@ export function inspectLayerDeclaration(
     if (structure.cqrs && !structure.packages.some((entry) => entry.role === "query"))
       report.add(LAYER_RULES.cqrsSides, `${where}: the context is cqrs but declares no query-side package`);
     checkDependencyDirection(report, structure, where);
-    checkRestorationPaths(report, structure, model, where);
+    checkRestorationPaths(report, structure, model, where, persistenceMethods);
   }
   return report.findings;
 }

@@ -17,6 +17,15 @@ export interface RuleDefinition {
 
 export const RULES: readonly RuleDefinition[] = [
   {
+    rule_id: "event-sourcing-storage",
+    name: "event-stream-in-memory-storage",
+    statement: "an in-memory Event Sourcing repository stores aggregate state instead of event streams",
+    target_layers: ["interface-adapter"],
+    requires_model: true,
+    facts: ["fields", "layer-structure", "aggregate-mapping"],
+    per_file: true,
+  },
+  {
     rule_id: "repository-result-contract",
     name: "simple-repository-result",
     statement: "a repository wraps its Result without additional meaning, returns a persistence envelope, or uses a per-operation infrastructure error",

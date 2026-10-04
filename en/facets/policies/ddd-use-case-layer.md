@@ -1,6 +1,8 @@
 # DDD Use-Case Layer Policy
 
-For a single-aggregate repository, load returns Result<Aggregate | undefined, RepositoryError> (Rust: Result<Option<Aggregate>, RepositoryError>), and store returns Result<void, RepositoryError> (Rust: Result<(), RepositoryError>). Do not create operation-specific Result aliases, persistence DTOs or return wrappers that add no meaning. Reusable generic aliases are allowed. Infrastructure failures use the common RepositoryError rather than per-operation error types.
+For a State Sourcing single-aggregate repository, load returns Result<Aggregate | undefined, RepositoryError> (Rust: Result<Option<Aggregate>, RepositoryError>), and store returns Result<void, RepositoryError> (Rust: Result<(), RepositoryError>). Do not create operation-specific Result aliases, persistence DTOs or return wrappers that add no meaning. Reusable generic aliases are allowed. Infrastructure failures use the common RepositoryError rather than per-operation error types.
+
+Event Sourcing loads domain event streams and appends newly produced events. Do not impose the State Sourcing aggregate-storage signature on these event operations. Report infrastructure failures through the common RepositoryError; publish a successful event only after its append succeeds.
 
 Judges the code of the use-case layer. A use case orchestrates: it loads, calls domain operations, and stores. This policy covers the shape of a use case, re-execution and publishing, multiple aggregates, and decisions from read models. Where decisions are made and command-ID memory belong to the domain layer policy; allowed dependencies belong to the layer dependency policy.
 

@@ -130,7 +130,10 @@ function checkLayers(context: ProjectContext): Omit<CheckResult, "check"> {
         domainPackages.push({ language: "rust", package: assignment.crate_name });
     }
   }
-  return { findings: inspectLayerDeclaration(loaded.declaration, loaded.model, file, domainPackages) };
+  const mapping = loadAggregateMapping(join(context.modelDir, MAPPING_FILE));
+  if (!mapping.ok) return { findings: [] }; // The mapping check reports the invalid declaration.
+  const persistenceMethods = new Map(mapping.mapping.aggregate_mappings.map((entry) => [entry.aggregate_ref, entry.persistence_method]));
+  return { findings: inspectLayerDeclaration(loaded.declaration, loaded.model, file, domainPackages, persistenceMethods) };
 }
 
 async function checkRust(context: ProjectContext): Promise<CheckResult[]> {
@@ -145,7 +148,7 @@ async function checkRust(context: ProjectContext): Promise<CheckResult[]> {
   return Promise.all([
     run("rust-domain", () => gate(["domain"], false, ["a", "b", "operation", "primitive-initialization", "in-place", "collection", "port-placement", "c", "d", "g", "domain-packaging"], true)),
     run("rust-use-case", () => gate(["use-case"], false, ["g", "h", "i", "d", "use-case-name", "repository-result", "repository-result-contract", "repository-mut-self"])),
-    run("rust-interface-adapter", () => gate(["interface-adapter", "rmu"], true, ["k", "l", "m", "n", "g", "in-memory-restoration"])),
+    run("rust-interface-adapter", () => gate(["interface-adapter", "rmu"], true, ["k", "l", "m", "n", "g", "in-memory-restoration", "event-sourcing-storage"])),
     run("rust-module-layout", () => {
       const result = checkModuleLayout(extractor, context.root, () => api.checkBudget());
       return { findings: result.findings, note: `${result.mode ?? "no Rust project"}; ${result.crates} crates` };
