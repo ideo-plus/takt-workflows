@@ -439,6 +439,130 @@ describe("Rust sample aggregate mapping", () => {
     });
 });
 
+describe("domain factory naming", () => {
+  function declareConversion(files: Record<string, string>, rust: boolean): void {
+    const model: any = Bun.YAML.parse(files["docs/ddd/domain-model.yaml"]!);
+    model.bounded_contexts[0].aggregates[0].factory_rules.push({
+      element_id: "factory.invoice.convert-money-text", name: "ConvertMoneyText", target_element: "primitive.money",
+      preconditions: ["invariant.invoice.money-increment"],
+      domain_errors: [{ element_id: "error.invoice.convert-money-text.invalid-amount", name: "InvalidAmount", operation: "factory.invoice.convert-money-text", condition: "the text is not a valid monetary amount" }],
+    });
+    files["docs/ddd/domain-model.yaml"] = Bun.YAML.stringify(model);
+    const mapping: any = Bun.YAML.parse(files["docs/ddd/aggregate-mapping.yaml"]!);
+    mapping.aggregate_mappings[0].operations.push({ operation_ref: "factory.invoice.convert-money-text", code: { method: rust ? "try_from" : "from", error_type: "ConvertMoneyError" }, errors: [{ error_ref: "error.invoice.convert-money-text.invalid-amount", code: { case: rust ? "InvalidAmount" : "invalid-amount" } }] });
+    files["docs/ddd/aggregate-mapping.yaml"] = Bun.YAML.stringify(mapping);
+  }
+  for (const sample of typeScriptSamples()) {
+    const line = "packages/command/billing-domain/src/invoice/line.ts";
+    const money = "packages/command/billing-domain/src/money.ts";
+    const addMethod = (files: Record<string, string>, path: string, method: string) => {
+      const prefix = sample.representation === "class" ? "  static " : "  ";
+      replace(files, path, `${prefix}of(`, `${prefix}${method}${sample.representation === "companion" ? "," : ""}\n\n${prefix}of(`);
+    };
+    const cases = [
+      ["parse returns Result", line, "parse(source: Money): InvoiceLine { return InvoiceLine.of(source); }"],
+      ["from accepts one source", line, "from(left: Money, right: Money): InvoiceLine { return InvoiceLine.of(left.add(right)); }"],
+      ["from does not copy its own type", line, "from(source: InvoiceLine): InvoiceLine { return source; }"],
+      ["from does not replace primitive of/parse", money, "from(value: number): Money { return Money.of(value); }"],
+    ] as const;
+    for (const [name, path, method] of cases)
+      test(`${sample.name}: ${name}`, () => {
+        const result = lint(sample.files, (files) => addMethod(files, path, method));
+        expect(result.findings.some((entry) => entry.rule_id === "factory-naming")).toBe(true);
+      });
+    test(`${sample.name}: of returns a value rather than an unnecessary Result`, () => {
+      const result = lint(sample.files, (files) => {
+        files[line] = 'import type { Result } from "@acme/language-extensions";\n' + files[line];
+        replace(files, line, "of(amount: Money): InvoiceLine", "of(amount: Money): Result<InvoiceLine, never>");
+        replace(files, line, sample.representation === "class" ? "return new InvoiceLine(amount);" : "return instance;", sample.representation === "class" ? "return { ok: true, value: new InvoiceLine(amount) };" : "return { ok: true, value: instance };");
+      });
+      expect(result.findings.some((entry) => entry.rule_id === "factory-naming")).toBe(true);
+    });
+    test(`${sample.name}: of does not create an Entity`, () => {
+      const result = lint(sample.files, (files) => {
+        replace(files, parentModuleFile(sample.layout), sample.representation === "class" ? "static open(" : "  open(", sample.representation === "class" ? "static of(" : "  of(");
+        replace(files, "docs/ddd/aggregate-mapping.yaml", "method: open,", "method: of,");
+      });
+      expect(result.findings.some((entry) => entry.rule_id === "factory-naming" && entry.message.includes("Entity"))).toBe(true);
+    });
+    test(`${sample.name}: value factories, conversions, typed parse and standard calls remain valid`, () => {
+      const result = lint(sample.files, (files) => {
+        addMethod(files, line, "from(source: Money): InvoiceLine { return InvoiceLine.of(source); }");
+        addMethod(files, line, 'create(source: Money): InvoiceLine { return InvoiceLine.of(source); }');
+        addMethod(files, money, 'generate(seed: number): Money { return Money.of(Number.parseInt(String(seed), 10) * 100); }');
+        if (sample.representation === "class") replace(files, line, "  addTo(", "  valueOf(): InvoiceLine { return this; }\n\n  addTo(");
+      });
+      expect(result.findings).toEqual([]);
+      expect(result.unavailable).toEqual([]);
+    });
+    test(`${sample.name}: aliases cannot conceal a same-type copy`, () => {
+      const result = lint(sample.files, (files) => {
+        files[line] = 'type SourceLine = InvoiceLine;\n' + files[line];
+        addMethod(files, line, "from(source: SourceLine): InvoiceLine { return source; }");
+      });
+      expect(result.findings.some((entry) => entry.rule_id === "factory-naming")).toBe(true);
+    });
+    test(`${sample.name}: a declared DP conversion still initializes through its typed parse`, () => {
+      const result = lint(sample.files, (files) => {
+        declareConversion(files, false);
+        files[money] = 'export type ConvertMoneyError = "invalid-amount";\n' + files[money];
+        addMethod(files, money, 'from(source: string): Result<Money, ConvertMoneyError> { const parsed = Money.parse(Number(source)); if (!parsed.ok) return { ok: false, error: "invalid-amount" }; return parsed; }');
+      });
+      expect(result.findings).toEqual([]);
+      expect(result.unavailable).toEqual([]);
+    });
+  }
+  for (const sample of rustSamples()) {
+    const line = "packages/command/billing-domain/src/invoice/line.rs";
+    const money = "packages/command/billing-domain/src/money.rs";
+    const addMethod = (files: Record<string, string>, path: string, method: string) =>
+      replace(files, path, "    pub fn of(", `    pub fn ${method}\n\n    pub fn of(`);
+    const cases = [
+      ["parse returns Result", line, "parse(source: Money) -> Self { Self::of(source) }"],
+      ["from accepts one source", line, "from(left: Money, right: Money) -> Self { let mut total = left; total.add(&right); Self::of(total) }"],
+      ["from does not copy its own type", line, "from(source: Self) -> Self { source }"],
+      ["from does not replace primitive of/parse", money, "from(value: i64) -> Self { Self::of(value) }"],
+      ["fallible conversion uses try_from", line, "from(source: Money) -> Result<Self, ()> { Ok(Self::of(source)) }"],
+      ["try_from returns Result", line, "try_from(source: Money) -> Self { Self::of(source) }"],
+      ["borrowed same-type conversion is a copy", line, "from<'a>(source: &'a Self) -> Self { source.clone() }"],
+    ] as const;
+    for (const [name, path, method] of cases)
+      test(`${sample.name}: ${name}`, () => {
+        const result = lint(sample.files, (files) => addMethod(files, path, method));
+        expect(result.findings.some((entry) => entry.rule_id === "factory-naming")).toBe(true);
+      });
+    test(`${sample.name}: of returns a value rather than an unnecessary Result`, () => {
+      const result = lint(sample.files, (files) => {
+        replace(files, line, "of(amount: Money) -> Self", "of(amount: Money) -> Result<Self, std::convert::Infallible>");
+        replace(files, line, "InvoiceLine { amount }", "Ok(InvoiceLine { amount })");
+      });
+      expect(result.findings.some((entry) => entry.rule_id === "factory-naming")).toBe(true);
+    });
+    test(`${sample.name}: of does not create an Entity`, () => {
+      const result = lint(sample.files, (files) => {
+        replace(files, rustParentModuleFile(sample.layout), "pub fn open(", "pub fn of(");
+        replace(files, "docs/ddd/aggregate-mapping.yaml", "method: open,", "method: of,");
+      });
+      expect(result.findings.some((entry) => entry.rule_id === "factory-naming" && entry.message.includes("Entity"))).toBe(true);
+    });
+    test(`${sample.name}: inherent and standard trait conversions preserve the construction contract`, () => {
+      const result = lint(sample.files, (files) => {
+        addMethod(files, line, "try_from(source: Money) -> Result<Self, ()> { Ok(Self::of(source)) }");
+        files[line] += "\nimpl From<Money> for InvoiceLine { fn from(source: Money) -> Self { Self::of(source) } }\n";
+      });
+      expect(result.findings).toEqual([]);
+    });
+    test(`${sample.name}: a declared DP conversion still initializes through its typed parse`, () => {
+      const result = lint(sample.files, (files) => {
+        declareConversion(files, true);
+        files[money] = '#[derive(Debug, Clone, Copy, PartialEq, Eq)]\npub enum ConvertMoneyError { InvalidAmount }\n' + files[money];
+        addMethod(files, money, 'try_from(source: &str) -> Result<Self, ConvertMoneyError> { let value = source.parse::<i64>().map_err(|_| ConvertMoneyError::InvalidAmount)?; Self::parse(value).map_err(|_| ConvertMoneyError::InvalidAmount) }');
+      });
+      expect(result.findings).toEqual([]);
+    });
+  }
+});
+
 describe("sample builds", () => {
   for (const layout of ["named-file", "index-file"] as const) {
     test(`Event Sourcing TypeScript ${layout} passes lint`, () => expect(lint(eventTypeScriptSample(layout).files).findings).toEqual([]));

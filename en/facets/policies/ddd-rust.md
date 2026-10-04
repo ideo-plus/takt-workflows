@@ -2,6 +2,8 @@
 
 Defines how the rules of the other DDD policies are judged in Rust code, and the rule only Rust has (changing in place). When the reading breaks a rule, that rule's verdict applies. Module layout belongs to the module layout policy.
 
+Both an inherent `from` and a `From<T>` implementation return `Self` as an infallible conversion. Use `try_from`/`TryFrom<T>` and `Result<Self, ConversionError>` for fallible conversions. A DP uses its existing `of`/`parse` for backing-input validation; adding conversions never bypasses that initialization path.
+
 | Rule (policy) | How Rust code is judged |
 |---------------|-------------------------|
 | Do not expose state (domain layer) | A `pub`, `pub(crate)`, `pub(super)`, or `pub(in …)` field is public |

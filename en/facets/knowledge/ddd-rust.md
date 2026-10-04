@@ -2,6 +2,8 @@
 
 ## Aggregate
 
+Follow "Choosing Factory Names" in the modeling knowledge. `from` is infallible; `try_from` returns a Result. Standard `From`/`TryFrom` implementations also follow invariant validation paths. The private full constructor `new` remains the internal construction path called by business factories.
+
 An aggregate keeps private fields, a private constructor that takes the whole state, validating factories that return the operation's own error enum, a `restore` function for persisted event history, and commands that take `&mut self`, change the state, and return the one event they produce. A command that fails changes nothing and produces no event.
 
 ```rust

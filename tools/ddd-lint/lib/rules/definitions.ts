@@ -17,6 +17,15 @@ export interface RuleDefinition {
 
 export const RULES: readonly RuleDefinition[] = [
   {
+    rule_id: "factory-naming",
+    name: "domain-factory-contract",
+    statement: "a domain factory's of, parse, from, or try_from signature contradicts its value construction or conversion contract",
+    target_layers: ["domain"],
+    requires_model: false,
+    facts: ["methods", "domain-model", "aggregate-mapping"],
+    per_file: true,
+  },
+  {
     rule_id: "event-sourcing-storage",
     name: "event-stream-in-memory-storage",
     statement: "an in-memory Event Sourcing repository stores aggregate state instead of event streams",

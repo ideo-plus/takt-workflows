@@ -12,6 +12,7 @@ import { containsMediaWord, toPascal } from "../lists.ts";
 import type { DomainTypeSymbol, InspectionContext, InspectionTarget } from "../types.ts";
 import { evaluateDomainPackaging } from "./packaging.ts";
 import { rulePrimitiveInitialization } from "./primitives.ts";
+import { ruleFactoryNaming } from "./factories.ts";
 import { inMemoryAggregates, storedMapValue, eventStreamElement, isAggregateStateElement } from "../in-memory.ts";
 import { repositoryContractProblem, resultArguments, expandGenericStoreResult } from "../repository-contract.ts";
 import { within as withinSpan } from "./program.ts";
@@ -757,6 +758,7 @@ export const PER_FILE_EVALUATORS: Record<
   b: ruleB,
   operation: ruleOperation,
   "primitive-initialization": rulePrimitiveInitialization,
+  "factory-naming": ruleFactoryNaming,
   "in-place": ruleInPlace,
   collection: ruleCollection,
   "port-placement": rulePortPlacement,

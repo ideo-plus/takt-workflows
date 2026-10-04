@@ -37,7 +37,7 @@ export function rulePrimitiveInitialization(
         `${type.name} derives Deserialize with uninspectable initialization; implement deserialization through parse`,
       );
     const parsed = methods.find((entry) => entry.name === "parse");
-    if (operations.some((entry) => entry.method !== "parse"))
+    if (!operations.some((entry) => entry.method === "parse"))
       report(`${type.name} must map its invariant-checking factory to parse`);
     const of = methods.find((entry) => entry.name === "of");
     if (

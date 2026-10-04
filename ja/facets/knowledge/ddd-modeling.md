@@ -393,6 +393,27 @@ layer_structures:
 
 Event Sourcing は保存媒体にかかわらず `via: event-replay` を宣言する。リポジトリが保持するのは順序付きの追記専用ドメインイベント列であり、集約に宣言した replay メソッドで復元する。インメモリの Map／HashMap もイベント列を保持し、集約の現在状態やその保存ラッパーを格納しない。
 
+## ファクトリ名の選択
+
+用途に合わせて名前を選び、実装名は集約写像の `code.method` に宣言する。次の表はこのプロジェクトの命名方針であり、Java の慣習を全言語へそのまま適用するものではない。
+
+| 名前 | 意味と用途 |
+|------|------------|
+| `of` | 単一値または構成要素から VO を構築する。複数引数に限定しない。DP では基本入力を検証し、契約違反を panic／throw にする |
+| `parse` | 入力を解釈・検証し、操作固有のエラーを持つ Result で構築する。`ReservationId.parse(value: u64)` のような数値入力も使う |
+| `from` | 意味のある別型から変換する。同じ型のコピーや DP の基本入力の包装は、この名前にしない |
+| `create` | Entity やドメインオブジェクトを生成する。`reserve`・`open` など、操作を表す業務名があれば優先する |
+| `generate` | 計算・アルゴリズムによって値を生成する。決定的な計算も含み、乱数に限定しない。生成した DP も不変条件を検証する |
+| `valueOf` | 値に対応するオブジェクトを得るという技術 API の慣習。キャッシュは実装上の選択である。新規のドメイン API は `of`／`parse` を標準にする |
+| `getInstance` | 利用するインスタンスを取得する。共有・キャッシュ・シングルトンの保証は個別の契約に記載する |
+| `newInstance` | 新しいインスタンスを構築する。ドメインでは `of`／`create`／業務名を優先する。新規性は実装を確認する |
+
+Rust では `value_of`・`get_instance`・`new_instance` のように snake_case にする。`from` は失敗しない変換として扱い、失敗する変換は `try_from` と `Result` を使う。TypeScript の `from` は、失敗するなら操作固有のエラーを持つ Result を返す。TS のインスタンス `valueOf()` は、言語の変換フックとして別に扱う。
+
+命名リンターは `of`・`parse`・`from`・Rust の `try_from` の構造を検査する。キャッシュ・新規性・アルゴリズムの意味はレビューで確認する。ES の `restore` と宣言済み replay メソッドは、履歴を復元・適用する専用の経路である。
+
+参考にした一次資料: [LocalDate.of](https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/time/LocalDate.html)、[Integer.valueOf／parseInt](https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/lang/Integer.html)、[Calendar の実装](https://github.com/openjdk/jdk/blob/jdk-25-ga/src/java.base/share/classes/java/util/Calendar.java)、[UUID.randomUUID](https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/util/UUID.html)、[Rust From](https://doc.rust-lang.org/std/convert/trait.From.html)、[ECMAScript valueOf](https://tc39.es/ecma262/multipage/fundamental-objects.html#sec-object.prototype.valueof)。Java の3引数の日付構築例は `LocalDate.of(year, month, day)`、UUID の標準生成例は `UUID.randomUUID()` である。
+
 ## モデルの導き方
 
 モデルはデータの表からではなく振る舞いから導く。ストーリーから過去形のドメインイベントを挙げ、各イベントを生むコマンドとアクターを特定し、同じ状態を変えるイベントを集約にまとめる。集約の不変条件が、それらが一緒にある理由を説明する。
