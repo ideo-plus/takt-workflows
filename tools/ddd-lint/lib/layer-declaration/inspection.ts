@@ -99,7 +99,7 @@ function checkDependencyDirection(report: LayerReport, structure: LayerStructure
   }
 }
 
-/** Memory retains aggregate instances; external representations use the full-state constructor. */
+/** Restoration follows the declared persistence method and storage medium. */
 function checkRestorationPaths(
   report: LayerReport,
   structure: LayerStructure,

@@ -192,7 +192,7 @@ export function ruleN(inspection: TsInspection, target: TsTarget): FindingInput[
   return findings;
 }
 
-/** A memory repository retains aggregate objects; it never decodes a persisted state record. */
+/** A State Sourcing memory repository retains aggregate objects without decoding state records. */
 export function ruleInMemoryRestoration(inspection: TsInspection, target: TsTarget): FindingInput[] {
   return inMemoryStorage(inspection, target, "in-memory-restoration");
 }
