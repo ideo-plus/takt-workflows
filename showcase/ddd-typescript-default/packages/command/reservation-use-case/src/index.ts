@@ -1,11 +1,3 @@
 export { CancelReservationUseCase } from "./cancel-reservation.ts";
-export type {
-  CancelReservationFailure,
-  CancelReservationUseCaseResult,
-} from "./cancel-reservation.ts";
-export type {
-  FindReservationResult,
-  RepositoryError,
-  ReservationRepository,
-  StoreReservationResult,
-} from "./reservation-repository.ts";
+export type { CancelReservationFailure } from "./cancel-reservation.ts";
+export type { ReservationRepository, RepositoryError } from "./reservation-repository.ts";

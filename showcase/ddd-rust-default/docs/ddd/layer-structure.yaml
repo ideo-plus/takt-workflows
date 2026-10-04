@@ -1,98 +1,54 @@
-{
-  "model_ref": "domain-model.yaml",
-  "layer_structures": [
-    {
-      "context_ref": "bc.reservation",
-      "cqrs": false,
-      "packages": [
-        {
-          "role": "command",
-          "code": {
-            "language": "rust",
-            "package": "reservation-domain"
-          }
-        },
-        {
-          "role": "command",
-          "code": {
-            "language": "rust",
-            "package": "reservation-use-case"
-          }
-        },
-        {
-          "role": "command",
-          "code": {
-            "language": "rust",
-            "package": "reservation-interface-adapter"
-          }
-        }
-      ],
-      "dependencies": [
-        {
-          "code": {
-            "language": "rust",
-            "package": "reservation-domain"
-          },
-          "depends_on": []
-        },
-        {
-          "code": {
-            "language": "rust",
-            "package": "reservation-use-case"
-          },
-          "depends_on": [
-            {
-              "language": "rust",
-              "package": "reservation-domain"
-            }
-          ]
-        },
-        {
-          "code": {
-            "language": "rust",
-            "package": "reservation-interface-adapter"
-          },
-          "depends_on": [
-            {
-              "language": "rust",
-              "package": "reservation-domain"
-            },
-            {
-              "language": "rust",
-              "package": "reservation-use-case"
-            }
-          ]
-        }
-      ],
-      "ports": [
-        {
-          "name": "ReservationRepository",
-          "kind": "repository",
-          "verbs": [
-            "store",
-            "find_by_id"
-          ]
-        }
-      ],
-      "repositories": [
-        {
-          "name": "ReservationRepository",
-          "aggregate_ref": "aggregate.reservation",
-          "io_unit": "single",
-          "verbs": [
-            "store",
-            "find_by_id"
-          ],
-          "store_semantics": "upsert"
-        }
-      ],
-      "restoration_paths": [
-        {
-          "aggregate_ref": "aggregate.reservation",
-          "via": "full-constructor"
-        }
-      ],
-      "persistence_backend": "in-memory"
-    }
-  ]
-}
+model_ref: domain-model.yaml
+layer_structures:
+- context_ref: bc.reservation
+  cqrs: false
+  packages:
+  - role: command
+    code:
+      language: rust
+      package: reservation-domain
+  - role: command
+    code:
+      language: rust
+      package: reservation-use-case
+  - role: command
+    code:
+      language: rust
+      package: reservation-interface-adapter
+  dependencies:
+  - code:
+      language: rust
+      package: reservation-domain
+    depends_on: []
+  - code:
+      language: rust
+      package: reservation-use-case
+    depends_on:
+    - language: rust
+      package: reservation-domain
+  - code:
+      language: rust
+      package: reservation-interface-adapter
+    depends_on:
+    - language: rust
+      package: reservation-domain
+    - language: rust
+      package: reservation-use-case
+  ports:
+  - name: ReservationRepository
+    kind: repository
+    verbs:
+    - find_by_id
+    - store
+  repositories:
+  - name: ReservationRepository
+    aggregate_ref: aggregate.reservation
+    io_unit: single
+    verbs:
+    - find_by_id
+    - store
+    store_semantics: append-only
+  restoration_paths:
+  - aggregate_ref: aggregate.reservation
+    via: event-replay
+  persistence_backend: in-memory

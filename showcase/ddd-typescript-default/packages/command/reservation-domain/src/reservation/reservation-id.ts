@@ -1,19 +1,32 @@
-export class ReservationId {
-  readonly #value: string;
+import type { Result } from "@acme/language-extensions";
 
-  private constructor(value: string) {
+export type ParseReservationIdError = "invalid-id";
+
+export class ReservationId {
+  readonly #value: number;
+
+  private constructor(value: number) {
     this.#value = value;
   }
 
-  static of(value: string): ReservationId {
-    return new ReservationId(value);
+  static of(value: unknown): ReservationId {
+    const result = ReservationId.parse(value);
+    if (!result.ok) throw new Error("ReservationId is outside its domain");
+    return result.value;
   }
 
-  toString(): string {
+  static parse(value: unknown): Result<ReservationId, ParseReservationIdError> {
+    if (typeof value !== "number" || !Number.isInteger(value) || value < 1) {
+      return { ok: false, error: "invalid-id" };
+    }
+    return { ok: true, value: new ReservationId(value) };
+  }
+
+  equals(other: ReservationId): boolean {
+    return this.#value === other.#value;
+  }
+
+  value(): number {
     return this.#value;
-  }
-
-  toSnapshot(): { readonly id: string } {
-    return { id: this.#value };
   }
 }

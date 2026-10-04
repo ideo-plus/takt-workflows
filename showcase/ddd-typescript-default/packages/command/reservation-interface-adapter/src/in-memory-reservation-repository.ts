@@ -1,23 +1,38 @@
 import { Reservation } from "@acme/reservation-domain";
-import type { ReservationId, ReservationSnapshot } from "@acme/reservation-domain";
-import type {
-  FindReservationResult,
-  ReservationRepository,
-  StoreReservationResult,
-} from "@acme/reservation-use-case";
+import type { ReservationId, ReservationEvent } from "@acme/reservation-domain";
+import type { ReservationRepository, RepositoryError } from "@acme/reservation-use-case";
+import type { Result } from "@acme/language-extensions";
 
 export class InMemoryReservationRepository implements ReservationRepository {
-  readonly #records: Map<string, ReservationSnapshot> = new Map();
+  readonly #events: Map<number, readonly ReservationEvent[]> = new Map();
 
-  findById(id: ReservationId): FindReservationResult {
-    const snapshot: ReservationSnapshot | undefined = this.#records.get(id.toString());
-    if (snapshot === undefined) return { ok: true, value: undefined };
-    return { ok: true, value: Reservation.restore(snapshot) };
+  findById(id: ReservationId): Result<Reservation | undefined, RepositoryError> {
+    const events = this.#events.get(id.value());
+    if (events === undefined) return { ok: true, value: undefined };
+    try {
+      return { ok: true, value: Reservation.restore(id, events) };
+    } catch {
+      return { ok: false, error: { kind: "repository-error", message: "予約のイベント履歴が不正です" } };
+    }
   }
 
-  store(reservation: Reservation): StoreReservationResult {
-    const snapshot: ReservationSnapshot = reservation.toSnapshot();
-    this.#records.set(snapshot.id, snapshot);
+  store(id: ReservationId, event: ReservationEvent): Result<void, RepositoryError> {
+    if (!event.reservationId.equals(id)) {
+      return { ok: false, error: { kind: "repository-error", message: "予約IDがイベントと一致しません" } };
+    }
+    const previous = this.#events.get(id.value()) ?? [];
+    const persisted: ReservationEvent = Object.freeze({ ...event });
+    const next: readonly ReservationEvent[] = Object.freeze([...previous, persisted]);
+    try {
+      Reservation.restore(id, next);
+    } catch {
+      return { ok: false, error: { kind: "repository-error", message: "予約のイベント順序が不正です" } };
+    }
+    this.#events.set(id.value(), next);
     return { ok: true, value: undefined };
+  }
+
+  eventsFor(id: ReservationId): readonly ReservationEvent[] {
+    return Object.freeze([...(this.#events.get(id.value()) ?? [])]);
   }
 }

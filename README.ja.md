@@ -11,7 +11,7 @@
 
 今後もワークフローを追加していきます。
 
-[生成コードの showcase](showcase/README.md) に、TypeScript と Rust の DDD ワークフローが生成した、Event Sourcing の会議室予約コードを置いています。与えたタスク、モデルの設定、検証結果も確認できます。
+[コード例の showcase](showcase/README.md) に、TypeScript と Rust の DDD ワークフローで生成した会議室予約を、直接修正して Event Sourcing に統一した例を置いています。元の生成条件と、修正後の検証結果も確認できます。
 
 ## 特長
 - **作業するプロジェクトに導入する。** ワンライナーのインストーラがバンドルをプロジェクトの `.takt/` にコピーします。リポジトリの中に clone する必要はありません。

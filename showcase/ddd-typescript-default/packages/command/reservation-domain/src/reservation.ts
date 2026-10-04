@@ -1,115 +1,97 @@
 import type { Result } from "@acme/language-extensions";
-import { MemberId } from "./member-id.ts";
-import { RoomId } from "./room-id.ts";
-import { ReservationId } from "./reservation/reservation-id.ts";
-import { TimeSlot } from "./reservation/time-slot.ts";
-import type { CreateTimeSlotResult } from "./reservation/time-slot.ts";
+import type { MemberId } from "./member-id.ts";
+import type { RoomId } from "./room-id.ts";
+import type { ReservationId } from "./reservation/reservation-id.ts";
+
+export { ReservationId } from "./reservation/reservation-id.ts";
+export type { ParseReservationIdError } from "./reservation/reservation-id.ts";
 
 export type ReserveReservationError = "invalid-time-slot";
 export type CancelReservationError = "already-cancelled";
-
-export type CancelReservationResult = Result<CancelReservationOutcome, CancelReservationError>;
-
-export type ReservationCancelled = { readonly reservationId: ReservationId };
+export type ReservationStatus = "confirmed" | "cancelled";
+export type ReservationReserved = {
+  readonly kind: "reserved";
+  readonly reservationId: ReservationId;
+  readonly memberId: MemberId;
+  readonly roomId: RoomId;
+  readonly startsAt: number;
+  readonly endsAt: number;
+};
+export type ReservationCancelled = {
+  readonly kind: "cancelled";
+  readonly reservationId: ReservationId;
+};
+export type ReservationEvent = ReservationReserved | ReservationCancelled;
 export type CancelReservationOutcome = {
   readonly reservation: Reservation;
   readonly event: ReservationCancelled;
 };
 
-export type ReservationSnapshot = {
-  readonly id: string;
-  readonly memberId: string;
-  readonly roomId: string;
-  readonly startsAt: number;
-  readonly endsAt: number;
-  readonly status: "confirmed" | "cancelled";
-};
-
 export class Reservation {
-  readonly #id: ReservationId;
-  readonly #memberId: MemberId;
-  readonly #roomId: RoomId;
-  readonly #slot: TimeSlot;
-  readonly #status: "confirmed" | "cancelled";
+  readonly #reserved: ReservationReserved;
+  readonly #status: ReservationStatus;
 
-  private constructor(
-    id: ReservationId,
-    memberId: MemberId,
-    roomId: RoomId,
-    slot: TimeSlot,
-    status: "confirmed" | "cancelled",
-  ) {
-    this.#id = id;
-    this.#memberId = memberId;
-    this.#roomId = roomId;
-    this.#slot = slot;
+  private constructor(reserved: ReservationReserved, status: ReservationStatus) {
+    this.#reserved = reserved;
     this.#status = status;
   }
 
   static reserve(
-    id: ReservationId,
-    memberId: MemberId,
-    roomId: RoomId,
-    startsAt: Date,
-    endsAt: Date,
+    id: ReservationId, memberId: MemberId, roomId: RoomId,
+    startsAt: number, endsAt: number,
   ): Result<Reservation, ReserveReservationError> {
-    const slot: CreateTimeSlotResult = TimeSlot.create(startsAt, endsAt);
-    if (!slot.ok) return { ok: false, error: "invalid-time-slot" };
-    return {
-      ok: true,
-      value: new Reservation(id, memberId, roomId, slot.value, "confirmed"),
-    };
+    if (!Number.isFinite(startsAt) || !Number.isFinite(endsAt) || endsAt <= startsAt) {
+      return { ok: false, error: "invalid-time-slot" };
+    }
+    const event: ReservationReserved = Object.freeze({
+      kind: "reserved", reservationId: id, memberId, roomId, startsAt, endsAt,
+    });
+    return { ok: true, value: Reservation.fromReserved(event) };
   }
 
-  static restore(snapshot: ReservationSnapshot): Reservation {
-    if (
-      typeof snapshot.id !== "string" ||
-      typeof snapshot.memberId !== "string" ||
-      typeof snapshot.roomId !== "string" ||
-      !Number.isInteger(snapshot.startsAt) ||
-      !Number.isInteger(snapshot.endsAt) ||
-      (snapshot.status !== "confirmed" && snapshot.status !== "cancelled")
-    ) {
-      throw new Error("予約の保存状態が破損しています");
+  static restore(id: ReservationId, events: readonly ReservationEvent[]): Reservation {
+    const first = events[0];
+    if (!first || first.kind !== "reserved" || !first.reservationId.equals(id)) {
+      throw new Error("予約のイベント履歴が不正です");
     }
-    const slot: CreateTimeSlotResult = TimeSlot.create(
-      new Date(snapshot.startsAt),
-      new Date(snapshot.endsAt),
-    );
-    if (!slot.ok) {
-      throw new Error("予約の保存状態が破損しています");
+    let reservation = Reservation.fromReserved(first);
+    for (const event of events.slice(1)) {
+      if (event.kind !== "cancelled" || !event.reservationId.equals(id) ||
+          reservation.#status !== "confirmed") {
+        throw new Error("予約のイベント履歴が不正です");
+      }
+      reservation = reservation.applyCancelled(event);
     }
-    return new Reservation(
-      ReservationId.of(snapshot.id),
-      MemberId.of(snapshot.memberId),
-      RoomId.of(snapshot.roomId),
-      slot.value,
-      snapshot.status,
-    );
+    return reservation;
+  }
+
+  private static fromReserved(event: ReservationReserved): Reservation {
+    if (!Number.isFinite(event.startsAt) || !Number.isFinite(event.endsAt) ||
+        event.endsAt <= event.startsAt) {
+      throw new Error("予約のイベント履歴が不正です");
+    }
+    return new Reservation(Object.freeze({ ...event }), "confirmed");
+  }
+
+  private applyCancelled(_event: ReservationCancelled): Reservation {
+    return new Reservation(this.#reserved, "cancelled");
   }
 
   cancel(): Result<CancelReservationOutcome, CancelReservationError> {
     if (this.#status === "cancelled") {
       return { ok: false, error: "already-cancelled" };
     }
-    const reservation: Reservation = new Reservation(
-      this.#id,
-      this.#memberId,
-      this.#roomId,
-      this.#slot,
-      "cancelled",
-    );
-    const event: ReservationCancelled = { reservationId: this.#id };
-    return { ok: true, value: { reservation, event } };
+    const event: ReservationCancelled = Object.freeze({
+      kind: "cancelled", reservationId: this.#reserved.reservationId,
+    });
+    return { ok: true, value: { reservation: this.applyCancelled(event), event } };
   }
 
-  toSnapshot(): ReservationSnapshot {
-    return Object.assign(
-      { status: this.#status },
-      this.#id.toSnapshot(),
-      this.#memberId.toSnapshot(),
-      this.#roomId.toSnapshot(),
-      this.#slot.toSnapshot(),
-    );
-  }
+  reservedEvent(): ReservationReserved { return this.#reserved; }
+  id(): ReservationId { return this.#reserved.reservationId; }
+  memberId(): MemberId { return this.#reserved.memberId; }
+  roomId(): RoomId { return this.#reserved.roomId; }
+  startsAt(): number { return this.#reserved.startsAt; }
+  endsAt(): number { return this.#reserved.endsAt; }
+  status(): ReservationStatus { return this.#status; }
 }

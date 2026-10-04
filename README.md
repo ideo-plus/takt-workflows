@@ -11,7 +11,7 @@ A collection of [TAKT](https://github.com/nrslib/takt) workflows, facets, and ha
 
 More workflows will be added to this collection over time.
 
-See the [generated-code showcase](showcase/README.md) for Event Sourcing meeting-room reservation code produced by the TypeScript and Rust DDD workflows, with the task, model configuration, and verification results.
+See the [code showcase](showcase/README.md) for meeting-room reservation examples based on TypeScript and Rust DDD workflow output, directly revised to use Event Sourcing. Each example records its original generation conditions and verification after the corrections.
 
 ## Highlights
 - **Install into the project you work in.** A one-line installer copies a bundle into the project's `.takt/`. No clone inside your repository.

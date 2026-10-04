@@ -1,0 +1,134 @@
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+use super::{
+    CancelReservationError, CorruptReservationHistory, Reservation, ReservationEvent,
+    ReservationStatus, ReserveReservationError,
+};
+use crate::member_id::MemberId;
+use crate::reservation::reservation_id::ReservationId;
+use crate::reservation::time_slot::TimeSlot;
+use crate::room_id::RoomId;
+
+fn valid_times() -> (SystemTime, SystemTime) {
+    let start = UNIX_EPOCH + Duration::from_secs(3_600);
+    let end = start + Duration::from_secs(1_800);
+    (start, end)
+}
+
+#[test]
+fn reservation_keeps_its_member_room_and_time_slot() {
+    let reservation_id = ReservationId::of(1);
+    let member_id = MemberId::of(2);
+    let room_id = RoomId::of(3);
+    let (start, end) = valid_times();
+    let expected_time_slot = TimeSlot::create(start, end).expect("the time slot should be valid");
+
+    let reservation = Reservation::reserve(
+        reservation_id.clone(),
+        member_id.clone(),
+        room_id.clone(),
+        start,
+        end,
+    )
+    .expect("the reservation should be valid");
+
+    assert_eq!(reservation.id(), &reservation_id);
+    assert_eq!(reservation.member_id(), &member_id);
+    assert_eq!(reservation.room_id(), &room_id);
+    assert_eq!(reservation.time_slot(), &expected_time_slot);
+    assert_eq!(reservation.status(), ReservationStatus::Confirmed);
+}
+
+#[test]
+fn reservation_rejects_an_invalid_time_slot() {
+    let start = UNIX_EPOCH + Duration::from_secs(3_600);
+
+    let result = Reservation::reserve(
+        ReservationId::of(1),
+        MemberId::of(2),
+        RoomId::of(3),
+        start,
+        start,
+    );
+
+    assert!(matches!(
+        result,
+        Err(ReserveReservationError::InvalidTimeSlot)
+    ));
+}
+
+#[test]
+fn confirmed_reservation_can_be_cancelled_only_once() {
+    let reservation_id = ReservationId::of(1);
+    let (start, end) = valid_times();
+    let mut reservation = Reservation::reserve(
+        reservation_id.clone(),
+        MemberId::of(2),
+        RoomId::of(3),
+        start,
+        end,
+    )
+    .expect("the reservation should be valid");
+
+    let event = reservation
+        .cancel()
+        .expect("a confirmed reservation should be cancellable");
+
+    assert_eq!(event.reservation_id(), &reservation_id);
+    assert_eq!(reservation.status(), ReservationStatus::Cancelled);
+    assert_eq!(
+        reservation.cancel(),
+        Err(CancelReservationError::AlreadyCancelled)
+    );
+    assert_eq!(reservation.status(), ReservationStatus::Cancelled);
+}
+
+#[test]
+fn replay_preserves_values_and_rebuilds_cancelled_state() {
+    let (start, end) = valid_times();
+    let mut original = Reservation::reserve(
+        ReservationId::of(1),
+        MemberId::of(2),
+        RoomId::of(3),
+        start,
+        end,
+    )
+    .unwrap();
+    let birth = ReservationEvent::Reserved(original.reserved_event());
+    assert_eq!(
+        Reservation::restore(original.id(), &[birth.clone()]).unwrap(),
+        original
+    );
+    let cancellation = ReservationEvent::Cancelled(original.cancel().unwrap());
+    assert_eq!(
+        Reservation::restore(original.id(), &[birth, cancellation]).unwrap(),
+        original
+    );
+}
+
+#[test]
+fn replay_rejects_missing_duplicate_and_wrong_reservation_events() {
+    let (start, end) = valid_times();
+    let mut original = Reservation::reserve(
+        ReservationId::of(1),
+        MemberId::of(2),
+        RoomId::of(3),
+        start,
+        end,
+    )
+    .unwrap();
+    let birth = ReservationEvent::Reserved(original.reserved_event());
+    let cancellation = ReservationEvent::Cancelled(original.cancel().unwrap());
+    assert_eq!(
+        Reservation::restore(original.id(), &[]),
+        Err(CorruptReservationHistory::MissingReservationEvent)
+    );
+    assert!(Reservation::restore(original.id(), &[cancellation.clone()]).is_err());
+    assert!(Reservation::restore(original.id(), &[birth.clone(), birth.clone()]).is_err());
+    assert!(Reservation::restore(
+        original.id(),
+        &[birth.clone(), cancellation.clone(), cancellation]
+    )
+    .is_err());
+    assert!(Reservation::restore(&ReservationId::of(2), &[birth]).is_err());
+}

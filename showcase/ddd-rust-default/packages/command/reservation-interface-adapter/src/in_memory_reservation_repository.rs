@@ -1,55 +1,50 @@
+use reservation_domain::reservation::reservation_id::ReservationId;
+use reservation_domain::reservation::{Reservation, ReservationEvent};
+use reservation_use_case::reservation_repository::{RepositoryError, ReservationRepository};
 use std::collections::HashMap;
 
-use reservation_domain::{
-    MemberId, Reservation, ReservationId, ReservationStatus, RoomId, TimeSlot,
-};
-use reservation_use_case::{RepositoryError, ReservationRepository};
-
 pub struct InMemoryReservationRepository {
-    reservations: HashMap<ReservationId, StoredReservation>,
-}
-
-struct StoredReservation {
-    id: ReservationId,
-    member_id: MemberId,
-    room_id: RoomId,
-    time_slot: TimeSlot,
-    status: ReservationStatus,
+    events: HashMap<ReservationId, Vec<ReservationEvent>>,
 }
 
 impl InMemoryReservationRepository {
     pub fn new() -> Self {
         Self {
-            reservations: HashMap::new(),
+            events: HashMap::new(),
         }
+    }
+
+    pub fn events_for(&self, id: &ReservationId) -> &[ReservationEvent] {
+        self.events.get(id).map(Vec::as_slice).unwrap_or(&[])
     }
 }
 
 impl ReservationRepository for InMemoryReservationRepository {
-    fn store(&mut self, reservation: Reservation) -> Result<(), RepositoryError> {
-        let stored = StoredReservation {
-            id: reservation.id().clone(),
-            member_id: reservation.member_id().clone(),
-            room_id: reservation.room_id().clone(),
-            time_slot: reservation.time_slot().clone(),
-            status: reservation.status(),
+    fn find_by_id(&self, id: &ReservationId) -> Result<Option<Reservation>, RepositoryError> {
+        let Some(events) = self.events.get(id) else {
+            return Ok(None);
         };
-        self.reservations.insert(stored.id.clone(), stored);
-        Ok(())
+        Reservation::restore(id, events)
+            .map(Some)
+            .map_err(|_| RepositoryError::new("予約のイベント履歴が不正です"))
     }
 
-    fn find_by_id(
-        &self,
-        reservation_id: &ReservationId,
-    ) -> Result<Option<Reservation>, RepositoryError> {
-        Ok(self.reservations.get(reservation_id).map(|stored| {
-            Reservation::restore(
-                stored.id.clone(),
-                stored.member_id.clone(),
-                stored.room_id.clone(),
-                stored.time_slot.clone(),
-                stored.status,
-            )
-        }))
+    fn store(
+        &mut self,
+        id: &ReservationId,
+        event: ReservationEvent,
+    ) -> Result<(), RepositoryError> {
+        if event.reservation_id() != id {
+            return Err(RepositoryError::new("予約IDがイベントと一致しません"));
+        }
+        let mut candidate = self.events.get(id).cloned().unwrap_or_default();
+        candidate.push(event.clone());
+        Reservation::restore(id, &candidate)
+            .map_err(|_| RepositoryError::new("予約のイベント順序が不正です"))?;
+        self.events.entry(id.clone()).or_default().push(event);
+        Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests;

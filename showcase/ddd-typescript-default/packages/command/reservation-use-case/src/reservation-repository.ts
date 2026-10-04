@@ -1,4 +1,4 @@
-import type { Reservation, ReservationId } from "@acme/reservation-domain";
+import type { Reservation, ReservationId, ReservationEvent } from "@acme/reservation-domain";
 import type { Result } from "@acme/language-extensions";
 
 export type RepositoryError = {
@@ -6,10 +6,7 @@ export type RepositoryError = {
   readonly message: string;
 };
 
-export type FindReservationResult = Result<Reservation | undefined, RepositoryError>;
-export type StoreReservationResult = Result<void, RepositoryError>;
-
 export interface ReservationRepository {
-  findById(id: ReservationId): Result<Reservation | undefined, RepositoryError>;
-  store(reservation: Reservation): Result<void, RepositoryError>;
+  findById(reservationId: ReservationId): Result<Reservation | undefined, RepositoryError>;
+  store(reservationId: ReservationId, event: ReservationEvent): Result<void, RepositoryError>;
 }
