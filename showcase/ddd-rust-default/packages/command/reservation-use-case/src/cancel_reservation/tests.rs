@@ -2,7 +2,9 @@ use super::{CancelReservationFailure, CancelReservationUseCase};
 use crate::reservation_repository::{RepositoryError, ReservationRepository};
 use reservation_domain::member_id::MemberId;
 use reservation_domain::reservation::reservation_id::ReservationId;
-use reservation_domain::reservation::{CancelReservationError, Reservation, ReservationEvent};
+use reservation_domain::reservation::{
+    CancelReservationError, Reservation, ReservationEvent, ReservationStatus,
+};
 use reservation_domain::room_id::RoomId;
 use std::time::{Duration, UNIX_EPOCH};
 
@@ -10,6 +12,7 @@ struct ControllableRepository {
     load_result: Result<Option<Reservation>, RepositoryError>,
     store_failure: Option<RepositoryError>,
     store_calls: usize,
+    stored: Option<(ReservationEvent, Reservation)>,
 }
 
 impl ControllableRepository {
@@ -18,6 +21,7 @@ impl ControllableRepository {
             load_result: Ok(Some(reservation)),
             store_failure: None,
             store_calls: 0,
+            stored: None,
         }
     }
     fn failing_to_load(error: RepositoryError) -> Self {
@@ -25,6 +29,7 @@ impl ControllableRepository {
             load_result: Err(error),
             store_failure: None,
             store_calls: 0,
+            stored: None,
         }
     }
 }
@@ -35,10 +40,11 @@ impl ReservationRepository for ControllableRepository {
     }
     fn store(
         &mut self,
-        _id: &ReservationId,
-        _event: ReservationEvent,
+        event: ReservationEvent,
+        snapshot: Reservation,
     ) -> Result<(), RepositoryError> {
         self.store_calls += 1;
+        self.stored = Some((event, snapshot));
         match &self.store_failure {
             Some(error) => Err(error.clone()),
             None => Ok(()),
@@ -56,6 +62,23 @@ fn confirmed_reservation() -> Reservation {
         start + Duration::from_secs(1_800),
     )
     .expect("the reservation should be valid")
+}
+
+#[test]
+fn cancellation_is_stored_with_the_cancelled_reservation_as_its_snapshot() {
+    let mut repository = ControllableRepository::loading(confirmed_reservation());
+
+    let event = {
+        let mut use_case = CancelReservationUseCase::new(&mut repository);
+        use_case
+            .execute(&ReservationId::of(1))
+            .expect("the cancellation should succeed")
+    };
+
+    let (stored_event, snapshot) = repository.stored.expect("the event should be stored");
+    assert_eq!(stored_event, ReservationEvent::Cancelled(event));
+    assert_eq!(snapshot.status(), ReservationStatus::Cancelled);
+    assert_eq!(snapshot.sequence_number(), stored_event.sequence_number());
 }
 
 #[test]

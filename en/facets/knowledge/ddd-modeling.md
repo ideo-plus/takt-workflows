@@ -391,7 +391,7 @@ layer_structures:
 An aggregate-only context with no persistence still declares its package, dependency row, and restoration path. It may explicitly declare `ports: []`, `repositories: []`, and `persistence_backend: none`.
 
 
-Event Sourcing declares `via: event-replay` regardless of the storage medium. Its repository keeps ordered, append-only domain events, and reconstruction calls the aggregate's declared replay methods. The memory map contains event streams, not aggregate state objects or state-storage wrappers.
+Event Sourcing declares `via: event-replay` regardless of the storage medium. Its repository keeps ordered, append-only domain events and snapshots of the aggregate itself. Loading applies the events after the latest snapshot through the aggregate's declared replay methods. The memory maps are one map of event streams and one map whose values are the aggregate itself as snapshots, not state-storage wrappers that copy the aggregate's state into another type.
 
 ## Choosing Factory Names
 
@@ -410,7 +410,7 @@ Choose the name from its purpose and declare the implementation name in the aggr
 
 Rust uses snake_case, including `value_of`, `get_instance`, and `new_instance`. Rust `from` is infallible; a fallible conversion uses `try_from` and Result. A fallible TypeScript `from` returns a Result with an operation-owned error. TypeScript instance `valueOf()` is a language conversion hook, separate from a static factory.
 
-The naming linter checks the structure of `of`, `parse`, `from`, and Rust `try_from`. Review caching, freshness, and algorithmic meaning. ES `restore` and declared replay methods remain dedicated history reconstruction/application paths.
+The naming linter checks the structure of `of`, `parse`, `from`, and Rust `try_from`. Review caching, freshness, and algorithmic meaning. ES `replay` and declared replay methods remain dedicated history application paths.
 
 Primary references: [LocalDate.of](https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/time/LocalDate.html), [Integer.valueOf/parseInt](https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/lang/Integer.html), [Calendar implementation](https://github.com/openjdk/jdk/blob/jdk-25-ga/src/java.base/share/classes/java/util/Calendar.java), [UUID.randomUUID](https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/util/UUID.html), [Rust From](https://doc.rust-lang.org/std/convert/trait.From.html), and [ECMAScript valueOf](https://tc39.es/ecma262/multipage/fundamental-objects.html#sec-object.prototype.valueof). The Java three-argument date example is `LocalDate.of(year, month, day)`; the standard UUID generation example is `UUID.randomUUID()`.
 
@@ -457,7 +457,7 @@ Once the concepts grow and the root no longer shows how the domain is organized,
 
 This workflow standardizes persistence on Event Sourcing.
 
-The repository public boundary is the aggregate. findById (Rust: find_by_id) returns a replayed aggregate as Result<Aggregate | undefined, RepositoryError> (Rust: Result<Option<Aggregate>, RepositoryError>). store receives the aggregate ID and the newly produced domain event and returns Result<void, RepositoryError> (Rust: Result<(), RepositoryError>) after appending it. Keep loadEvents and history replay inside the adapter. Declare this boundary in the plan API and acceptance conditions.
+The repository public boundary is the aggregate. findById (Rust: find_by_id) returns the aggregate it builds by replaying the events after the latest snapshot onto it, as Result<Aggregate | undefined, RepositoryError> (Rust: Result<Option<Aggregate>, RepositoryError>). store receives the newly produced domain event, which carries the aggregate ID, and the aggregate right after it as the snapshot (store(event, snapshot)), and returns Result<void, RepositoryError> (Rust: Result<(), RepositoryError>) after appending it; it takes no separate aggregate ID. Keep loadEvents and history replay inside the adapter. Declare this boundary in the plan API and acceptance conditions.
 
 Keep State Sourcing examples and storage routes out of the standard knowledge.
 

@@ -11,11 +11,12 @@
 import { join } from "node:path";
 import type { FindingInput } from "../../shared/findings.ts";
 import { containsMediaWord, toPascal } from "../lists.ts";
-import { inMemoryAggregates, storedMapValue, eventStreamElement, isAggregateStateElement } from "../in-memory.ts";
+import { inMemoryAggregates, storedMapValue, eventStreamElement, isAggregateStateElement, EVENT_SOURCING_STORAGE, eventSourcingStorageGaps } from "../in-memory.ts";
 import { aggregateMappings } from "./aggregate-binding.ts";
 import { packageContaining, resolveSpecifier } from "./edges.ts";
 import { factsOf } from "./file-facts.ts";
-import { importedDomainType, isPortDeclaration, resolveConstructedType, resolveTypeName } from "./symbols.ts";
+import { importedDomainType, isPortDeclaration, resolveConstructedType, resolveDeclaredType, resolveTypeName } from "./symbols.ts";
+import { ADAPTER_SURFACE } from "../repository-contract.ts";
 import type { TsInspection, TsTarget } from "./types.ts";
 
 // --- (l) query side domain / repository reference ------------------------------------------------
@@ -193,6 +194,38 @@ export function ruleN(inspection: TsInspection, target: TsTarget): FindingInput[
 }
 
 /** A State Sourcing memory repository retains aggregate objects without decoding state records. */
+/**
+ * A class that implements a repository port exposes only that port and its constructor: a public
+ * member the port does not declare (an `eventsFor` that hands the stored history to tests) widens
+ * the adapter beyond the contract the use case relies on. A port that cannot be resolved is left
+ * undecided.
+ */
+export function ruleRepositoryAdapterSurface(inspection: TsInspection, target: TsTarget): FindingInput[] {
+  const facts = factsOf(inspection, target.file);
+  const findings: FindingInput[] = [];
+  for (const adapter of facts.declarations.filter((entry) => entry.kind === "class")) {
+    const ports = (adapter.heritage ?? []).filter((entry) => entry.kind === "implements" && entry.type_text.replace(/<.*$/, "").split(".").pop()!.endsWith("Repository"));
+    if (!ports.length) continue;
+    const allowed = new Set<string>();
+    let resolvedAll = true;
+    for (const port of ports) {
+      const resolved = resolveDeclaredType(inspection.packages, inspection.declarations, target.file, facts, port.type_text.replace(/<.*$/, ""));
+      if (resolved.kind !== "found" || !isPortDeclaration(resolved.entry.declaration)) { resolvedAll = false; continue; }
+      for (const member of resolved.entry.declaration.members) allowed.add(member.name);
+    }
+    if (!resolvedAll) {
+      inspection.undecided.add(target.file, adapter.span.start_line, `the repository port ${adapter.name} implements`);
+      continue;
+    }
+    for (const member of adapter.members) {
+      if (member.kind === "constructor" || member.visibility === "private" || member.visibility === "private-name" || member.visibility === "protected") continue;
+      if (allowed.has(member.name)) continue;
+      findings.push({ rule_id: "repository-adapter-surface", file: target.file, line: member.span.start_line, message: `${adapter.name}.${member.name} is not part of its port: ${ADAPTER_SURFACE}` });
+    }
+  }
+  return findings;
+}
+
 export function ruleInMemoryRestoration(inspection: TsInspection, target: TsTarget): FindingInput[] {
   return inMemoryStorage(inspection, target, "in-memory-restoration");
 }
@@ -213,6 +246,7 @@ function inMemoryStorage(inspection: TsInspection, target: TsTarget, rule: "in-m
   for (const repository of facts.declarations.filter((entry) => entry.kind === "class" && entry.name.endsWith("Repository"))) {
     const owned = aggregates.filter((entry) => repository.heritage?.some((port) => port.kind === "implements" && port.type_text.split(".").pop() === `${entry.type}Repository`));
     if (!owned.length) continue;
+    const streams = new Set<string>(), snapshots = new Set<string>();
     for (const field of repository.members.filter((entry) => entry.kind === "property")) {
       const values = new Set([field.type_text, field.initializer_type_text].map(storedMapValue).filter((entry): entry is string => entry !== undefined));
       for (const value of values) {
@@ -223,10 +257,15 @@ function inMemoryStorage(inspection: TsInspection, target: TsTarget, rule: "in-m
         const imported = element === undefined ? undefined : facts.imports.find((entry) => entry.bindings.some((binding) => binding.name === element.split(".")[0]));
         const eventPackage = imported ? resolveSpecifier(inspection.packages, target.pkg, join(inspection.packages.workspaceRoot, target.file), imported.specifier) : undefined;
         const domainEvent = eventPackage?.kind === "package" && owned.some((entry) => entry.package === eventPackage.pkg.name);
-        if (state ? direct : element !== undefined && domainEvent && !direct && !stateElement) continue;
-        findings.push({ rule_id: rule, file: target.file, line: field.span.start_line, message: `${repository.name}.${field.name} stores ${value}; ${state ? "its map must retain the aggregate directly" : "Event Sourcing stores event streams rather than aggregate state"}` });
+        if (state && direct) continue;
+        if (!state && element !== undefined && domainEvent && !direct && !stateElement) { streams.add(field.name); continue; }
+        if (!state && element === undefined && direct) { snapshots.add(field.name); continue; }
+        findings.push({ rule_id: rule, file: target.file, line: field.span.start_line, message: `${repository.name}.${field.name} stores ${value}; ${state ? "its map must retain the aggregate directly" : EVENT_SOURCING_STORAGE}` });
       }
     }
+    if (state) continue;
+    for (const problem of eventSourcingStorageGaps(streams.size, snapshots.size))
+      findings.push({ rule_id: rule, file: target.file, line: repository.span.start_line, message: `${repository.name} ${problem}` });
   }
   if (!state) return findings;
   for (const call of facts.calls) {

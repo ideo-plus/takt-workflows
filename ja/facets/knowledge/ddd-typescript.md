@@ -20,7 +20,7 @@
 
 ### class 表現
 
-標準は Event Sourcing である。`open` は入力を検証して完全な集約と生成イベントを一度に作る。`addLine`・`issue` は業務条件を検証してイベントを生む。各コマンドは宣言した replay メソッドで次の状態を作る。`restore` はイベント履歴の整合性を確かめ、同じ replay メソッドを順に使って復元する。履歴の不整合は業務エラーとして扱わない。明細追加の重複コマンドはイベントを生まない。
+標準は Event Sourcing である。`open` は入力を検証して完全な集約と生成イベントを一度に作る。`addLine`・`issue` は業務条件を検証してイベントを生む。各コマンドは宣言した replay メソッドで次の状態を作る。集約とイベントはシーケンス番号を持ち、生成イベントが 1、イベントを生むたびに 1 ずつ増える。`replay(events, snapshot)` は、スナップショットに続くイベントを、集約 ID と番号の連続を確かめながら同じ replay メソッドで順に適用する。履歴の不整合は業務エラーとして扱わない。明細追加の重複コマンドはイベントを生まない。
 
 ```ts
 import type { Result } from "@acme/language-extensions";
@@ -33,11 +33,11 @@ export type OpenInvoiceError = "negative-total";
 export type AddInvoiceLineError = "already-issued" | "negative-total";
 export type IssueInvoiceError = "already-issued" | "empty-lines";
 
-export type InvoiceOpened = { readonly kind: "opened"; readonly invoiceId: string; readonly customer: CustomerId; readonly lines: InvoiceLines };
+export type InvoiceOpened = { readonly kind: "opened"; readonly invoiceId: string; readonly sequenceNumber: number; readonly customer: CustomerId; readonly lines: InvoiceLines };
 export type InvoiceEvent = InvoiceOpened | InvoiceLineAdded | InvoiceIssued;
 
-export type InvoiceLineAdded = { readonly kind: "line-added"; readonly invoiceId: string; readonly commandId: string; readonly line: InvoiceLine };
-export type InvoiceIssued = { readonly kind: "issued"; readonly invoiceId: string };
+export type InvoiceLineAdded = { readonly kind: "line-added"; readonly invoiceId: string; readonly sequenceNumber: number; readonly commandId: string; readonly line: InvoiceLine };
+export type InvoiceIssued = { readonly kind: "issued"; readonly invoiceId: string; readonly sequenceNumber: number };
 
 export type AddInvoiceLineOutcome =
   | { readonly kind: "applied"; readonly invoice: Invoice; readonly event: InvoiceLineAdded }
@@ -47,14 +47,16 @@ export type IssueInvoiceOutcome = { readonly invoice: Invoice; readonly event: I
 export class Invoice {
   readonly #opening: InvoiceOpened;
   readonly #id: string;
+  readonly #sequenceNumber: number;
   readonly #customer: CustomerId;
   readonly #lines: InvoiceLines;
   readonly #issued: boolean;
   readonly #lastAddLineCommandId: string | undefined;
 
-  private constructor(opening: InvoiceOpened, lines: InvoiceLines, issued: boolean, lastAddLineCommandId: string | undefined) {
+  private constructor(opening: InvoiceOpened, sequenceNumber: number, lines: InvoiceLines, issued: boolean, lastAddLineCommandId: string | undefined) {
     this.#opening = opening;
     this.#id = opening.invoiceId;
+    this.#sequenceNumber = sequenceNumber;
     this.#customer = opening.customer;
     this.#lines = lines;
     this.#issued = issued;
@@ -63,7 +65,7 @@ export class Invoice {
 
   static open(id: string, customer: CustomerId, lines: InvoiceLines): Result<Invoice, OpenInvoiceError> {
     if (lines.total().isNegative()) return { ok: false, error: "negative-total" };
-    const event: InvoiceOpened = { kind: "opened", invoiceId: id, customer, lines };
+    const event: InvoiceOpened = { kind: "opened", invoiceId: id, sequenceNumber: 1, customer, lines };
     return { ok: true, value: Invoice.fromOpened(event) };
   }
 
@@ -71,12 +73,18 @@ export class Invoice {
     return this.#opening;
   }
 
-  static restore(id: string, events: readonly InvoiceEvent[]): Invoice {
-    const first = events[0];
-    if (!first || first.kind !== "opened" || first.invoiceId !== id || first.lines.total().isNegative()) throw new Error("corrupt invoice history");
-    let invoice = Invoice.fromOpened(first);
-    for (const event of events.slice(1)) {
-      if (event.invoiceId !== id) throw new Error("corrupt invoice history");
+  id(): string {
+    return this.#id;
+  }
+
+  sequenceNumber(): number {
+    return this.#sequenceNumber;
+  }
+
+  static replay(events: readonly InvoiceEvent[], snapshot: Invoice): Invoice {
+    let invoice = snapshot;
+    for (const event of events) {
+      if (event.invoiceId !== invoice.#id || event.sequenceNumber !== invoice.#sequenceNumber + 1) throw new Error("corrupt invoice history");
       switch (event.kind) {
         case "opened": throw new Error("corrupt invoice history");
         case "line-added":
@@ -93,15 +101,15 @@ export class Invoice {
   }
 
   private static fromOpened(event: InvoiceOpened): Invoice {
-    return new Invoice(event, event.lines, false, undefined);
+    return new Invoice(event, event.sequenceNumber, event.lines, false, undefined);
   }
 
   private applyLineAdded(event: InvoiceLineAdded): Invoice {
-    return new Invoice(this.#opening, this.#lines.add(event.line), false, event.commandId);
+    return new Invoice(this.#opening, event.sequenceNumber, this.#lines.add(event.line), false, event.commandId);
   }
 
-  private applyIssued(_event: InvoiceIssued): Invoice {
-    return new Invoice(this.#opening, this.#lines, true, this.#lastAddLineCommandId);
+  private applyIssued(event: InvoiceIssued): Invoice {
+    return new Invoice(this.#opening, event.sequenceNumber, this.#lines, true, this.#lastAddLineCommandId);
   }
 
   addLine(commandId: string, line: InvoiceLine): Result<AddInvoiceLineOutcome, AddInvoiceLineError> {
@@ -109,7 +117,7 @@ export class Invoice {
     if (this.#issued) return { ok: false, error: "already-issued" };
     const lines: InvoiceLines = this.#lines.add(line);
     if (lines.total().isNegative()) return { ok: false, error: "negative-total" };
-    const event: InvoiceLineAdded = { kind: "line-added", invoiceId: this.#id, commandId, line };
+    const event: InvoiceLineAdded = { kind: "line-added", invoiceId: this.#id, sequenceNumber: this.#sequenceNumber + 1, commandId, line };
     const invoice = this.applyLineAdded(event);
     return { ok: true, value: { kind: "applied", invoice, event } };
   }
@@ -117,7 +125,7 @@ export class Invoice {
   issue(): Result<IssueInvoiceOutcome, IssueInvoiceError> {
     if (this.#issued) return { ok: false, error: "already-issued" };
     if (this.#lines.isEmpty()) return { ok: false, error: "empty-lines" };
-    const event: InvoiceIssued = { kind: "issued", invoiceId: this.#id };
+    const event: InvoiceIssued = { kind: "issued", invoiceId: this.#id, sequenceNumber: this.#sequenceNumber + 1 };
     const invoice = this.applyIssued(event);
     return { ok: true, value: { invoice, event } };
   }
@@ -283,7 +291,7 @@ export type Result<T, E> =
   | { readonly ok: false; readonly error: E };
 ```
 
-写像された各ファクトリとコマンドは、自分のエラー型を明記する。それは写像された case の文字列リテラルの union で、`error_type` の名前を持ち、集約のモジュールから export する。`IssueInvoiceError` は `"already-issued"` と `"empty-lines"` を持ち、`open` や `addLine` のものは持たない。コマンドの成功値の型は成功値の型で、`success_type` の名前を持ち、エラー型と並べて export する。写像されたファクトリの成功値は集約である。操作に結び付かないファクトリ（`restore` や値オブジェクトの `of`）は値そのものを返す。
+写像された各ファクトリとコマンドは、自分のエラー型を明記する。それは写像された case の文字列リテラルの union で、`error_type` の名前を持ち、集約のモジュールから export する。`IssueInvoiceError` は `"already-issued"` と `"empty-lines"` を持ち、`open` や `addLine` のものは持たない。コマンドの成功値の型は成功値の型で、`success_type` の名前を持ち、エラー型と並べて export する。写像されたファクトリの成功値は集約である。操作に結び付かない関数（`replay` や値オブジェクトの `of`）は値そのものを返す。
 
 ## 所有
 
@@ -344,7 +352,7 @@ export type { InvoiceOpened, InvoiceEvent } from "./invoice/index.ts";
 
 ## ユースケースとインターフェイスアダプタ
 
-リポジトリポートは `<Aggregate>Repository` という名前の `interface` で、ユースケースのパッケージに宣言し、ドメインのパッケージには宣言しない。読み込みと保存はプロセスの外に出るので失敗しうる。どのメソッドも `Result` を返し、失敗は `RepositoryError` で伝える。`RepositoryError` はポートの隣に宣言するインフラの失敗であり、業務上のエラーではないので、操作ごとのエラー型の規則は当てはまらない。検索は、見つからないことを失敗にせず `undefined` で返す（`Result<Invoice | undefined, RepositoryError>`）。保存は `Result<void, RepositoryError>` を返す。
+リポジトリポートは `<Aggregate>Repository` という名前の `interface` で、ユースケースのパッケージに宣言し、ドメインのパッケージには宣言しない。読み込みと保存はプロセスの外に出るので失敗しうる。どのメソッドも `Result` を返し、失敗は `RepositoryError` で伝える。`RepositoryError` はポートの隣に宣言するインフラの失敗であり、業務上のエラーではないので、操作ごとのエラー型の規則は当てはまらない。検索は、見つからないことを失敗にせず `undefined` で返す（`Result<Invoice | undefined, RepositoryError>`）。保存は `Result<void, RepositoryError>` を返す。Event Sourcing の保存は、集約 ID を持つドメインイベントと、そのイベントの直後の集約（スナップショット）を受け取る（`store(event, snapshot)`）。集約 ID を別の引数で渡さない。
 
 ```ts
 import type { Invoice, InvoiceEvent } from "@acme/billing-domain";
@@ -354,7 +362,7 @@ export type RepositoryError = { readonly message: string };
 
 export interface InvoiceRepository {
   findById(invoiceId: string): Result<Invoice | undefined, RepositoryError>;
-  store(invoiceId: string, event: InvoiceEvent): Result<void, RepositoryError>;
+  store(event: InvoiceEvent, snapshot: Invoice): Result<void, RepositoryError>;
 }
 ```
 
@@ -383,14 +391,14 @@ export class IssueInvoiceUseCase {
     const issued: Result<IssueInvoiceOutcome, IssueInvoiceError> = invoice.issue();
     if (!issued.ok) return issued;
     const outcome: IssueInvoiceOutcome = issued.value;
-    const stored: Result<void, RepositoryError> = this.#invoiceRepository.store(invoiceId, outcome.event);
+    const stored: Result<void, RepositoryError> = this.#invoiceRepository.store(outcome.event, outcome.invoice);
     if (!stored.ok) return stored;
     return { ok: true, value: outcome.event };
   }
 }
 ```
 
-リポジトリはイベント列を内部に保持する。`findById` は履歴を replay して集約を返し、`store` はコマンドが生んだドメインイベントを追記する。ユースケースへ履歴の取得・再生を公開しない。既存イベントを上書きせず、同じ意味の別DTOへ変換しない。
+リポジトリはイベント列と、集約そのもののスナップショットを内部に保持する。`store` はイベントを追記する。スナップショットも更新するかどうかはアダプタが決める（この例は生成時と `snapshotInterval` 件ごと）。`findById` は最新のスナップショットを読み、その番号より後のイベントだけを `replay` する。全履歴を毎回再生すると、イベント列が長くなるほど読込が遅くなるからである。`store` は、スナップショットがイベントの直後の状態であること（ID と番号の一致）と、イベントが保存済みの列に続くこと（番号の連続）を確かめる。これが同時更新の検出も兼ねる。ユースケースへ履歴の取得・再生を公開せず、アダプタはポート以外の公開メソッド（テスト用の `eventsFor` など）を持たない。テストは `findById` を通して確かめる。既存イベントを上書きせず、同じ意味の別DTOへ変換しない。
 
 ```ts
 import { Invoice } from "@acme/billing-domain";
@@ -400,21 +408,31 @@ import type { Result } from "@acme/language-extensions";
 
 export class InMemoryInvoiceRepository implements InvoiceRepository {
   readonly #events: Map<string, readonly InvoiceEvent[]> = new Map();
+  readonly #snapshots: Map<string, Invoice> = new Map();
+  readonly #snapshotInterval: number;
+
+  constructor(snapshotInterval: number) {
+    if (!Number.isSafeInteger(snapshotInterval) || snapshotInterval < 1) throw new RangeError("the snapshot interval must be a positive integer");
+    this.#snapshotInterval = snapshotInterval;
+  }
 
   findById(invoiceId: string): Result<Invoice | undefined, RepositoryError> {
-    const events = this.#events.get(invoiceId);
-    if (events === undefined) return { ok: true, value: undefined };
+    const snapshot = this.#snapshots.get(invoiceId);
+    if (snapshot === undefined) return { ok: true, value: undefined };
+    const events = (this.#events.get(invoiceId) ?? []).filter((event) => event.sequenceNumber > snapshot.sequenceNumber());
     try {
-      return { ok: true, value: Invoice.restore(invoiceId, events) };
+      return { ok: true, value: Invoice.replay(events, snapshot) };
     } catch {
       return { ok: false, error: { message: "corrupt invoice history" } };
     }
   }
 
-  store(invoiceId: string, event: InvoiceEvent): Result<void, RepositoryError> {
-    if (event.invoiceId !== invoiceId) return { ok: false, error: { message: "event belongs to another invoice" } };
-    const previous = this.#events.get(invoiceId) ?? [];
-    this.#events.set(invoiceId, [...previous, event]);
+  store(event: InvoiceEvent, snapshot: Invoice): Result<void, RepositoryError> {
+    if (event.invoiceId !== snapshot.id() || event.sequenceNumber !== snapshot.sequenceNumber()) return { ok: false, error: { message: "the snapshot is not the state after the event" } };
+    const previous = this.#events.get(event.invoiceId) ?? [];
+    if (event.sequenceNumber !== (previous[previous.length - 1]?.sequenceNumber ?? 0) + 1) return { ok: false, error: { message: "the event does not follow the stored history" } };
+    this.#events.set(event.invoiceId, [...previous, event]);
+    if (event.sequenceNumber === 1 || event.sequenceNumber % this.#snapshotInterval === 0) this.#snapshots.set(event.invoiceId, snapshot);
     return { ok: true, value: undefined };
   }
 }

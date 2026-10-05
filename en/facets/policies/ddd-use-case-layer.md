@@ -1,6 +1,6 @@
 # DDD Use-Case Layer Policy
 
-The standard is Event Sourcing. Loading returns Result<Aggregate | undefined, RepositoryError> (Rust: Result<Option<Aggregate>, RepositoryError>); storing returns Result<void, RepositoryError> (Rust: Result<(), RepositoryError>). Store receives the aggregate ID and the domain event produced by its command. The repository owns history loading and replay. The use case invokes the loaded aggregate and returns the event after persistence succeeds. Avoid operation-specific Result aliases and redundant return wrappers. Reusable generic aliases are allowed; infrastructure failures use the common RepositoryError.
+The standard is Event Sourcing. Loading returns Result<Aggregate | undefined, RepositoryError> (Rust: Result<Option<Aggregate>, RepositoryError>); storing returns Result<void, RepositoryError> (Rust: Result<(), RepositoryError>). Store receives the domain event produced by the command, which carries the aggregate ID, and the aggregate after the command as the snapshot: `store(event, snapshot)`, with no separate aggregate ID. The repository owns history loading and replay. The use case invokes the loaded aggregate and returns the event after persistence succeeds. Avoid operation-specific Result aliases and redundant return wrappers. Reusable generic aliases are allowed; infrastructure failures use the common RepositoryError.
 
 Judges the code of the use-case layer. A use case orchestrates: it loads, calls domain operations, and stores. This policy covers the shape of a use case, re-execution and publishing, multiple aggregates, and decisions from read models. Where decisions are made and command-ID memory belong to the domain layer policy; allowed dependencies belong to the layer dependency policy.
 
@@ -38,4 +38,4 @@ Judges the code of the use-case layer. A use case orchestrates: it loads, calls 
 
 | Criterion | Judgment |
 |-----------|----------|
-| An update decision uses a query-side read model | REJECT. Decide from the restored aggregate; protect it with expected versions or constraints |
+| An update decision uses a query-side read model | REJECT. Decide from the loaded aggregate; protect it with expected versions or constraints |

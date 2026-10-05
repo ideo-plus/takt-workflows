@@ -1,8 +1,8 @@
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use super::{
-    CancelReservationError, CorruptReservationHistory, Reservation, ReservationEvent,
-    ReservationStatus, ReserveReservationError,
+    CancelReservationError, CorruptReservationHistory, Reservation, ReservationCancelled,
+    ReservationEvent, ReservationStatus, ReserveReservationError,
 };
 use crate::member_id::MemberId;
 use crate::reservation::reservation_id::ReservationId;
@@ -84,9 +84,9 @@ fn confirmed_reservation_can_be_cancelled_only_once() {
 }
 
 #[test]
-fn replay_preserves_values_and_rebuilds_cancelled_state() {
+fn sequence_numbers_start_at_the_reservation_and_advance_with_the_cancellation() {
     let (start, end) = valid_times();
-    let mut original = Reservation::reserve(
+    let mut reservation = Reservation::reserve(
         ReservationId::of(1),
         MemberId::of(2),
         RoomId::of(3),
@@ -94,22 +94,44 @@ fn replay_preserves_values_and_rebuilds_cancelled_state() {
         end,
     )
     .unwrap();
-    let birth = ReservationEvent::Reserved(original.reserved_event());
+    let birth = ReservationEvent::Reserved(reservation.reserved_event());
+    assert_eq!(reservation.sequence_number(), 1);
+    assert_eq!(birth.sequence_number(), 1);
+
+    let cancellation = ReservationEvent::Cancelled(reservation.cancel().unwrap());
+
+    assert_eq!(cancellation.sequence_number(), 2);
+    assert_eq!(reservation.sequence_number(), 2);
+}
+
+#[test]
+fn replay_applies_the_events_after_the_snapshot() {
+    let (start, end) = valid_times();
+    let snapshot = Reservation::reserve(
+        ReservationId::of(1),
+        MemberId::of(2),
+        RoomId::of(3),
+        start,
+        end,
+    )
+    .unwrap();
+    let mut cancelled = snapshot.clone();
+    let cancellation = ReservationEvent::Cancelled(cancelled.cancel().unwrap());
+
     assert_eq!(
-        Reservation::restore(original.id(), &[birth.clone()]).unwrap(),
-        original
+        Reservation::replay(&[], snapshot.clone()).unwrap(),
+        snapshot
     );
-    let cancellation = ReservationEvent::Cancelled(original.cancel().unwrap());
     assert_eq!(
-        Reservation::restore(original.id(), &[birth, cancellation]).unwrap(),
-        original
+        Reservation::replay(&[cancellation], snapshot).unwrap(),
+        cancelled
     );
 }
 
 #[test]
-fn replay_rejects_missing_duplicate_and_wrong_reservation_events() {
+fn replay_rejects_events_that_do_not_continue_the_snapshot() {
     let (start, end) = valid_times();
-    let mut original = Reservation::reserve(
+    let snapshot = Reservation::reserve(
         ReservationId::of(1),
         MemberId::of(2),
         RoomId::of(3),
@@ -117,18 +139,47 @@ fn replay_rejects_missing_duplicate_and_wrong_reservation_events() {
         end,
     )
     .unwrap();
-    let birth = ReservationEvent::Reserved(original.reserved_event());
-    let cancellation = ReservationEvent::Cancelled(original.cancel().unwrap());
-    assert_eq!(
-        Reservation::restore(original.id(), &[]),
-        Err(CorruptReservationHistory::MissingReservationEvent)
-    );
-    assert!(Reservation::restore(original.id(), &[cancellation.clone()]).is_err());
-    assert!(Reservation::restore(original.id(), &[birth.clone(), birth.clone()]).is_err());
-    assert!(Reservation::restore(
-        original.id(),
-        &[birth.clone(), cancellation.clone(), cancellation]
+    let birth = ReservationEvent::Reserved(snapshot.reserved_event());
+    let mut cancelled = snapshot.clone();
+    let cancellation = ReservationEvent::Cancelled(cancelled.cancel().unwrap());
+    let mut other = Reservation::reserve(
+        ReservationId::of(2),
+        MemberId::of(2),
+        RoomId::of(3),
+        start,
+        end,
     )
-    .is_err());
-    assert!(Reservation::restore(&ReservationId::of(2), &[birth]).is_err());
+    .unwrap();
+    let other_cancellation = ReservationEvent::Cancelled(other.cancel().unwrap());
+
+    assert_eq!(
+        Reservation::replay(&[birth.clone()], snapshot.clone()),
+        Err(CorruptReservationHistory::OutOfSequence)
+    );
+    assert_eq!(
+        Reservation::replay(&[cancellation.clone()], cancelled.clone()),
+        Err(CorruptReservationHistory::OutOfSequence)
+    );
+    assert_eq!(
+        Reservation::replay(&[cancellation.clone(), cancellation], snapshot.clone()),
+        Err(CorruptReservationHistory::OutOfSequence)
+    );
+    assert_eq!(
+        Reservation::replay(&[other_cancellation], snapshot),
+        Err(CorruptReservationHistory::WrongReservation)
+    );
+    assert_eq!(
+        Reservation::replay(
+            &[ReservationEvent::Cancelled(ReservationCancelled::new(
+                ReservationId::of(1),
+                3
+            ))],
+            cancelled.clone()
+        ),
+        Err(CorruptReservationHistory::InvalidTransition)
+    );
+    assert_eq!(
+        Reservation::replay(&[], cancelled.clone()).unwrap(),
+        cancelled
+    );
 }

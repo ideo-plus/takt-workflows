@@ -24,11 +24,15 @@ fn confirmed_reservation(id: u64) -> Reservation {
     .expect("the reservation should be valid")
 }
 
+/// Larger than the two events of a reservation, so a cancellation is read from the events after
+/// the reservation snapshot.
+const SNAPSHOT_INTERVAL: u64 = 3;
+
 fn store_new(repository: &mut InMemoryReservationRepository, reservation: Reservation) {
     repository
         .store(
-            reservation.id(),
             ReservationEvent::Reserved(reservation.reserved_event()),
+            reservation,
         )
         .expect("the reservation should be stored");
 }
@@ -36,7 +40,7 @@ fn store_new(repository: &mut InMemoryReservationRepository, reservation: Reserv
 #[test]
 fn cancelling_a_stored_reservation_persists_the_cancelled_state() {
     let reservation_id = ReservationId::of(1);
-    let mut repository = InMemoryReservationRepository::new();
+    let mut repository = InMemoryReservationRepository::new(SNAPSHOT_INTERVAL);
     store_new(&mut repository, confirmed_reservation(1));
 
     let event = {
@@ -55,9 +59,30 @@ fn cancelling_a_stored_reservation_persists_the_cancelled_state() {
 }
 
 #[test]
+fn a_cancellation_stored_as_a_snapshot_is_loaded_cancelled() {
+    let reservation_id = ReservationId::of(1);
+    let mut repository = InMemoryReservationRepository::new(1);
+    store_new(&mut repository, confirmed_reservation(1));
+
+    {
+        let mut use_case = CancelReservationUseCase::new(&mut repository);
+        use_case
+            .execute(&reservation_id)
+            .expect("the cancellation should succeed");
+    }
+    let stored = repository
+        .find_by_id(&reservation_id)
+        .expect("the repository load should succeed")
+        .expect("the reservation should exist");
+
+    assert_eq!(stored.status(), ReservationStatus::Cancelled);
+    assert_eq!(stored.sequence_number(), 2);
+}
+
+#[test]
 fn cancelling_the_same_stored_reservation_twice_fails() {
     let reservation_id = ReservationId::of(1);
-    let mut repository = InMemoryReservationRepository::new();
+    let mut repository = InMemoryReservationRepository::new(SNAPSHOT_INTERVAL);
     store_new(&mut repository, confirmed_reservation(1));
 
     {
@@ -88,7 +113,7 @@ fn cancelling_the_same_stored_reservation_twice_fails() {
 fn cancelling_a_missing_reservation_fails() {
     let reservation_id = ReservationId::of(404);
     let existing_id = ReservationId::of(1);
-    let mut repository = InMemoryReservationRepository::new();
+    let mut repository = InMemoryReservationRepository::new(SNAPSHOT_INTERVAL);
     store_new(&mut repository, confirmed_reservation(1));
     let before = repository
         .find_by_id(&existing_id)
@@ -122,7 +147,7 @@ fn cancelling_a_missing_reservation_fails() {
 fn cancelling_by_id_leaves_other_reservations_confirmed() {
     let target_id = ReservationId::of(1);
     let other_id = ReservationId::of(2);
-    let mut repository = InMemoryReservationRepository::new();
+    let mut repository = InMemoryReservationRepository::new(SNAPSHOT_INTERVAL);
     store_new(&mut repository, confirmed_reservation(1));
     store_new(&mut repository, confirmed_reservation(2));
 

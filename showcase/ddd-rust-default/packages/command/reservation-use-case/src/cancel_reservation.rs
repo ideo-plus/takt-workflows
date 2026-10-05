@@ -39,7 +39,7 @@ impl<'a, R: ReservationRepository> CancelReservationUseCase<'a, R> {
             .cancel()
             .map_err(CancelReservationFailure::Rejected)?;
         self.reservation_repository
-            .store(reservation_id, ReservationEvent::Cancelled(event.clone()))
+            .store(ReservationEvent::Cancelled(event.clone()), reservation)
             .map_err(CancelReservationFailure::Repository)?;
         Ok(event)
     }

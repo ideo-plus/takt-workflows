@@ -10,6 +10,17 @@ export function isAggregateStateElement(model: ModelAvailability, aggregateRef: 
   ) ?? false;
 }
 
+export const EVENT_SOURCING_STORAGE = "Event Sourcing keeps event streams and snapshots of the aggregate itself, not other state";
+
+/** An in-memory Event Sourcing repository keeps the event streams and one map of aggregate snapshots, from which findById replays only later events. */
+export function eventSourcingStorageGaps(streams: number, snapshots: number): readonly string[] {
+  return [
+    ...(streams === 0 ? ["keeps no event stream; append each stored event to a Map/HashMap of event streams"] : []),
+    ...(snapshots === 0 ? ["keeps no aggregate snapshot; keep the latest snapshot so findById replays only the events after it"] : []),
+    ...(snapshots > 1 ? ["keeps more than one snapshot map; keep one map of the aggregate itself"] : []),
+  ];
+}
+
 /** A stored event stream explicitly states its element type. */
 export function eventStreamElement(text: string, language: "rust" | "typescript"): string | undefined {
   if (language === "rust") return /^(?:::)?(?:\w+::)*Vec<(.+)>$/.exec(text)?.[1];

@@ -112,8 +112,8 @@
   "manual_revision": {
     "basis": "Explicit user instruction: remove ReservationSnapshot directly without TAKT; unify both showcases on Event Sourcing; retain no backward compatibility.",
     "started_at": "2026-10-04T05:46:34.820720+00:00",
-    "validation_bundle_commit": "871d0d866516c9264f4f10dbd77126a117ae4af6",
-    "finished_at": "2026-10-04T07:49:05.032104+00:00",
+    "validation_bundle_commit": "a87ca122fa606332e56d68746153e99768ded3f1",
+    "finished_at": "2026-10-05T08:59:44.000000+00:00",
     "versions": {
       "node": "v24.19.0",
       "bun": "1.4.2",
@@ -151,6 +151,29 @@
       "construction_path": "of -> parse -> private new",
       "native_protocol_version": 11,
       "verified_at": "2026-10-04T07:49:05.032104+00:00"
+    },
+    "event_snapshot_update": {
+      "basis": "Explicit user instruction (2026-10-05): store each event with the aggregate snapshot after it as store(event, snapshot), drop the separate reservation ID parameter, have find_by_id replay only the events after the latest snapshot, and remove events_for without backward compatibility.",
+      "rules": [
+        "event-sourcing-storage",
+        "event-sourcing-store",
+        "repository-adapter-surface"
+      ],
+      "replay": "Reservation::replay(events, snapshot) replaces restore(id, events)",
+      "native_protocol_version": 13,
+      "changed_files": [
+        "README.md",
+        "generation.json",
+        "packages/command/reservation-domain/src/reservation.rs",
+        "packages/command/reservation-domain/src/reservation/tests.rs",
+        "packages/command/reservation-interface-adapter/src/in_memory_reservation_repository.rs",
+        "packages/command/reservation-interface-adapter/src/in_memory_reservation_repository/tests.rs",
+        "packages/command/reservation-interface-adapter/tests/cancel_reservation.rs",
+        "packages/command/reservation-use-case/src/cancel_reservation.rs",
+        "packages/command/reservation-use-case/src/cancel_reservation/tests.rs",
+        "packages/command/reservation-use-case/src/reservation_repository.rs"
+      ],
+      "verified_at": "2026-10-05T08:59:44.000000+00:00"
     }
   },
   "identifier_domain_assumption": {
@@ -165,33 +188,33 @@
     "packages/command/reservation-domain/Cargo.toml": "b09e94b7ed4cd71eca16441af5891832d437ba54e44929ddba8b452b8996da09",
     "packages/command/reservation-interface-adapter/Cargo.toml": "7263d4e799e0f31db00e696208c128c03df91ab0aa84c30606bffc14d4bdb924",
     "packages/command/reservation-use-case/Cargo.toml": "435c3814953660a282f19487bb1289b4a524a64ab9ff21415d048dd2087770d4",
-    "packages/command/reservation-use-case/src/cancel_reservation.rs": "92f59031d9d63fd4021d9421d20ca19956246c75c30e5e68c532a62f99bd5fd1",
+    "packages/command/reservation-use-case/src/cancel_reservation.rs": "58a9758574c35060964362d75b94224678af9af47cd97b666b91075d2355ecd7",
     "packages/command/reservation-use-case/src/lib.rs": "641d19e8b29f9fec7b37278b31209949d8be2aced2282fa0bc998bc1ea6aff14",
-    "packages/command/reservation-use-case/src/reservation_repository.rs": "41f71f088862c83f2176942031ae2974ee83851b6f6f48f8a6280ad788a1cc81",
-    "packages/command/reservation-use-case/src/cancel_reservation/tests.rs": "e5bbd18ee2e4af6d9b37262591234c9d764618cb86580aa7d741af240d7e687c",
-    "packages/command/reservation-interface-adapter/tests/cancel_reservation.rs": "f4499120e2833560504934ae0c81d987df78fb68daebfb2a320928ca1b820665",
-    "packages/command/reservation-interface-adapter/src/in_memory_reservation_repository.rs": "457bf1e790da2f5bc3370ab1b4c2bbe63d562c6f70b1467ca59e43f7f8a15045",
+    "packages/command/reservation-use-case/src/reservation_repository.rs": "15d271dd401faf06315591d0f10b57ec4b47f3dc93d70d0c1a383bf84dc441ac",
+    "packages/command/reservation-use-case/src/cancel_reservation/tests.rs": "94133f1053bc0572d57d3cd9aff1b1c0fd4e9fb4165f8526b0ac5a6ac7fc9b7c",
+    "packages/command/reservation-interface-adapter/tests/cancel_reservation.rs": "bd765460a27ec3688152a7d5623a9f1909f707177661ae44e3a5d58151e80a05",
+    "packages/command/reservation-interface-adapter/src/in_memory_reservation_repository.rs": "59719e5383dd344b398165dd748070223070408693b6043d985d7f3a83ba837c",
     "packages/command/reservation-interface-adapter/src/lib.rs": "d72d0e55088eee814f164de63f16738f1a7c30ae86dff7dab44eedd650f17cc9",
-    "packages/command/reservation-interface-adapter/src/in_memory_reservation_repository/tests.rs": "137a47c3c59b19a095dd0fb2aa2835ff211be42ddbbb3e4e3d88ee9af885d47f",
+    "packages/command/reservation-interface-adapter/src/in_memory_reservation_repository/tests.rs": "2cd06909ae1aedd45991a6f21213fb4390b9866c611ec7a7ad3f936577a601af",
     "packages/command/reservation-domain/src/room_id.rs": "8978302434fc3288101270c505416ea558ec23bd8d1da77ed753c58b9f3e197b",
     "packages/command/reservation-domain/src/member_id.rs": "a35baef0835767c9a3479dd6a4713d1b1df5a176011aae456a530172a846851e",
     "packages/command/reservation-domain/src/lib.rs": "51ec988f8d557d6a265c0b2d56de0b7debddf8d3c93b91023f9d9c297b01119d",
-    "packages/command/reservation-domain/src/reservation.rs": "164374a738f979874b57edd672ac3d8bf8299915d902d5f17105104b6746b0c8",
+    "packages/command/reservation-domain/src/reservation.rs": "3ab312218fd463cd53abc8f4fb109cf9b3037c8ad8560a7408ff0e5d53d61d31",
     "packages/command/reservation-domain/src/member_id/tests.rs": "c8ad01698b4fdc5eeb1e1fac7195db1efd51b8b5783025e18c75bce0ac327e08",
     "packages/command/reservation-domain/src/reservation/time_slot.rs": "48f79a5969c94d3bd7477596814f1a6fb9f51c06583900b092d509ba8e654fd8",
-    "packages/command/reservation-domain/src/reservation/tests.rs": "ab0e09c3b5df90f7825dc45e261b41a389f2b09d8d80758d0ec08b8e16ae2bc8",
+    "packages/command/reservation-domain/src/reservation/tests.rs": "4fd9b4402e29d0370126512ea947e3b0e8764eb09b7c64355a4983dd266f1b3c",
     "packages/command/reservation-domain/src/reservation/reservation_id.rs": "a958214f05088eb7bf8115717624708e1b98004bba937ff450253704ee383b4a",
     "packages/command/reservation-domain/src/room_id/tests.rs": "e4c06bb14c02994f3b87f6cfe05317adc499ae9bab23c72cc034969af7b6bb0c",
     "packages/command/reservation-domain/src/reservation/reservation_id/tests.rs": "cd6bb44957e453c314420f218c5e97f24ed1c251c15744604cb2cef1141aeaf1",
     "packages/command/reservation-domain/src/reservation/time_slot/tests.rs": "46dcfb058147e25467873514416ea16c192711d445ed41f635cb7987fcb748d5",
-    "docs/ddd/aggregate-mapping.yaml": "daca09ce5c2f34ffbd413f060f92b54c5e5980ad03a2f2cad98b437cc8236eb8",
+    "docs/ddd/aggregate-mapping.yaml": "f5ea5aca75523b787e95789081aba89f63c9baea01107b4c0a2279b01690b83c",
     "docs/ddd/domain-model.yaml": "7f2ee3102e6a18b57fe0931ad21591f7574164c47640f4d86ae99a731be31350",
     "docs/ddd/layer-structure.yaml": "987c85c41774b0e96b26ed0ad5cb0b7f0280a15a6cd04d79911ef186deab62be"
   },
   "standalone_verification": {
     "pass": true,
     "tests": {
-      "pass": 34,
+      "pass": 40,
       "fail": 0,
       "skipped": 0
     },
@@ -216,6 +239,11 @@
       "artifact_commit": "00977635cf6d9b586d36ab976b67dffd22f70015",
       "validation_bundle_commit": "c41914f72bbad8cb20721852890c02ca8d67662b",
       "verified_at": "2026-10-04T07:03:40.845172+00:00"
+    },
+    {
+      "artifact_commit": "eeea20a364cb5a89a39f12bd77178e1028d20db4",
+      "validation_bundle_commit": "871d0d866516c9264f4f10dbd77126a117ae4af6",
+      "verified_at": "2026-10-04T07:49:05.032104+00:00"
     }
   ]
 }

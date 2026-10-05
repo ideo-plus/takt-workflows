@@ -18,15 +18,35 @@ fn reservation(id: u64) -> Reservation {
 fn store_new(repository: &mut InMemoryReservationRepository, reservation: &Reservation) {
     repository
         .store(
-            reservation.id(),
             ReservationEvent::Reserved(reservation.reserved_event()),
+            reservation.clone(),
         )
         .unwrap();
 }
 
+fn store_cancellation(repository: &mut InMemoryReservationRepository, id: &ReservationId) {
+    let mut loaded = repository.find_by_id(id).unwrap().unwrap();
+    let event = loaded.cancel().unwrap();
+    repository
+        .store(ReservationEvent::Cancelled(event), loaded)
+        .unwrap();
+}
+
 #[test]
-fn storing_events_rebuilds_all_reservation_values() {
-    let mut repository = InMemoryReservationRepository::new();
+fn a_missing_reservation_is_none() {
+    let repository = InMemoryReservationRepository::new(1);
+    assert_eq!(repository.find_by_id(&ReservationId::of(1)).unwrap(), None);
+}
+
+#[test]
+#[should_panic]
+fn a_zero_snapshot_interval_is_rejected() {
+    InMemoryReservationRepository::new(0);
+}
+
+#[test]
+fn storing_the_reservation_keeps_all_its_values() {
+    let mut repository = InMemoryReservationRepository::new(1);
     let expected = reservation(1);
     store_new(&mut repository, &expected);
     assert_eq!(
@@ -36,110 +56,113 @@ fn storing_events_rebuilds_all_reservation_values() {
 }
 
 #[test]
-fn unsaved_changes_do_not_change_history_and_saved_events_are_appended() {
-    let mut repository = InMemoryReservationRepository::new();
+fn unsaved_changes_do_not_change_the_stored_reservation() {
+    let mut repository = InMemoryReservationRepository::new(1);
     let original = reservation(1);
     store_new(&mut repository, &original);
-    let before = repository.events_for(original.id()).to_vec();
     let mut loaded = repository.find_by_id(original.id()).unwrap().unwrap();
-    let event = loaded.cancel().unwrap();
+    loaded.cancel().unwrap();
     assert_eq!(
-        repository
-            .find_by_id(original.id())
-            .unwrap()
-            .unwrap()
-            .status(),
-        ReservationStatus::Confirmed
-    );
-    assert_eq!(repository.events_for(original.id()), before);
-    repository
-        .store(original.id(), ReservationEvent::Cancelled(event))
-        .unwrap();
-    assert_eq!(
-        &repository.events_for(original.id())[..before.len()],
-        before
-    );
-    assert_eq!(repository.events_for(original.id()).len(), 2);
-    assert_eq!(
-        repository
-            .find_by_id(original.id())
-            .unwrap()
-            .unwrap()
-            .status(),
-        ReservationStatus::Cancelled
+        repository.find_by_id(original.id()).unwrap(),
+        Some(original)
     );
 }
 
 #[test]
-fn rejected_events_leave_saved_history_unchanged() {
-    let mut repository = InMemoryReservationRepository::new();
+fn a_cancellation_between_snapshots_is_replayed_from_the_events_after_the_snapshot() {
+    let mut repository = InMemoryReservationRepository::new(3);
+    let original = reservation(1);
+    store_new(&mut repository, &original);
+    store_cancellation(&mut repository, original.id());
+
+    let loaded = repository.find_by_id(original.id()).unwrap().unwrap();
+
+    assert_eq!(loaded.status(), ReservationStatus::Cancelled);
+    assert_eq!(loaded.sequence_number(), 2);
+}
+
+#[test]
+fn a_corrupt_event_after_the_snapshot_is_a_repository_failure() {
+    let mut repository = InMemoryReservationRepository::new(3);
     let mut original = reservation(1);
     store_new(&mut repository, &original);
-    let before = repository.events_for(original.id()).to_vec();
-    assert!(repository
-        .store(
-            original.id(),
-            ReservationEvent::Reserved(original.reserved_event())
-        )
-        .is_err());
-    assert_eq!(repository.events_for(original.id()), before);
     let cancellation = ReservationEvent::Cancelled(original.cancel().unwrap());
     repository
-        .store(original.id(), cancellation.clone())
-        .unwrap();
-    let cancelled = repository.events_for(original.id()).to_vec();
-    assert!(repository.store(original.id(), cancellation).is_err());
-    assert_eq!(repository.events_for(original.id()), cancelled);
-}
-
-#[test]
-fn an_event_for_another_id_does_not_create_a_stream() {
-    let mut repository = InMemoryReservationRepository::new();
-    let original = reservation(1);
-    assert!(repository
-        .store(
-            &ReservationId::of(2),
-            ReservationEvent::Reserved(original.reserved_event())
-        )
-        .is_err());
-    assert!(repository.events.is_empty());
-}
-
-#[test]
-fn a_cancellation_without_a_creation_event_is_rejected() {
-    let mut repository = InMemoryReservationRepository::new();
-    let mut original = reservation(1);
-    let cancellation = original.cancel().unwrap();
-    assert!(repository
-        .store(original.id(), ReservationEvent::Cancelled(cancellation))
-        .is_err());
-    assert!(repository.events.is_empty());
-}
-
-#[test]
-fn corrupt_history_is_a_repository_failure() {
-    let mut repository = InMemoryReservationRepository::new();
-    let mut original = reservation(1);
-    let cancellation = original.cancel().unwrap();
-    repository.events.insert(
-        original.id().clone(),
-        vec![ReservationEvent::Cancelled(cancellation)],
-    );
+        .events
+        .get_mut(original.id())
+        .unwrap()
+        .extend([cancellation.clone(), cancellation]);
     assert!(repository.find_by_id(original.id()).is_err());
 }
 
 #[test]
+fn a_cancellation_on_a_snapshot_is_loaded_without_replaying_earlier_events() {
+    let mut repository = InMemoryReservationRepository::new(1);
+    let original = reservation(1);
+    store_new(&mut repository, &original);
+    store_cancellation(&mut repository, original.id());
+    repository.events.get_mut(original.id()).unwrap().remove(0);
+
+    let loaded = repository.find_by_id(original.id()).unwrap().unwrap();
+
+    assert_eq!(loaded.status(), ReservationStatus::Cancelled);
+    assert_eq!(loaded.sequence_number(), 2);
+}
+
+#[test]
+fn a_snapshot_that_is_not_the_state_after_the_event_is_rejected() {
+    let mut repository = InMemoryReservationRepository::new(1);
+    let original = reservation(1);
+    store_new(&mut repository, &original);
+    let mut loaded = repository.find_by_id(original.id()).unwrap().unwrap();
+    let cancellation = ReservationEvent::Cancelled(loaded.cancel().unwrap());
+
+    assert!(repository
+        .store(cancellation.clone(), original.clone())
+        .is_err());
+    assert!(repository.store(cancellation, reservation(2)).is_err());
+    assert_eq!(
+        repository.find_by_id(original.id()).unwrap(),
+        Some(original)
+    );
+}
+
+#[test]
+fn an_event_that_does_not_follow_the_stored_history_is_rejected() {
+    let mut repository = InMemoryReservationRepository::new(1);
+    let mut original = reservation(1);
+    let unsaved = original.clone();
+    let cancellation = ReservationEvent::Cancelled(original.cancel().unwrap());
+
+    assert!(repository
+        .store(cancellation.clone(), original.clone())
+        .is_err());
+    assert_eq!(repository.find_by_id(original.id()).unwrap(), None);
+
+    store_new(&mut repository, &unsaved);
+    assert!(repository
+        .store(
+            ReservationEvent::Reserved(unsaved.reserved_event()),
+            unsaved.clone()
+        )
+        .is_err());
+    repository
+        .store(cancellation.clone(), original.clone())
+        .unwrap();
+    assert!(repository.store(cancellation, original.clone()).is_err());
+    assert_eq!(
+        repository.find_by_id(original.id()).unwrap(),
+        Some(original)
+    );
+}
+
+#[test]
 fn updating_one_stream_preserves_another_stream() {
-    let mut repository = InMemoryReservationRepository::new();
-    let mut first = reservation(1);
+    let mut repository = InMemoryReservationRepository::new(1);
+    let first = reservation(1);
     let second = reservation(2);
     store_new(&mut repository, &first);
     store_new(&mut repository, &second);
-    let other_history = repository.events_for(second.id()).to_vec();
-    let cancellation = first.cancel().unwrap();
-    repository
-        .store(first.id(), ReservationEvent::Cancelled(cancellation))
-        .unwrap();
-    assert_eq!(repository.events_for(second.id()), other_history);
+    store_cancellation(&mut repository, first.id());
     assert_eq!(repository.find_by_id(second.id()).unwrap(), Some(second));
 }

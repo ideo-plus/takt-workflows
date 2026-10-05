@@ -17,13 +17,13 @@ Judges the code of the domain layer (aggregates, Entities, value objects, Domain
 | Code of any layer builds an aggregate or Entity outside its type through a literal, a default value, a cast, or a public constructor | REJECT. Go through the full constructor that takes the whole state |
 | A factory builds an instance before validating its input, or builds an empty instance and fills it later | REJECT |
 | An `init`, `setup`, `initialize`, `reset`, or `configure` method completes construction | REJECT |
-| An aggregate is reconstructed from event history without validating history integrity | REJECT. Validate history and apply declared replay methods before returning the aggregate |
-| A restore factory rejects a corrupt state by throwing | OK. A corrupt state is not a business failure |
+| An aggregate is reconstructed from event history without validating history integrity | REJECT. `replay(events, snapshot)` validates that the events continue the snapshot (aggregate ID and consecutive sequence numbers) and advances the aggregate through the replay methods the commands use |
+| `replay` rejects a corrupt history by throwing (Rust: its own error type) | OK. A corrupt history is not a business failure |
 | A factory the mapping binds to an operation returns the bare value although the operation has declared errors | REJECT |
 
 ## Primary Constructor and Auxiliary Construction Paths
 
-A stateful domain class, struct, or companion has one primary constructor that assembles all state. Auxiliary paths that construct the same type, including `of`, `parse`, `create`, `from`, and `restore`, reach that primary directly or through another auxiliary path. This follows Scala's constructor-delegation structure. [Scala specification](https://www.scala-lang.org/files/archive/spec/2.13/05-classes-and-objects.html)
+A stateful domain class, struct, or companion has one primary constructor that assembles all state. Auxiliary paths that construct the same type, including `of`, `parse`, `create`, and `from`, reach that primary directly or through another auxiliary path. A function that takes an existing instance and advances it (ES `replay(events, snapshot)`) constructs nothing new and is not a construction path. This follows Scala's constructor-delegation structure. [Scala specification](https://www.scala-lang.org/files/archive/spec/2.13/05-classes-and-objects.html)
 
 | Criterion | Judgment |
 |-----------|----------|

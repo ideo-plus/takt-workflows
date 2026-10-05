@@ -20,8 +20,8 @@ pub enum ReserveReservationError {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CorruptReservationHistory {
-    MissingReservationEvent,
     WrongReservation,
+    OutOfSequence,
     InvalidTransition,
 }
 
@@ -33,6 +33,7 @@ pub enum CancelReservationError {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReservationReserved {
     reservation_id: ReservationId,
+    sequence_number: u64,
     member_id: MemberId,
     room_id: RoomId,
     time_slot: TimeSlot,
@@ -47,6 +48,7 @@ impl ReservationReserved {
     ) -> Self {
         Self {
             reservation_id,
+            sequence_number: 1,
             member_id,
             room_id,
             time_slot,
@@ -60,11 +62,15 @@ impl ReservationReserved {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReservationCancelled {
     reservation_id: ReservationId,
+    sequence_number: u64,
 }
 
 impl ReservationCancelled {
-    fn new(reservation_id: ReservationId) -> Self {
-        Self { reservation_id }
+    fn new(reservation_id: ReservationId, sequence_number: u64) -> Self {
+        Self {
+            reservation_id,
+            sequence_number,
+        }
     }
     pub fn reservation_id(&self) -> &ReservationId {
         &self.reservation_id
@@ -84,11 +90,19 @@ impl ReservationEvent {
             Self::Cancelled(event) => event.reservation_id(),
         }
     }
+
+    pub fn sequence_number(&self) -> u64 {
+        match self {
+            Self::Reserved(event) => event.sequence_number,
+            Self::Cancelled(event) => event.sequence_number,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Reservation {
     id: ReservationId,
+    sequence_number: u64,
     member_id: MemberId,
     room_id: RoomId,
     time_slot: TimeSlot,
@@ -98,6 +112,7 @@ pub struct Reservation {
 impl Reservation {
     fn new(
         id: ReservationId,
+        sequence_number: u64,
         member_id: MemberId,
         room_id: RoomId,
         time_slot: TimeSlot,
@@ -105,6 +120,7 @@ impl Reservation {
     ) -> Self {
         Self {
             id,
+            sequence_number,
             member_id,
             room_id,
             time_slot,
@@ -134,20 +150,17 @@ impl Reservation {
         )
     }
 
-    pub fn restore(
-        id: &ReservationId,
+    pub fn replay(
         events: &[ReservationEvent],
+        snapshot: Reservation,
     ) -> Result<Self, CorruptReservationHistory> {
-        let Some(ReservationEvent::Reserved(first)) = events.first() else {
-            return Err(CorruptReservationHistory::MissingReservationEvent);
-        };
-        if first.reservation_id() != id {
-            return Err(CorruptReservationHistory::WrongReservation);
-        }
-        let mut reservation = Self::from_reserved(first);
-        for event in &events[1..] {
-            if event.reservation_id() != id {
+        let mut reservation = snapshot;
+        for event in events {
+            if event.reservation_id() != &reservation.id {
                 return Err(CorruptReservationHistory::WrongReservation);
+            }
+            if event.sequence_number() != reservation.sequence_number + 1 {
+                return Err(CorruptReservationHistory::OutOfSequence);
             }
             match event {
                 ReservationEvent::Cancelled(cancelled)
@@ -164,6 +177,7 @@ impl Reservation {
     fn from_reserved(event: &ReservationReserved) -> Self {
         Self::new(
             event.reservation_id.clone(),
+            event.sequence_number,
             event.member_id.clone(),
             event.room_id.clone(),
             event.time_slot.clone(),
@@ -171,7 +185,8 @@ impl Reservation {
         )
     }
 
-    fn apply_cancelled(&mut self, _event: &ReservationCancelled) {
+    fn apply_cancelled(&mut self, event: &ReservationCancelled) {
+        self.sequence_number = event.sequence_number;
         self.status = ReservationStatus::Cancelled;
     }
 
@@ -179,13 +194,16 @@ impl Reservation {
         if self.status == ReservationStatus::Cancelled {
             return Err(CancelReservationError::AlreadyCancelled);
         }
-        let event = ReservationCancelled::new(self.id.clone());
+        let event = ReservationCancelled::new(self.id.clone(), self.sequence_number + 1);
         self.apply_cancelled(&event);
         Ok(event)
     }
 
     pub fn id(&self) -> &ReservationId {
         &self.id
+    }
+    pub fn sequence_number(&self) -> u64 {
+        self.sequence_number
     }
     pub fn member_id(&self) -> &MemberId {
         &self.member_id

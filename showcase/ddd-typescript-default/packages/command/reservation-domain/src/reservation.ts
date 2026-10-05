@@ -12,6 +12,7 @@ export type ReservationStatus = "confirmed" | "cancelled";
 export type ReservationReserved = {
   readonly kind: "reserved";
   readonly reservationId: ReservationId;
+  readonly sequenceNumber: number;
   readonly memberId: MemberId;
   readonly roomId: RoomId;
   readonly startsAt: number;
@@ -20,6 +21,7 @@ export type ReservationReserved = {
 export type ReservationCancelled = {
   readonly kind: "cancelled";
   readonly reservationId: ReservationId;
+  readonly sequenceNumber: number;
 };
 export type ReservationEvent = ReservationReserved | ReservationCancelled;
 export type CancelReservationOutcome = {
@@ -29,10 +31,12 @@ export type CancelReservationOutcome = {
 
 export class Reservation {
   readonly #reserved: ReservationReserved;
+  readonly #sequenceNumber: number;
   readonly #status: ReservationStatus;
 
-  private constructor(reserved: ReservationReserved, status: ReservationStatus) {
+  private constructor(reserved: ReservationReserved, sequenceNumber: number, status: ReservationStatus) {
     this.#reserved = reserved;
+    this.#sequenceNumber = sequenceNumber;
     this.#status = status;
   }
 
@@ -44,19 +48,16 @@ export class Reservation {
       return { ok: false, error: "invalid-time-slot" };
     }
     const event: ReservationReserved = Object.freeze({
-      kind: "reserved", reservationId: id, memberId, roomId, startsAt, endsAt,
+      kind: "reserved", reservationId: id, sequenceNumber: 1, memberId, roomId, startsAt, endsAt,
     });
     return { ok: true, value: Reservation.fromReserved(event) };
   }
 
-  static restore(id: ReservationId, events: readonly ReservationEvent[]): Reservation {
-    const first = events[0];
-    if (!first || first.kind !== "reserved" || !first.reservationId.equals(id)) {
-      throw new Error("予約のイベント履歴が不正です");
-    }
-    let reservation = Reservation.fromReserved(first);
-    for (const event of events.slice(1)) {
-      if (event.kind !== "cancelled" || !event.reservationId.equals(id) ||
+  static replay(events: readonly ReservationEvent[], snapshot: Reservation): Reservation {
+    let reservation = snapshot;
+    for (const event of events) {
+      if (event.kind !== "cancelled" || !event.reservationId.equals(reservation.id()) ||
+          event.sequenceNumber !== reservation.#sequenceNumber + 1 ||
           reservation.#status !== "confirmed") {
         throw new Error("予約のイベント履歴が不正です");
       }
@@ -66,15 +67,11 @@ export class Reservation {
   }
 
   private static fromReserved(event: ReservationReserved): Reservation {
-    if (!Number.isFinite(event.startsAt) || !Number.isFinite(event.endsAt) ||
-        event.endsAt <= event.startsAt) {
-      throw new Error("予約のイベント履歴が不正です");
-    }
-    return new Reservation(Object.freeze({ ...event }), "confirmed");
+    return new Reservation(event, event.sequenceNumber, "confirmed");
   }
 
-  private applyCancelled(_event: ReservationCancelled): Reservation {
-    return new Reservation(this.#reserved, "cancelled");
+  private applyCancelled(event: ReservationCancelled): Reservation {
+    return new Reservation(this.#reserved, event.sequenceNumber, "cancelled");
   }
 
   cancel(): Result<CancelReservationOutcome, CancelReservationError> {
@@ -83,12 +80,14 @@ export class Reservation {
     }
     const event: ReservationCancelled = Object.freeze({
       kind: "cancelled", reservationId: this.#reserved.reservationId,
+      sequenceNumber: this.#sequenceNumber + 1,
     });
     return { ok: true, value: { reservation: this.applyCancelled(event), event } };
   }
 
   reservedEvent(): ReservationReserved { return this.#reserved; }
   id(): ReservationId { return this.#reserved.reservationId; }
+  sequenceNumber(): number { return this.#sequenceNumber; }
   memberId(): MemberId { return this.#reserved.memberId; }
   roomId(): RoomId { return this.#reserved.roomId; }
   startsAt(): number { return this.#reserved.startsAt; }

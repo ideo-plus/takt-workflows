@@ -8,10 +8,13 @@
  * annotation spells, and what those do not decide is left undecided rather than passed.
  */
 
+import { join } from "node:path";
 import type { FindingInput } from "../../shared/findings.ts";
-import { repositoryContractProblem, resultArguments, expandGenericStoreResult } from "../repository-contract.ts";
+import { isAggregateStateElement } from "../in-memory.ts";
+import { repositoryContractProblem, resultArguments, expandGenericStoreResult, EVENT_SOURCING_STORE } from "../repository-contract.ts";
 import type { MemberFact, ParamFact, TypeScriptFileFacts } from "../../typescript/domain-facts/index.ts";
-import { aggregateBinding } from "./aggregate-binding.ts";
+import { aggregateBinding, aggregateMappings } from "./aggregate-binding.ts";
+import { resolveSpecifier } from "./edges.ts";
 import { enclosingClass, factsOf, receiverType } from "./file-facts.ts";
 import { isNamedType, isPortDeclaration, passedType, resolveDeclaredType, resolveTypeName, typeNamesIn } from "./symbols.ts";
 import type { TsDomainType, TsInspection, TsTarget } from "./types.ts";
@@ -231,6 +234,45 @@ export function ruleRepositoryContract(inspection: TsInspection, target: TsTarge
   for (const alias of facts.declarations.filter((entry) => entry.kind === "type-alias" && !entry.generic)) {
     const parts = resultArguments(alias.type_text);
     if (parts && parts[1] === "RepositoryError") findings.push({ rule_id: "repository-result-contract", file: target.file, line: alias.span.start_line, message: `${alias.name} only renames a repository Result; use Result directly or a reusable generic alias` });
+  }
+  return findings;
+}
+
+/**
+ * An Event Sourcing repository port stores the domain event with the aggregate after it,
+ * `store(event, snapshot)`: the event already carries its aggregate ID, and the snapshot lets
+ * findById replay only the events after it. The event is a single named type imported from the
+ * aggregate's domain package that is neither the aggregate nor one of its state elements.
+ */
+export function ruleEventSourcingStore(inspection: TsInspection, target: TsTarget): FindingInput[] {
+  const facts = factsOf(inspection, target.file);
+  const findings: FindingInput[] = [];
+  for (const port of facts.declarations.filter((entry) => isPortDeclaration(entry) && entry.name.endsWith("Repository"))) {
+    const aggregate = aggregateMappings(inspection).find((entry) => entry.persistence_method === "event-sourcing" && `${entry.type}Repository` === port.name);
+    if (!aggregate) continue;
+    const domainType = (text: string | undefined) => {
+      if (text === undefined) return undefined;
+      const resolved = resolveTypeName(inspection.packages, inspection.symbols, target.file, facts, text);
+      return resolved.kind === "domain" ? resolved.type : undefined;
+    };
+    const isSnapshot = (text: string | undefined) => {
+      const type = domainType(text);
+      return type !== undefined && type.name === aggregate.type && type.pkg.name === aggregate.package;
+    };
+    const isEvent = (text: string | undefined) => {
+      if (text === undefined || !/^[\w$]+(?:\.[\w$]+)*$/.test(text)) return false;
+      const type = domainType(text);
+      if (type && (type.name === aggregate.type || isAggregateStateElement(inspection.model, aggregate.aggregate_ref, type.name))) return false;
+      const imported = facts.imports.find((entry) => entry.bindings.some((binding) => binding.name === text.split(".")[0]));
+      const from = imported ? resolveSpecifier(inspection.packages, target.pkg, join(inspection.packages.workspaceRoot, target.file), imported.specifier) : undefined;
+      return from?.kind === "package" && from.pkg.name === aggregate.package;
+    };
+    for (const member of port.members.filter((entry) => entry.name === "store")) {
+      const params = member.params ?? [];
+      if (params.length === 2 && isEvent(params[0]!.type_text) && isSnapshot(params[1]!.type_text)) continue;
+      const spelled = params.map((param) => `${param.name}: ${param.type_text ?? "?"}`).join(", ");
+      findings.push({ rule_id: "event-sourcing-store", file: target.file, line: member.span.start_line, message: `${port.name}.store(${spelled}): ${EVENT_SOURCING_STORE}` });
+    }
   }
   return findings;
 }

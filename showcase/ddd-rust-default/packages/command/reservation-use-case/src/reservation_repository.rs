@@ -21,7 +21,7 @@ pub trait ReservationRepository {
     ) -> Result<Option<Reservation>, RepositoryError>;
     fn store(
         &mut self,
-        reservation_id: &ReservationId,
         event: ReservationEvent,
+        snapshot: Reservation,
     ) -> Result<(), RepositoryError>;
 }

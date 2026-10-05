@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { MemberId, Reservation, ReservationId, RoomId } from "@acme/reservation-domain";
 import { CancelReservationUseCase } from "@acme/reservation-use-case";
+import type { ReservationEvent } from "@acme/reservation-domain";
 import type { ReservationRepository, RepositoryError } from "@acme/reservation-use-case";
 
 test("読込失敗は保存せずに呼出側へ返す", () => {
@@ -31,4 +32,27 @@ test("保存失敗では成功イベントを返さず、保存された予約�
   assert.deepEqual(useCase.execute(ReservationId.of(1)), { ok: false, error });
   assert.equal(reservation.status(), "confirmed");
   assert.deepEqual(useCase.execute(ReservationId.of(1)), { ok: false, error });
+});
+
+test("取消イベントと、その直後の予約をスナップショットとして保存する", () => {
+  const reserved = Reservation.reserve(
+    ReservationId.of(1), MemberId.of(2), RoomId.of(3), 100, 200,
+  );
+  if (!reserved.ok) assert.fail("予約生成に失敗しました");
+  const stored: { event: ReservationEvent; snapshot: Reservation }[] = [];
+  const repository: ReservationRepository = {
+    findById() { return { ok: true, value: reserved.value }; },
+    store(event, snapshot) {
+      stored.push({ event, snapshot });
+      return { ok: true, value: undefined };
+    },
+  };
+
+  const cancelled = new CancelReservationUseCase(repository).execute(ReservationId.of(1));
+
+  if (!cancelled.ok) assert.fail("取消に失敗しました");
+  assert.equal(stored.length, 1);
+  assert.equal(stored[0]?.event, cancelled.value);
+  assert.equal(stored[0]?.snapshot.status(), "cancelled");
+  assert.equal(stored[0]?.snapshot.sequenceNumber(), cancelled.value.sequenceNumber);
 });

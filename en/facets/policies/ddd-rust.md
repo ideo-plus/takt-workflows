@@ -8,7 +8,7 @@ Both an inherent `from` and a `From<T>` implementation return `Self` as an infal
 |---------------|-------------------------|
 | Do not expose state (domain layer) | A `pub`, `pub(crate)`, `pub(super)`, or `pub(in …)` field is public |
 | Do not build outside the type (domain layer) | Struct literals and the `..` update syntax appear only inside the type's inherent `impl`. Deriving or implementing `Default`, or building through `Default::default()`, is building outside the type |
-| Go through the primary constructor (domain layer) | One private associated function assembles all state. Struct literals and tuple initialization appear only there. Validating factories and `restore` delegate to it, directly or through auxiliary paths |
+| Go through the primary constructor (domain layer) | One private associated function assembles all state. Struct literals and tuple initialization appear only there. Validating factories delegate to it, directly or through auxiliary paths. ES `replay` advances the snapshot it takes by value through the replay methods and is not a construction path |
 | Only declared methods change state (domain layer) | A method taking `&mut self` is a method that changes state |
 | Whether a domain type changes in place or becomes a new instance (domain layer) | In place; follow "Changing in Place" below. A command takes `&mut self`, changes the aggregate, and returns `Result<success_type, error_type>`. A method that takes `&self` or `self` and only returns an event is a command that does not change state |
 | Do not hide changes behind interior mutability (domain layer) | `Cell`, `RefCell`, `Mutex`, `RwLock`, or an atomic type holding the business state of a domain type is interior mutability. When one serves a technical cache, say so |
