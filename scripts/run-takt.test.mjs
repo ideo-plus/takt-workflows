@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -8,8 +8,17 @@ import test from 'node:test';
 
 const launcher = fileURLToPath(new URL('./run-takt.sh', import.meta.url));
 const adapter = fileURLToPath(new URL('./takt-claude.sh', import.meta.url));
-const CREDENTIALS = ['CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX'];
+const CREDENTIALS = [
+  'CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX',
+  'ANTHROPIC_PROFILE', 'ANTHROPIC_FEDERATION_RULE_ID', 'ANTHROPIC_ORGANIZATION_ID', 'ANTHROPIC_WORKSPACE_ID',
+  'CLAUDE_CODE_USE_ANTHROPIC_AWS', 'CLAUDE_CODE_USE_FOUNDRY', 'CLAUDE_CODE_USE_MANTLE',
+  'ANTHROPIC_BASE_URL', 'ANTHROPIC_CUSTOM_HEADERS', 'ANTHROPIC_MODEL', 'ANTHROPIC_DEFAULT_MODEL',
+  'ANTHROPIC_DEFAULT_OPUS_MODEL', 'ANTHROPIC_DEFAULT_SONNET_MODEL', 'ANTHROPIC_DEFAULT_HAIKU_MODEL',
+  'ANTHROPIC_DEFAULT_FABLE_MODEL', 'ANTHROPIC_SMALL_FAST_MODEL',
+  'CLAUDE_CODE_SUBAGENT_MODEL', 'CLAUDE_CODE_SUBAGENT_MODEL_FORCE',
+];
 const CODEX_CREDENTIALS = ['OPENAI_API_KEY', 'CODEX_API_KEY', 'TAKT_OPENAI_API_KEY'];
+const TAKT_CREDENTIALS = ['TAKT_ANTHROPIC_API_KEY'];
 const codexAdapter = fileURLToPath(new URL('./takt-codex.sh', import.meta.url));
 
 function fixture(t) {
@@ -23,6 +32,14 @@ function fixture(t) {
   mkdirSync(codex);
   const cli = join(root, 'fake-cli');
   writeFileSync(cli, `#!/usr/bin/env node
+if (require('node:path').basename(process.argv[1]) === 'mise') {
+  if (process.env.TEST_MISE_RECORD) require('node:fs').appendFileSync(process.env.TEST_MISE_RECORD,
+    JSON.stringify({ args: process.argv.slice(2), cwd: process.cwd() }) + '\\n');
+  if (process.argv[2] === 'trust' && process.argv[3] === '--show') {
+    console.log(process.env.TEST_MISE_TRUST === undefined ? process.cwd() + '/mise.toml: trusted' : process.env.TEST_MISE_TRUST);
+    process.exit(Number(process.env.TEST_MISE_TRUST_EXIT || 0));
+  }
+}
 if (process.argv[2] === '--version') {
   console.log(process.env.TEST_VERSION || (require('node:path').basename(process.argv[1]) === 'codex' ? 'codex-cli 0.134.0' : '2.1.280 (Claude Code)'));
   process.exit(Number(process.env.TEST_VERSION_EXIT || 0));
@@ -46,7 +63,8 @@ process.stdin.on('end', () => {
     args: process.argv.slice(2), input, cwd: process.cwd(), executable: process.argv[1],
     env: Object.fromEntries(keys.map(key => [key, process.env[key]])),
     credentials: ${JSON.stringify(CREDENTIALS)}.filter(key => key in process.env),
-    codexCredentials: ${JSON.stringify(CODEX_CREDENTIALS)}.filter(key => key in process.env)
+    codexCredentials: ${JSON.stringify(CODEX_CREDENTIALS)}.filter(key => key in process.env),
+    taktCredentials: ${JSON.stringify(TAKT_CREDENTIALS)}.filter(key => key in process.env)
   }));
   process.exitCode = Number(process.env.TEST_EXIT_CODE || 0);
 });
@@ -60,7 +78,7 @@ process.stdin.on('end', () => {
     TAKT_CODEX_REAL_CLI: cli,
     CLAUDE_CONFIG_DIR: join(root, 'inherited account'),
     CODEX_HOME: join(root, 'inherited codex account'),
-    ...Object.fromEntries([...CREDENTIALS, ...CODEX_CREDENTIALS].map(key => [key, 'test-only'])),
+    ...Object.fromEntries([...CREDENTIALS, ...CODEX_CREDENTIALS, ...TAKT_CREDENTIALS].map(key => [key, 'test-only'])),
   } };
 }
 
@@ -84,6 +102,7 @@ test('launcher selects both accounts, preserving arguments, stdin and exit statu
   assert.equal(got.env.TAKT_CLAUDE_REAL_CLI, f.cli);
   assert.equal(got.env.TAKT_CODEX_REAL_CLI, f.cli);
   assert.deepEqual(got.codexCredentials, []);
+  assert.deepEqual(got.taktCredentials, []);
 });
 
 test('installed launcher uses adjacent adapters and overrides inherited TAKT_CONFIG_DIR', t => {
@@ -121,6 +140,7 @@ test('PATH CLI resolution reaches both adapters and reports the same paths and a
     assert.equal(got.executable, join(bin, provider));
     assert.equal(got.env[provider === 'claude' ? 'CLAUDE_CONFIG_DIR' : 'CODEX_HOME'], provider === 'claude' ? f.account : f.codex);
     assert.equal(got.input, 'input');
+    if (provider === 'claude') assert.deepEqual(got.credentials, []);
     for (const value of [f.account, f.codex, join(bin, 'claude'), join(bin, 'codex'), '2.1.280', 'codex-cli 0.134.0', join(f.project, '.takt/home')]) {
       assert.ok(result.stderr.includes(value), result.stderr);
     }
@@ -236,12 +256,47 @@ test('launcher runs takt through mise exec when mise is available, so the projec
   copyFileSync(f.cli, join(bin, 'mise'));
   chmodSync(join(bin, 'mise'), 0o755);
   const { TAKT_REAL_CLI, ...env } = f.env;
+  const record = join(f.root, 'mise-record');
   const result = spawnSync('sh', [launcher, '--claude-account', f.account, '--codex-account', f.codex, '--pipeline'], {
-    cwd: f.project, env: { ...env, PATH: `${bin}:${env.PATH}`, TEST_EXIT_CODE: '5' }, encoding: 'utf8',
+    cwd: f.project, env: { ...env, PATH: `${bin}:${env.PATH}`, TEST_EXIT_CODE: '5', TEST_MISE_RECORD: record }, encoding: 'utf8',
   });
   assert.equal(result.status, 5, result.stderr);
   const got = JSON.parse(result.stdout);
   assert.deepEqual(got.args, ['exec', '--', 'takt', '--pipeline']);
+  assert.deepEqual(got.taktCredentials, []);
+  assert.deepEqual(readFileSync(record, 'utf8').trim().split('\n').map(line => JSON.parse(line)), [
+    { args: ['trust', '--show'], cwd: f.project },
+    { args: ['exec', '--', 'takt', '--pipeline'], cwd: f.project },
+  ]);
+});
+
+test('untrusted or unconfirmed mise configuration stops without trusting or launching TAKT', t => {
+  const f = fixture(t);
+  const bin = join(f.root, 'bin');
+  mkdirSync(bin);
+  for (const name of ['mise', 'takt']) copyFileSync(f.cli, join(bin, name));
+  const { TAKT_REAL_CLI, ...env } = f.env;
+  const record = join(f.root, 'mise-record');
+  const launchRecord = join(f.root, 'launch-record');
+  for (const [output, exit] of [
+    [`${f.project}/mise.toml: untrusted`, '0'],
+    [`${f.root}/mise.toml: trusted\n${f.project}/mise.toml: untrusted`, '0'],
+    ['', '0'],
+    [`${f.project}/mise.toml: trusted`, '1'],
+  ]) {
+    rmSync(record, { force: true });
+    const result = spawnSync('sh', [launcher, '--claude-account', f.account, '--codex-account', f.codex, '--pipeline'], {
+      cwd: f.project, env: { ...env, PATH: `${bin}:${env.PATH}`, TEST_MISE_TRUST: output,
+        TEST_MISE_TRUST_EXIT: exit, TEST_MISE_RECORD: record, TEST_LAUNCH_RECORD: launchRecord }, encoding: 'utf8',
+    });
+    assert.notEqual(result.status, 0, result.stderr);
+    assert.ok(result.stderr.includes('mise trust'), result.stderr);
+    assert.equal(result.stdout, '');
+    assert.equal(existsSync(launchRecord), false);
+    assert.deepEqual(readFileSync(record, 'utf8').trim().split('\n').map(line => JSON.parse(line)), [
+      { args: ['trust', '--show'], cwd: f.project },
+    ]);
+  }
 });
 
 test('missing or invalid account selection never launches the real CLI', t => {

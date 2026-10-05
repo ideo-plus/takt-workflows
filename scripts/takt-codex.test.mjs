@@ -7,6 +7,10 @@ import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
 const adapter = fileURLToPath(new URL('./takt-codex.sh', import.meta.url));
+const CODEX_CREDENTIALS = [
+  'OPENAI_API_KEY', 'CODEX_API_KEY', 'OPENAI_BASE_URL', 'CODEX_ACCESS_TOKEN',
+  'OPENAI_IDENTITY_TOKEN_FILE', 'OPENAI_FEDERATION_RULE_ID',
+];
 
 function fixture(t) {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'takt-codex-')));
@@ -25,7 +29,7 @@ process.stdin.on('end', () => {
   console.log(JSON.stringify({
     args: process.argv.slice(2), input, cwd: process.cwd(),
     env: Object.fromEntries(keys.map(key => [key, process.env[key]])),
-    apiKeys: ['OPENAI_API_KEY', 'CODEX_API_KEY', 'TAKT_OPENAI_API_KEY'].filter(key => key in process.env)
+    apiKeys: [...${JSON.stringify(CODEX_CREDENTIALS)}, 'TAKT_OPENAI_API_KEY'].filter(key => key in process.env)
   }));
   process.exitCode = Number(process.env.TEST_EXIT_CODE || 0);
 });
@@ -33,12 +37,11 @@ process.stdin.on('end', () => {
   chmodSync(cli, 0o755);
   return { root, cli, project, account, env: {
     PATH: process.env.PATH,
-    HOME: process.env.HOME,
+    HOME: root,
     TAKT_CODEX_REAL_CLI: cli,
     CODEX_HOME: join(root, 'inherited account'),
     TAKT_CONFIG_DIR: join(root, 'inherited config'),
-    OPENAI_API_KEY: 'test-only',
-    CODEX_API_KEY: 'test-only',
+    ...Object.fromEntries(CODEX_CREDENTIALS.map(key => [key, 'test-only'])),
     TAKT_OPENAI_API_KEY: 'test-only',
   } };
 }
@@ -56,8 +59,7 @@ test('adapter overrides inherited account and API credentials without changing S
   assert.equal(got.input, 'SDK prompt\n');
   assert.equal(got.env.CODEX_HOME, f.account);
   assert.equal(got.env.TAKT_AGENT, '1');
-  assert.equal(got.apiKeys.includes('OPENAI_API_KEY'), false);
-  assert.equal(got.apiKeys.includes('CODEX_API_KEY'), false);
+  assert.deepEqual(got.apiKeys, ['TAKT_OPENAI_API_KEY']);
 });
 
 test('missing or invalid account selection never launches the real CLI', t => {
