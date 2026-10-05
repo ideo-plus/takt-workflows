@@ -55,7 +55,7 @@ takt workflow doctor flash-default
 - Before the first run, check that the models in `.takt/runtime.yaml` are available in your environment.
 - To update the bundle or switch language, run the installer again. It replaces only its own files, keeps your `runtime.yaml` and `config.yaml`, and leaves other workflows in `.takt/` untouched.
 
-Run the launcher from your project's root. Replace each `<dir>` with the corresponding account configuration directory; either account option can come first. Remaining arguments go directly to TAKT. The launcher selects the adjacent `takt-claude.sh` and `takt-codex.sh`, resolves the real CLIs to absolute paths, and stops before starting TAKT if either CLI is missing or Claude is older than 2.1.280. Accounts, CLI paths and versions, and the TAKT configuration directory are printed to standard error. If mise is available, TAKT runs through `mise exec` to use the project's pinned version.
+Run the launcher from your project's root. Replace each `<dir>` with the corresponding account configuration directory; either account option can come first. Remaining arguments go directly to TAKT. The launcher selects the adjacent `takt-claude.sh` and `takt-codex.sh`, resolves the real CLIs to absolute paths, and stops before starting TAKT if either CLI is missing or Claude is older than 2.1.280. Accounts, CLI paths and versions, and the TAKT configuration directory are printed to standard error. If mise is available, TAKT runs through `mise exec` to use the project's pinned version. If the project has a mise configuration but mise is not found, the launcher stops instead of running an unpinned TAKT.
 
 ### Install or update only the launchers
 From the project root:
