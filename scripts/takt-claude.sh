@@ -18,8 +18,8 @@ fi
 # 認証の情報を持つ環境変数は、CLAUDE_CONFIG_DIR より優先される。呼び出し元のシェルに
 # CLAUDE_CODE_OAUTH_TOKEN などが残っていると、設定ディレクトリを替えても同じアカウントで
 # 動いてしまうので、外してから起動する (2026-09-24 に、上限に達したアカウントのまま
-# 動くことを確かめた)。
-unset CLAUDE_CODE_OAUTH_TOKEN ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN
+# 動くことを確かめた)。Bedrock・Vertex を選ぶ変数が残っていても、アカウントではなくそちらで動くので外す。
+unset CLAUDE_CODE_OAUTH_TOKEN ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN CLAUDE_CODE_USE_BEDROCK CLAUDE_CODE_USE_VERTEX
 CLAUDE_CONFIG_DIR=$account_dir
 export CLAUDE_CONFIG_DIR
 # TAKT が起動したエージェントであることの印 (scripts/takt-codex.sh と同じ)

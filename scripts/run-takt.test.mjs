@@ -8,7 +8,7 @@ import test from 'node:test';
 
 const launcher = fileURLToPath(new URL('./run-takt.sh', import.meta.url));
 const adapter = fileURLToPath(new URL('./takt-claude.sh', import.meta.url));
-const CREDENTIALS = ['CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN'];
+const CREDENTIALS = ['CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX'];
 const CODEX_CREDENTIALS = ['OPENAI_API_KEY', 'CODEX_API_KEY', 'TAKT_OPENAI_API_KEY'];
 const codexAdapter = fileURLToPath(new URL('./takt-codex.sh', import.meta.url));
 
