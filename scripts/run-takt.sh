@@ -6,7 +6,7 @@
 #
 # runtime.yaml は 1 回の実行で claude と codex の両方を使う。TAKT_CLAUDE_CLI_PATH に scripts/takt-claude.sh、
 # TAKT_CODEX_CLI_PATH に scripts/takt-codex.sh を絶対パスで渡し、TAKT が起動する claude と codex を、
-# それぞれ指定したアカウント (CLAUDE_CONFIG_DIR、CODEX_HOME) で動かす。codex の設定は run-codex.sh と同じ。
+# それぞれ指定したアカウント (CLAUDE_CONFIG_DIR、CODEX_HOME) で動かす。
 # アカウントの上限に当たったときに、別のアカウントへ切り替えて再開するために使う。アカウントの名前は
 # マシンごとの事情なので、リポジトリには書かず、起動のたびに指定する。TAKT の設定はカレントディレクトリの
 # プロジェクトの .takt/home から読む (TAKT_CONFIG_DIR)。アカウントの指定の後ろの引数は、そのまま takt に渡す。
