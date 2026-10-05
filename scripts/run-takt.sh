@@ -103,7 +103,8 @@ TAKT_CODEX_CLI_PATH=$script_dir/takt-codex.sh
 TAKT_CODEX_ACCOUNT_DIR=$(CDPATH= cd -- "$codex_account" && pwd)
 TAKT_CONFIG_DIR=$project_dir/.takt/home
 CODEX_HOME=$TAKT_CODEX_ACCOUNT_DIR
-unset OPENAI_API_KEY CODEX_API_KEY TAKT_OPENAI_API_KEY
+# TAKT の API key も、指定したアカウントの認証より優先されるため外す。
+unset OPENAI_API_KEY CODEX_API_KEY TAKT_OPENAI_API_KEY TAKT_ANTHROPIC_API_KEY
 export TAKT_CLAUDE_CLI_PATH TAKT_CLAUDE_ACCOUNT_DIR TAKT_CODEX_CLI_PATH TAKT_CODEX_ACCOUNT_DIR TAKT_CONFIG_DIR CODEX_HOME
 export TAKT_CLAUDE_REAL_CLI TAKT_CODEX_REAL_CLI
 
@@ -117,6 +118,17 @@ echo "run-takt: TAKT_CONFIG_DIR: $TAKT_CONFIG_DIR" >&2
 if [ -n "${TAKT_REAL_CLI:-}" ]; then
     exec "$TAKT_REAL_CLI" "$@"
 elif command -v mise >/dev/null 2>&1; then
+    if ! mise_trust=$(mise trust --show); then
+        echo "run-takt: mise の信頼状態を確認できない。プロジェクトで mise trust を実行してください: $project_dir" >&2
+        exit 1
+    fi
+    if ! printf '%s\n' "$mise_trust" | awk '
+        !/: trusted$/ { invalid = 1 }
+        END { exit (NR == 0 || invalid) }
+    '; then
+        echo "run-takt: mise の設定が信頼されていない。プロジェクトで mise trust を実行してください: $project_dir" >&2
+        exit 1
+    fi
     exec mise exec -- takt "$@"
 fi
 exec takt "$@"
