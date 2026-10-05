@@ -58,9 +58,15 @@ gitignore="$target/.gitignore"
 if [ ! -e "$gitignore" ]; then
   printf '# Ignore everything by default\n*\n\n!.gitignore\n' > "$gitignore"
 fi
-# Begin a new line even when a user's existing file has no trailing newline.
+# Append an entry on a line of its own, even when a user's existing file has no trailing newline.
+allow() {
+  if [ -s "$gitignore" ] && [ -n "$(tail -c 1 "$gitignore")" ]; then
+    printf '\n' >> "$gitignore"
+  fi
+  printf '%s\n' "$1" >> "$gitignore"
+}
 for entry in '!bin/' '!bin/**'; do
-  grep -qxF -- "$entry" "$gitignore" || printf '\n%s\n' "$entry" >> "$gitignore"
+  grep -qxF -- "$entry" "$gitignore" || allow "$entry"
 done
 
 if [ "$launchers_only" -eq 1 ]; then
@@ -140,7 +146,7 @@ if [ "$with_config" -eq 1 ]; then
     '!facets/knowledge/' '!facets/knowledge/**' \
     '!facets/instructions/' '!facets/instructions/**' \
     '!facets/output-contracts/' '!facets/output-contracts/**'; do
-    grep -qxF -- "$entry" "$gitignore" || { printf '\n%s\n' "$entry" >> "$gitignore"; notes="$notes
+    grep -qxF -- "$entry" "$gitignore" || { allow "$entry"; notes="$notes
   added $entry to .takt/.gitignore"; }
   done
 fi
