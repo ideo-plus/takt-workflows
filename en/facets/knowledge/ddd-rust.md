@@ -2,11 +2,11 @@
 
 ## Aggregate
 
-Centralize direct initialization in one private primary constructor new. Validating auxiliary factories delegate to it. DPs follow of → parse → new; aggregate creation and ES restoration follow business factory/restore → auxiliary → new.
+Centralize direct initialization in one private primary constructor new. Validating auxiliary factories delegate to it. DPs follow of → parse → new; aggregate creation follows business factory → auxiliary → new. ES `replay(events, snapshot)` takes an existing aggregate and advances it through the replay methods, so it is not a construction path.
 
 Follow "Choosing Factory Names" in the modeling knowledge. `from` is infallible; `try_from` returns a Result. Standard `From`/`TryFrom` implementations also follow invariant validation paths. The private full constructor `new` remains the internal construction path called by business factories.
 
-An aggregate keeps private fields, a private constructor that takes the whole state, validating factories that return the operation's own error enum, a `restore` function for persisted event history, and commands that take `&mut self`, change the state, and return the one event they produce. A command that fails changes nothing and produces no event.
+An aggregate keeps private fields, a private constructor that takes the whole state, validating factories that return the operation's own error enum, a sequence number that the creation event starts at 1 and each event advances, a `replay` function that applies the events after a snapshot, and commands that take `&mut self`, change the state, and return the one event they produce. A command that fails changes nothing and produces no event.
 
 ```rust
 pub mod line;
@@ -41,13 +41,14 @@ pub struct CorruptInvoiceHistory;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InvoiceOpened {
     invoice_id: String,
+    sequence_number: u64,
     customer: CustomerId,
     lines: InvoiceLines,
 }
 
 impl InvoiceOpened {
     fn new(invoice_id: &str, customer: CustomerId, lines: InvoiceLines) -> Self {
-        Self { invoice_id: invoice_id.to_string(), customer, lines }
+        Self { invoice_id: invoice_id.to_string(), sequence_number: 1, customer, lines }
     }
 }
 
@@ -66,18 +67,27 @@ impl InvoiceEvent {
             Self::Issued(event) => &event.invoice_id,
         }
     }
+
+    pub fn sequence_number(&self) -> u64 {
+        match self {
+            Self::Opened(event) => event.sequence_number,
+            Self::LineAdded(event) => event.sequence_number,
+            Self::Issued(event) => event.sequence_number,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InvoiceLineAdded {
     invoice_id: String,
+    sequence_number: u64,
     command_id: String,
     line: InvoiceLine,
 }
 
 impl InvoiceLineAdded {
-    fn new(invoice_id: &str, command_id: &str, line: InvoiceLine) -> Self {
-        InvoiceLineAdded { invoice_id: invoice_id.to_string(), command_id: command_id.to_string(), line }
+    fn new(invoice_id: &str, sequence_number: u64, command_id: &str, line: InvoiceLine) -> Self {
+        InvoiceLineAdded { invoice_id: invoice_id.to_string(), sequence_number, command_id: command_id.to_string(), line }
     }
 
     pub fn invoice_id(&self) -> &str {
@@ -96,11 +106,12 @@ impl InvoiceLineAdded {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InvoiceIssued {
     invoice_id: String,
+    sequence_number: u64,
 }
 
 impl InvoiceIssued {
-    fn new(invoice_id: &str) -> Self {
-        InvoiceIssued { invoice_id: invoice_id.to_string() }
+    fn new(invoice_id: &str, sequence_number: u64) -> Self {
+        InvoiceIssued { invoice_id: invoice_id.to_string(), sequence_number }
     }
 
     pub fn invoice_id(&self) -> &str {
@@ -119,6 +130,7 @@ pub enum AddInvoiceLineOutcome {
 pub struct Invoice {
     opening: InvoiceOpened,
     id: String,
+    sequence_number: u64,
     customer: CustomerId,
     lines: InvoiceLines,
     issued: bool,
@@ -126,8 +138,8 @@ pub struct Invoice {
 }
 
 impl Invoice {
-    fn new(opening: InvoiceOpened, lines: InvoiceLines, issued: bool, last_add_line_command_id: Option<String>) -> Self {
-        Self { id: opening.invoice_id.clone(), customer: opening.customer.clone(), opening, lines, issued, last_add_line_command_id }
+    fn new(opening: InvoiceOpened, sequence_number: u64, lines: InvoiceLines, issued: bool, last_add_line_command_id: Option<String>) -> Self {
+        Self { id: opening.invoice_id.clone(), customer: opening.customer.clone(), opening, sequence_number, lines, issued, last_add_line_command_id }
     }
 
     pub fn open(id: &str, customer: CustomerId, lines: InvoiceLines) -> Result<Self, OpenInvoiceError> {
@@ -142,12 +154,18 @@ impl Invoice {
         self.opening.clone()
     }
 
-    pub fn restore(id: &str, events: &[InvoiceEvent]) -> Result<Self, CorruptInvoiceHistory> {
-        let Some(InvoiceEvent::Opened(first)) = events.first() else { return Err(CorruptInvoiceHistory); };
-        if first.invoice_id != id || first.lines.total().is_negative() { return Err(CorruptInvoiceHistory); }
-        let mut invoice = Self::from_opened(first);
-        for event in events.iter().skip(1) {
-            if event.invoice_id() != id { return Err(CorruptInvoiceHistory); }
+    pub fn id(&self) -> &str {
+        &self.id
+    }
+
+    pub fn sequence_number(&self) -> u64 {
+        self.sequence_number
+    }
+
+    pub fn replay(events: &[InvoiceEvent], snapshot: Invoice) -> Result<Self, CorruptInvoiceHistory> {
+        let mut invoice = snapshot;
+        for event in events {
+            if event.invoice_id() != invoice.id || event.sequence_number() != invoice.sequence_number + 1 { return Err(CorruptInvoiceHistory); }
             match event {
                 InvoiceEvent::Opened(_) => return Err(CorruptInvoiceHistory),
                 InvoiceEvent::LineAdded(event) => {
@@ -166,15 +184,17 @@ impl Invoice {
     }
 
     fn from_opened(event: &InvoiceOpened) -> Self {
-        Self::new(event.clone(), event.lines.clone(), false, None)
+        Self::new(event.clone(), event.sequence_number, event.lines.clone(), false, None)
     }
 
     fn apply_line_added(&mut self, event: &InvoiceLineAdded) {
+        self.sequence_number = event.sequence_number;
         self.lines.add(event.line.clone());
         self.last_add_line_command_id = Some(event.command_id.clone());
     }
 
-    fn apply_issued(&mut self, _event: &InvoiceIssued) {
+    fn apply_issued(&mut self, event: &InvoiceIssued) {
+        self.sequence_number = event.sequence_number;
         self.issued = true;
     }
 
@@ -190,7 +210,7 @@ impl Invoice {
         if total.is_negative() {
             return Err(AddInvoiceLineError::NegativeTotal);
         }
-        let event = InvoiceLineAdded::new(&self.id, command_id, line);
+        let event = InvoiceLineAdded::new(&self.id, self.sequence_number + 1, command_id, line);
         self.apply_line_added(&event);
         Ok(AddInvoiceLineOutcome::Applied(event))
     }
@@ -202,7 +222,7 @@ impl Invoice {
         if self.lines.is_empty() {
             return Err(IssueInvoiceError::EmptyLines);
         }
-        let event = InvoiceIssued::new(&self.id);
+        let event = InvoiceIssued::new(&self.id, self.sequence_number + 1);
         self.apply_issued(&event);
         Ok(event)
     }
@@ -221,7 +241,7 @@ impl Invoice {
 }
 ```
 
-`restore` reports a corrupt state with its own type because it is not a business failure. `add_line` remembers the ID of the last add-line command it applied (the model declares `retention: last-one`) and recognizes a resent command before any other check: it returns `AddInvoiceLineOutcome::Duplicate`, changes nothing, and produces no event, so the event is never published twice. It checks the new total before it changes anything. Events are domain types too: their fields are private, they are built by their own `new` inside the aggregate's module, and they offer read-only accessors to the code that publishes them. The customer is the Domain Primitive `CustomerId`, the line amounts are the Domain Primitive `Money`, and the lines are the first-class collection `InvoiceLines`. The invoice ID and the command ID stay `&str` only to keep the example short; when they have domain format or range rules, wrap them as DPs and place them under the `invoice` module as types that belong to the invoice alone (`invoice/invoice_id.rs`, `invoice/command_id.rs`). How to group modules is in "Modules" of the modeling knowledge.
+`replay` reports a corrupt continuation (another aggregate ID, a gap in the sequence numbers, a second creation event) with its own type because it is not a business failure. `add_line` remembers the ID of the last add-line command it applied (the model declares `retention: last-one`) and recognizes a resent command before any other check: it returns `AddInvoiceLineOutcome::Duplicate`, changes nothing, and produces no event, so the event is never published twice. It checks the new total before it changes anything. Events are domain types too: their fields are private, they are built by their own `new` inside the aggregate's module, and they offer read-only accessors to the code that publishes them. The customer is the Domain Primitive `CustomerId`, the line amounts are the Domain Primitive `Money`, and the lines are the first-class collection `InvoiceLines`. The invoice ID and the command ID stay `&str` only to keep the example short; when they have domain format or range rules, wrap them as DPs and place them under the `invoice` module as types that belong to the invoice alone (`invoice/invoice_id.rs`, `invoice/command_id.rs`). How to group modules is in "Modules" of the modeling knowledge.
 
 ## Changing in Place
 
@@ -368,11 +388,11 @@ impl InvoiceLines {
 
 ## Event Sourcing
 
-The standard is Event Sourcing. Commands validate business rules, apply declared replay methods, and return their events. Restoration validates history integrity and replays the same methods in order. Replay makes no new business decisions.
+The standard is Event Sourcing. Commands validate business rules, apply declared replay methods, and return their events. Each event carries the aggregate ID and its sequence number. `replay(events, snapshot)` validates that the events continue the snapshot and applies the same methods in order. Replay makes no new business decisions.
 
 ## Ports, Use Cases, and Adapters
 
-The repository port is a trait named after the aggregate, declared in the use-case crate and never in a domain crate. Loading and storing reach outside the process and can fail, so every method returns `Result` and reports a failure as `RepositoryError`, an infrastructure failure declared beside the port, not a business error. The lookup does not treat a missing invoice as a failure and returns `Ok(None)` (`Result<Option<Invoice>, RepositoryError>`); the store changes what is stored, so it takes `&mut self` and returns `Result<(), RepositoryError>`. Taking `&self` and changing the storage through a `RefCell` inside the implementation hides the change behind interior mutability. The one exception is a port shared across threads that needs a lock: then the trait declares `Send + Sync`, the store takes `&self`, and the implementation guards its storage with a `Mutex` or an `RwLock`. A use case holds the port as a `&mut` reference to a generic parameter (static dispatch), and its `execute` takes `&mut self`; a trait object is only for choosing an implementation at run time. The use case turns a missing invoice into its own error (`InvoiceNotFound`), stores the event the command produced, returns a failed store instead of dropping it, and returns the event for the caller to publish after persistence.
+The repository port is a trait named after the aggregate, declared in the use-case crate and never in a domain crate. Loading and storing reach outside the process and can fail, so every method returns `Result` and reports a failure as `RepositoryError`, an infrastructure failure declared beside the port, not a business error. The lookup does not treat a missing invoice as a failure and returns `Ok(None)` (`Result<Option<Invoice>, RepositoryError>`); the store changes what is stored, so it takes `&mut self` and returns `Result<(), RepositoryError>`. An Event Sourcing store takes the domain event, which already carries its aggregate ID, and the aggregate right after that event as the snapshot: `store(&mut self, event, snapshot)`. It takes no separate aggregate ID. Taking `&self` and changing the storage through a `RefCell` inside the implementation hides the change behind interior mutability. The one exception is a port shared across threads that needs a lock: then the trait declares `Send + Sync`, the store takes `&self`, and the implementation guards its storage with a `Mutex` or an `RwLock`. A use case holds the port as a `&mut` reference to a generic parameter (static dispatch), and its `execute` takes `&mut self`; a trait object is only for choosing an implementation at run time. The use case turns a missing invoice into its own error (`InvoiceNotFound`), stores the event the command produced together with the aggregate after it, returns a failed store instead of dropping it, and returns the event for the caller to publish after persistence.
 
 ```rust
 use billing_domain::invoice::{Invoice, InvoiceEvent};
@@ -382,7 +402,7 @@ pub struct RepositoryError { pub message: String }
 
 pub trait InvoiceRepository {
     fn find_by_id(&self, invoice_id: &str) -> Result<Option<Invoice>, RepositoryError>;
-    fn store(&mut self, invoice_id: &str, event: InvoiceEvent) -> Result<(), RepositoryError>;
+    fn store(&mut self, event: InvoiceEvent, snapshot: Invoice) -> Result<(), RepositoryError>;
 }
 
 use billing_domain::invoice::{InvoiceEvent, InvoiceIssued, IssueInvoiceError};
@@ -414,13 +434,13 @@ impl<'a, R: InvoiceRepository> IssueInvoiceUseCase<'a, R> {
             return Err(IssueInvoiceFailure::NotFound(InvoiceNotFound));
         };
         let issued = invoice.issue().map_err(IssueInvoiceFailure::Rejected)?;
-        self.invoice_repository.store(invoice_id, InvoiceEvent::Issued(issued.clone())).map_err(IssueInvoiceFailure::Repository)?;
+        self.invoice_repository.store(InvoiceEvent::Issued(issued.clone()), invoice).map_err(IssueInvoiceFailure::Repository)?;
         Ok(issued)
     }
 }
 ```
 
-The repository keeps domain events in `HashMap<String, Vec<InvoiceEvent>>`. Loading returns a replayed aggregate; storing appends an event. The adapter owns history loading and replay, while the use case invokes the aggregate and requests persistence.
+The repository keeps domain events in `HashMap<String, Vec<InvoiceEvent>>` and snapshots of the aggregate itself in `HashMap<String, Invoice>`. Storing appends the event; whether it also keeps the snapshot is the adapter's choice (here at creation and every `snapshot_interval` events). Loading reads the latest snapshot and replays only the events after its sequence number, because replaying the whole history gets slower as the stream grows. Storing checks that the snapshot is the state right after the event (same ID and number) and that the event follows the stored stream (the next number), which also detects a concurrent update. The adapter owns history loading and replay and exposes nothing beyond its port (no `events_for` for tests); tests observe it through `find_by_id`. The use case invokes the aggregate and requests persistence.
 
 ```rust
 use std::collections::HashMap;
@@ -429,21 +449,37 @@ use billing_use_case::invoice_repository::{InvoiceRepository, RepositoryError};
 
 pub struct InMemoryInvoiceRepository {
     events: HashMap<String, Vec<InvoiceEvent>>,
+    snapshots: HashMap<String, Invoice>,
+    snapshot_interval: u64,
 }
 
 impl InMemoryInvoiceRepository {
-    pub fn new() -> Self { Self { events: HashMap::new() } }
+    pub fn new(snapshot_interval: u64) -> Self {
+        assert!(snapshot_interval > 0, "the snapshot interval must be positive");
+        Self { events: HashMap::new(), snapshots: HashMap::new(), snapshot_interval }
+    }
 }
 
 impl InvoiceRepository for InMemoryInvoiceRepository {
     fn find_by_id(&self, invoice_id: &str) -> Result<Option<Invoice>, RepositoryError> {
-        let Some(events) = self.events.get(invoice_id) else { return Ok(None); };
-        Invoice::restore(invoice_id, events).map(Some).map_err(|_| RepositoryError { message: "corrupt invoice history".to_string() })
+        let Some(snapshot) = self.snapshots.get(invoice_id) else { return Ok(None); };
+        let events: Vec<InvoiceEvent> = self.events.get(invoice_id).into_iter().flatten().filter(|event| event.sequence_number() > snapshot.sequence_number()).cloned().collect();
+        Invoice::replay(&events, snapshot.clone()).map(Some).map_err(|_| RepositoryError { message: "corrupt invoice history".to_string() })
     }
 
-    fn store(&mut self, invoice_id: &str, event: InvoiceEvent) -> Result<(), RepositoryError> {
-        if event.invoice_id() != invoice_id { return Err(RepositoryError { message: "event belongs to another invoice".to_string() }); }
-        self.events.entry(invoice_id.to_string()).or_default().push(event);
+    fn store(&mut self, event: InvoiceEvent, snapshot: Invoice) -> Result<(), RepositoryError> {
+        if event.invoice_id() != snapshot.id() || event.sequence_number() != snapshot.sequence_number() {
+            return Err(RepositoryError { message: "the snapshot is not the state after the event".to_string() });
+        }
+        let last = self.events.get(event.invoice_id()).and_then(|stream| stream.last()).map_or(0, InvoiceEvent::sequence_number);
+        if event.sequence_number() != last + 1 {
+            return Err(RepositoryError { message: "the event does not follow the stored history".to_string() });
+        }
+        let sequence_number = event.sequence_number();
+        self.events.entry(event.invoice_id().to_string()).or_default().push(event);
+        if sequence_number == 1 || sequence_number % self.snapshot_interval == 0 {
+            self.snapshots.insert(snapshot.id().to_string(), snapshot);
+        }
         Ok(())
     }
 }

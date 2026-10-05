@@ -14,8 +14,8 @@ import { evaluateDomainPackaging } from "./packaging.ts";
 import { rulePrimitiveInitialization } from "./primitives.ts";
 import { ruleFactoryNaming } from "./factories.ts";
 import { rulePrimaryConstructor } from "./constructors.ts";
-import { inMemoryAggregates, storedMapValue, eventStreamElement, isAggregateStateElement } from "../in-memory.ts";
-import { repositoryContractProblem, resultArguments, expandGenericStoreResult } from "../repository-contract.ts";
+import { inMemoryAggregates, storedMapValue, eventStreamElement, isAggregateStateElement, EVENT_SOURCING_STORAGE, eventSourcingStorageGaps } from "../in-memory.ts";
+import { repositoryContractProblem, resultArguments, expandGenericStoreResult, EVENT_SOURCING_STORE, ADAPTER_SURFACE } from "../repository-contract.ts";
 import { within as withinSpan } from "./program.ts";
 
 function within(span: Span, outer: Span): boolean {
@@ -707,6 +707,59 @@ function ruleRepositoryContract(target: InspectionTarget, context: InspectionCon
   return findings;
 }
 
+/**
+ * An Event Sourcing repository port stores the domain event with the aggregate after it,
+ * `fn store(&mut self, event: Event, snapshot: Aggregate)`: the event already carries its aggregate
+ * ID, and the snapshot lets find_by_id replay only the events after it. Either may be borrowed.
+ */
+function ruleEventSourcingStore(target: InspectionTarget, context: InspectionContext): FindingInput[] {
+  if (!target.file || context.rustMapping.kind !== "loaded") return [];
+  const file = target.file;
+  const facts = declarationsOf(context, file);
+  const module = context.program.files.get(file)!.module;
+  const findings: FindingInput[] = [];
+  for (const port of facts.traits.filter((entry) => entry.name.endsWith("Repository"))) {
+    const aggregate = context.rustMapping.view.aggregates.find((entry) => entry.persistence_method === "event-sourcing" && `${entry.type}Repository` === port.name);
+    if (!aggregate) continue;
+    const crate = aggregate.crate.replace(/-/g, "_");
+    const resolve = (text: string) => context.program.resolveType(file, [...module, ...port.module], text.replace(/^&\s*/, ""));
+    for (const method of port.signatures.filter((entry) => entry.name === "store")) {
+      const [event, snapshot] = method.params.map((param) => resolve(param.type_text));
+      const eventOk = Boolean(event && event.crate === crate && event.name !== aggregate.type && !isAggregateStateElement(context.model, aggregate.aggregate_ref, event.name));
+      const snapshotOk = Boolean(snapshot && snapshot.crate === crate && snapshot.name === aggregate.type);
+      if (method.params.length === 2 && eventOk && snapshotOk) continue;
+      const spelled = method.params.map((param) => `${param.name}: ${param.type_text}`).join(", ");
+      findings.push(finding("event-sourcing-store", file, `${port.name}::store(${spelled}): ${EVENT_SOURCING_STORE}`, method.line));
+    }
+  }
+  return findings;
+}
+
+/**
+ * A struct that implements a repository port exposes only that port and its constructors: a public
+ * inherent method other than an associated function returning `Self` (an `events_for` that hands the
+ * stored history to tests), or a public field, widens the adapter beyond the use case's contract.
+ */
+function ruleRepositoryAdapterSurface(target: InspectionTarget, context: InspectionContext): FindingInput[] {
+  if (!target.file) return [];
+  const file = target.file;
+  const facts = declarationsOf(context, file);
+  const adapters = new Set(facts.impls.filter((entry) => entry.trait_text?.replace(/<.*$/, "").split("::").pop()!.endsWith("Repository")).map((entry) => entry.target_type_text.replace(/<.*$/, "")));
+  const findings: FindingInput[] = [];
+  for (const type of facts.types.filter((entry) => adapters.has(entry.name)))
+    for (const field of type.fields.filter((entry) => entry.visibility !== "private"))
+      findings.push(finding("repository-adapter-surface", file, `${type.name}.${field.name} is not part of its port: ${ADAPTER_SURFACE}`, field.line));
+  for (const block of facts.impls.filter((entry) => entry.trait_text === undefined && adapters.has(entry.target_type_text.replace(/<.*$/, ""))))
+    for (const method of block.methods) {
+      if (method.visibility === "private") continue;
+      const returned = method.return_type_text?.replace(/\s+/g, "");
+      const constructs = method.receiver === "none" && (returned === "Self" || returned === block.target_type_text.replace(/\s+/g, ""));
+      if (constructs) continue;
+      findings.push(finding("repository-adapter-surface", file, `${block.target_type_text}::${method.name} is not part of its port: ${ADAPTER_SURFACE}`, method.line));
+    }
+  return findings;
+}
+
 function ruleInMemoryRestoration(target: InspectionTarget, context: InspectionContext): FindingInput[] {
   return inMemoryStorage(target, context, "in-memory-restoration");
 }
@@ -730,6 +783,7 @@ function inMemoryStorage(target: InspectionTarget, context: InspectionContext, r
   for (const repository of facts.types) {
     const owned = aggregates.filter((entry) => repositories.some((port) => port.target_type_text === repository.name && port.trait_text?.split("::").pop() === `${entry.type}Repository`));
     if (!owned.length) continue;
+    let streams = 0, snapshots = 0;
     for (const field of repository.fields) {
       const value = storedMapValue(field.type_text);
       if (value === undefined) continue;
@@ -738,9 +792,12 @@ function inMemoryStorage(target: InspectionTarget, context: InspectionContext, r
       const direct = Boolean(type && owned.some((entry) => entry.type === type.name && entry.crate.replace(/-/g, "_") === type.crate));
       const stateElement = Boolean(type && owned.some((entry) => isAggregateStateElement(context.model, entry.aggregate_ref, type.name)));
       const domainEvent = Boolean(type && owned.some((entry) => entry.crate.replace(/-/g, "_") === type.crate));
-      if (state ? direct : element !== undefined && domainEvent && !direct && !stateElement) continue;
-      findings.push(finding(rule, target.file, `${repository.name}.${field.name} stores ${value}; ${state ? "its map must retain the aggregate directly" : "Event Sourcing stores event streams rather than aggregate state"}`, field.line));
+      if (state && direct) continue;
+      if (!state && element !== undefined && domainEvent && !direct && !stateElement) { streams++; continue; }
+      if (!state && element === undefined && direct) { snapshots++; continue; }
+      findings.push(finding(rule, target.file, `${repository.name}.${field.name} stores ${value}; ${state ? "its map must retain the aggregate directly" : EVENT_SOURCING_STORAGE}`, field.line));
     }
+    if (!state) for (const problem of eventSourcingStorageGaps(streams, snapshots)) findings.push(finding(rule, target.file, `${repository.name} ${problem}`, repository.line));
   }
   if (!state) return findings;
   return [...findings, ...facts.constructions.flatMap((site) => {
@@ -777,6 +834,8 @@ export const PER_FILE_EVALUATORS: Record<
   n: ruleN,
   "in-memory-restoration": ruleInMemoryRestoration,
   "event-sourcing-storage": ruleEventSourcingStorage,
+  "event-sourcing-store": ruleEventSourcingStore,
+  "repository-adapter-surface": ruleRepositoryAdapterSurface,
 };
 
 export const CONTEXT_EVALUATORS: Record<

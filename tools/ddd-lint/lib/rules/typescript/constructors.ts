@@ -40,7 +40,9 @@ export function rulePrimaryConstructor(inspection: TsInspection, target: TsTarge
       const found = resolveTypeName(inspection.packages, inspection.symbols, target.file, facts, text);
       return found.kind === "domain" && found.type.key === type.key;
     };
-    const paths = members.filter((method) => method.name === primary || owns(resultArguments(method.return_type_text)?.[0] ?? method.return_type_text ?? "")).map((method) => {
+    // A method that takes an instance of the type evolves it (Event Sourcing `replay(events, snapshot)`); it constructs nothing new.
+    const evolves = (method: (typeof members)[number]) => (method.params ?? []).some((param) => param.type_text !== undefined && owns(param.type_text));
+    const paths = members.filter((method) => method.name === primary || (owns(resultArguments(method.return_type_text)?.[0] ?? method.return_type_text ?? "") && !evolves(method))).map((method) => {
       const targets = facts.calls.flatMap((call) => {
         if (!within(call.span, method.span) || call.kind !== "method-call" || !call.receiver_text) return [];
         const nested = facts.constructions.filter((site) => site.kind === "typed-object-literal").flatMap((site) => site.members)

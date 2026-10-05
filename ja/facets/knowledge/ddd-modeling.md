@@ -391,7 +391,7 @@ layer_structures:
 永続化を持たない集約だけのコンテキストでも、パッケージ、依存行、復元経路は宣言する。`ports: []`、`repositories: []`、`persistence_backend: none` は明示的に記述できる。
 
 
-Event Sourcing は保存媒体にかかわらず `via: event-replay` を宣言する。リポジトリが保持するのは順序付きの追記専用ドメインイベント列であり、集約に宣言した replay メソッドで復元する。インメモリの Map／HashMap もイベント列を保持し、集約の現在状態やその保存ラッパーを格納しない。
+Event Sourcing は保存媒体にかかわらず `via: event-replay` を宣言する。リポジトリが保持するのは、順序付きの追記専用ドメインイベント列と、集約そのもののスナップショットである。読込は、最新のスナップショットにその後のイベントを集約に宣言した replay メソッドで適用する。インメモリの Map／HashMap も、イベント列の Map と、集約そのものを値に持つスナップショットの Map を 1 つずつ持つ。集約の状態を別の型に詰め替えた保存ラッパーは格納しない。
 
 ## ファクトリ名の選択
 
@@ -410,7 +410,7 @@ Event Sourcing は保存媒体にかかわらず `via: event-replay` を宣言�
 
 Rust では `value_of`・`get_instance`・`new_instance` のように snake_case にする。`from` は失敗しない変換として扱い、失敗する変換は `try_from` と `Result` を使う。TypeScript の `from` は、失敗するなら操作固有のエラーを持つ Result を返す。TS のインスタンス `valueOf()` は、言語の変換フックとして別に扱う。
 
-命名リンターは `of`・`parse`・`from`・Rust の `try_from` の構造を検査する。キャッシュ・新規性・アルゴリズムの意味はレビューで確認する。ES の `restore` と宣言済み replay メソッドは、履歴を復元・適用する専用の経路である。
+命名リンターは `of`・`parse`・`from`・Rust の `try_from` の構造を検査する。キャッシュ・新規性・アルゴリズムの意味はレビューで確認する。ES の `replay` と宣言済み replay メソッドは、履歴を適用する専用の経路である。
 
 参考にした一次資料: [LocalDate.of](https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/time/LocalDate.html)、[Integer.valueOf／parseInt](https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/lang/Integer.html)、[Calendar の実装](https://github.com/openjdk/jdk/blob/jdk-25-ga/src/java.base/share/classes/java/util/Calendar.java)、[UUID.randomUUID](https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/util/UUID.html)、[Rust From](https://doc.rust-lang.org/std/convert/trait.From.html)、[ECMAScript valueOf](https://tc39.es/ecma262/multipage/fundamental-objects.html#sec-object.prototype.valueof)。Java の3引数の日付構築例は `LocalDate.of(year, month, day)`、UUID の標準生成例は `UUID.randomUUID()` である。
 
@@ -457,7 +457,7 @@ packages/command/billing-domain/src/
 
 このワークフローの永続化方式は Event Sourcing に統一する。
 
-リポジトリの公開境界は集約である。`findById`（Rust は `find_by_id`）は履歴を内部で replay した集約を `Result<Aggregate | undefined, RepositoryError>`（Rust は `Result<Option<Aggregate>, RepositoryError>`）で返す。`store` は集約IDと今回のドメインイベントを受け取り、追記成功を `Result<void, RepositoryError>`（Rust は `Result<(), RepositoryError>`）で返す。`loadEvents` をリポジトリポートへ公開したり、ユースケースで履歴を replay したりしない。これを計画時のAPI・受入条件にも宣言する。
+リポジトリの公開境界は集約である。`findById`（Rust は `find_by_id`）は、最新のスナップショットにその後のイベントを内部で replay した集約を `Result<Aggregate | undefined, RepositoryError>`（Rust は `Result<Option<Aggregate>, RepositoryError>`）で返す。`store` は、集約 ID を持つ今回のドメインイベントと、そのイベントの直後の集約（スナップショット）を受け取り（`store(event, snapshot)`）、追記成功を `Result<void, RepositoryError>`（Rust は `Result<(), RepositoryError>`）で返す。集約 ID を別の引数で渡さない。`loadEvents` をリポジトリポートへ公開したり、ユースケースで履歴を replay したりしない。これを計画時のAPI・受入条件にも宣言する。
 
 State Sourcing のコード例・保存経路を混在させない。
 

@@ -31,13 +31,13 @@ import {
   ruleDomainPackaging,
 } from "./evaluators.ts";
 import { factsOf } from "./file-facts.ts";
-import { ruleL, ruleM, ruleN, ruleInMemoryRestoration, ruleEventSourcingStorage } from "./interface-adapter.ts";
+import { ruleL, ruleM, ruleN, ruleInMemoryRestoration, ruleEventSourcingStorage, ruleRepositoryAdapterSurface } from "./interface-adapter.ts";
 import { ruleA } from "./state-hiding.ts";
 import { rulePrimitiveInitialization } from "./primitives.ts";
 import { ruleFactoryNaming } from "./factories.ts";
 import { rulePrimaryConstructor } from "./constructors.ts";
 import type { TsGate, TsInspection, TsTarget } from "./types.ts";
-import { ruleH, ruleI, ruleRepositoryResult, ruleRepositoryContract, ruleUseCaseName } from "./use-case.ts";
+import { ruleH, ruleI, ruleRepositoryResult, ruleRepositoryContract, ruleUseCaseName, ruleEventSourcingStore } from "./use-case.ts";
 
 const DOMAIN: TsGate = {
   label: "domain",
@@ -60,7 +60,8 @@ const INTERFACE_ADAPTER: TsGate = {
   label: "interface-adapter",
   target_layers: ["interface-adapter", "rmu"],
   includes_query_side: true,
-  described_layers: ["domain"],
+  // The use-case layer is read for the repository ports an adapter implements.
+  described_layers: ["domain", "use-case"],
   reports_layer_diagnostics: false,
 };
 
@@ -127,6 +128,7 @@ export function evaluateTypeScriptUseCase(run: ProjectContext, api: CheckApi): C
       ...ruleUseCaseName(inspection, target),
       ...ruleRepositoryResult(inspection, target),
       ...ruleRepositoryContract(inspection, target),
+      ...ruleEventSourcingStore(inspection, target),
     ],
     whole: (inspection) => ruleG(buildEdges(inspection)),
   });
@@ -140,6 +142,7 @@ export function evaluateTypeScriptInterfaceAdapter(run: ProjectContext, api: Che
       ...ruleN(inspection, target),
       ...ruleInMemoryRestoration(inspection, target),
       ...ruleEventSourcingStorage(inspection, target),
+      ...ruleRepositoryAdapterSurface(inspection, target),
     ],
     whole: (inspection) => {
       const edges = buildEdges(inspection);

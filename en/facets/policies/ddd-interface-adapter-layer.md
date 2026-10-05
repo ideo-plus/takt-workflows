@@ -13,15 +13,19 @@ Judges the code of the interface adapter layer (repository implementations, exch
 | The lookup reports a missing aggregate as a failure of the port | REJECT. Return `undefined` (`None` in Rust) as a success; the use case turns the absence into its own error |
 | A repository port offers screen-oriented searches | REJECT. Put them on the query side |
 | One repository handles several aggregate types | REJECT |
+| A repository implementation has public methods or fields its port does not declare (an `eventsFor` for tests) | REJECT. Expose only the port and the constructors; tests observe the implementation through the port (`findById`) |
 | An external model is used inside the domain without stating whether it is adopted or translated | REJECT |
 
 ## Persistence
 
-The standard is Event Sourcing. Store append-only event sequences by aggregate ID and declare via: event-replay. The public repository loads aggregates and stores their domain events; the adapter owns history replay. Memory implementations retain events directly in Map<Id, readonly DomainEvent[]> / HashMap<Id, Vec<DomainEvent>>.
+The standard is Event Sourcing. Store append-only event sequences by aggregate ID and declare via: event-replay. The public repository loads aggregates (`findById`) and stores each domain event with the aggregate right after it as the snapshot (`store(event, snapshot)`). Loading applies only the events after the latest snapshot's sequence number to that snapshot, and the adapter owns this replay. Memory implementations retain events directly in `Map<Id, readonly DomainEvent[]>` / `HashMap<Id, Vec<DomainEvent>>` and snapshots in `Map<Id, Aggregate>` / `HashMap<Id, Aggregate>`.
 
 | Criterion | Judgment |
 |-----------|----------|
 | `store` overwrites unconditionally although concurrent updates are possible | REJECT. Use an expected version or an equivalent constraint |
+| Version wrappers or storage DTOs are added only to guard against concurrent updates nobody asked for | REJECT. State the concurrency condition that is needed and add no extra types |
+| An Event Sourcing `store` takes the aggregate ID as a separate parameter or takes no snapshot (the aggregate right after the event) | REJECT. Use `store(event, snapshot)`. The event carries the aggregate ID, and with a snapshot, loading replays only the events after the latest snapshot |
+| Loading replays the whole history from the start of the stream every time | REJECT. Loading slows down as the stream grows; apply only the events after the latest snapshot's sequence number to it |
 | Event-sourced persistence rewrites or deletes existing events | REJECT |
 | Uniqueness is decided by reading first instead of by a storage constraint | REJECT |
 | Database-specific errors leak to the use-case layer untranslated | REJECT |

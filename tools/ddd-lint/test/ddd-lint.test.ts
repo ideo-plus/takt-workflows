@@ -305,10 +305,29 @@ describe("in-memory aggregate storage", () => {
         const path = rust ? "packages/command/billing-interface-adapter/src/in_memory_invoice_repository.rs" : "packages/command/billing-interface-adapter/src/in-memory-invoice-repository.ts";
         replace(files, "docs/ddd/aggregate-mapping.yaml", "persistence_method: state-sourcing", "persistence_method: event-sourcing");
         replace(files, "docs/ddd/layer-structure.yaml", "via: stored-instance", "via: event-replay");
-        replace(files, path, rust ? "HashMap<String, Invoice>" : "Map<string, Invoice>", rust ? "HashMap<String, Vec<InvoiceIssued>>" : "Map<string, readonly InvoiceIssued[]>");
+        replace(files, path, rust ? "    stored: HashMap<String, Invoice>," : "  readonly #stored: Map<string, Invoice>;", rust ? "    stored: HashMap<String, Invoice>,\n    events: HashMap<String, Vec<InvoiceIssued>>," : "  readonly #stored: Map<string, Invoice>;\n  readonly #events: Map<string, readonly InvoiceIssued[]> = new Map();");
         files[path] = (rust ? "use billing_domain::invoice::InvoiceIssued;\n" : 'import type { InvoiceIssued } from "@acme/billing-domain";\n') + files[path];
       });
       expect(result.findings.filter((entry) => ["in-memory-restoration", "event-sourcing-storage", "repository-result-contract"].includes(entry.rule_id) || entry.rule_id.startsWith("layer-declaration."))).toEqual([]);
+    });
+    test(`${sample.name} requires both event streams and an aggregate snapshot for Event Sourcing`, () => {
+      const rust = sample.name.startsWith("rust");
+      const path = rust ? "packages/command/billing-interface-adapter/src/in_memory_invoice_repository.rs" : "packages/command/billing-interface-adapter/src/in-memory-invoice-repository.ts";
+      const declareEventSourcing = (files: Record<string, string>) => {
+        replace(files, "docs/ddd/aggregate-mapping.yaml", "persistence_method: state-sourcing", "persistence_method: event-sourcing");
+        replace(files, "docs/ddd/layer-structure.yaml", "via: stored-instance", "via: event-replay");
+        files[path] = (rust ? "use billing_domain::invoice::InvoiceIssued;\n" : 'import type { InvoiceIssued } from "@acme/billing-domain";\n') + files[path];
+      };
+      const onlyEvents = lint(sample.files, (files) => {
+        declareEventSourcing(files);
+        replace(files, path, rust ? "HashMap<String, Invoice>" : "Map<string, Invoice>", rust ? "HashMap<String, Vec<InvoiceIssued>>" : "Map<string, readonly InvoiceIssued[]>");
+      });
+      expect(onlyEvents.findings.some((entry) => entry.rule_id === "event-sourcing-storage" && entry.message.includes("keeps no aggregate snapshot"))).toBe(true);
+      const twoSnapshots = lint(sample.files, (files) => {
+        declareEventSourcing(files);
+        replace(files, path, rust ? "    stored: HashMap<String, Invoice>," : "  readonly #stored: Map<string, Invoice>;", rust ? "    stored: HashMap<String, Invoice>,\n    copies: HashMap<String, Invoice>,\n    events: HashMap<String, Vec<InvoiceIssued>>," : "  readonly #stored: Map<string, Invoice>;\n  readonly #copies: Map<string, Invoice> = new Map();\n  readonly #events: Map<string, readonly InvoiceIssued[]> = new Map();");
+      });
+      expect(twoSnapshots.findings.some((entry) => entry.rule_id === "event-sourcing-storage" && entry.message.includes("more than one snapshot map"))).toBe(true);
     });
     test(`${sample.name} rejects aggregate state storage declared as Event Sourcing`, () => {
       const result = lint(sample.files, (files) => {
@@ -691,12 +710,38 @@ describe("Event Sourcing repository contract", () => {
       const result = lint(sample.files, (files) => replace(files, path, sample.name.includes("typescript") ? "Result<Invoice | undefined, RepositoryError>" : "Result<Option<Invoice>, RepositoryError>", sample.name.includes("typescript") ? "Result<readonly InvoiceEvent[] | undefined, RepositoryError>" : "Result<Option<Vec<InvoiceEvent>>, RepositoryError>"));
       expect(result.findings.some((finding) => finding.rule_id === "repository-result-contract")).toBe(true);
     });
+    test(`${sample.name} stores the event with the aggregate snapshot after it`, () => {
+      const rust = sample.name.includes("rust");
+      const path = rust ? "packages/command/billing-use-case/src/invoice_repository.rs" : "packages/command/billing-use-case/src/invoice-repository.ts";
+      const stated = rust ? "fn store(&mut self, event: InvoiceEvent, snapshot: Invoice)" : "store(event: InvoiceEvent, snapshot: Invoice)";
+      for (const wrong of rust
+        ? ["fn store(&mut self, invoice_id: &str, event: InvoiceEvent)", "fn store(&mut self, event: InvoiceEvent)", "fn store(&mut self, snapshot: Invoice, event: InvoiceEvent)", "fn store(&mut self, event: Invoice, snapshot: Invoice)"]
+        : ["store(invoiceId: string, event: InvoiceEvent)", "store(event: InvoiceEvent)", "store(snapshot: Invoice, event: InvoiceEvent)", "store(event: Invoice, snapshot: Invoice)"]) {
+        const result = lint(sample.files, (files) => replace(files, path, stated, wrong));
+        expect(result.findings.filter((finding) => finding.rule_id === "event-sourcing-store").length).toBe(1);
+      }
+      const borrowed = lint(sample.files, (files) => replace(files, path, stated, rust ? "fn store(&mut self, event: &InvoiceEvent, snapshot: &Invoice)" : stated));
+      expect(borrowed.findings.filter((finding) => finding.rule_id === "event-sourcing-store")).toEqual([]);
+    });
+    test(`${sample.name} exposes nothing beyond the repository port`, () => {
+      const rust = sample.name.includes("rust");
+      const path = rust ? "packages/command/billing-interface-adapter/src/in_memory_invoice_repository.rs" : "packages/command/billing-interface-adapter/src/in-memory-invoice-repository.ts";
+      const accessor = lint(sample.files, (files) => {
+        if (rust) replace(files, path, "impl InvoiceRepository for InMemoryInvoiceRepository {", "impl InMemoryInvoiceRepository {\n    pub fn events_for(&self, invoice_id: &str) -> &[InvoiceEvent] { self.events.get(invoice_id).map(Vec::as_slice).unwrap_or(&[]) }\n    fn helper(&self) -> usize { self.events.len() }\n}\n\nimpl InvoiceRepository for InMemoryInvoiceRepository {");
+        else replace(files, path, "  findById(invoiceId: string)", "  eventsFor(invoiceId: string): readonly InvoiceEvent[] {\n    return this.#events.get(invoiceId) ?? [];\n  }\n\n  #helper(): number {\n    return this.#events.size;\n  }\n\n  findById(invoiceId: string)");
+      });
+      const reported = accessor.findings.filter((finding) => finding.rule_id === "repository-adapter-surface");
+      expect(reported.length).toBe(1);
+      expect(reported[0]!.message).toContain(rust ? "events_for" : "eventsFor");
+      const field = lint(sample.files, (files) => replace(files, path, rust ? "    snapshot_interval: u64," : "  readonly #snapshotInterval: number;", rust ? "    pub snapshot_interval: u64," : "  readonly snapshotInterval: number;"));
+      expect(field.findings.filter((finding) => finding.rule_id === "repository-adapter-surface").length).toBe(1);
+    });
     test(`${sample.name} rejects a creation event attributed to a primitive parser`, () => {
       const result = lint(sample.files, (files) => replace(files, "docs/ddd/domain-model.yaml", "produced_by: factory.invoice.open", "produced_by: factory.invoice.parse-money"));
       expect(result.findings.some((finding) => finding.rule_id === "schema.creation-event-producer")).toBe(true);
     });
   }
-  test("TypeScript retains event history and replays it inside the repository", () => {
+  test("TypeScript replays the events after the latest snapshot inside the repository", () => {
     const dir = writeProject(eventTypeScriptSample().files, "ddd-es-runtime-");
     try {
       const scope = join(dir,"node_modules/@acme"); mkdirSync(scope,{recursive:true});
@@ -705,48 +750,76 @@ describe("Event Sourcing repository contract", () => {
 import {Invoice,CustomerId,InvoiceLine,InvoiceLines,Money} from '@acme/billing-domain';
 import {IssueInvoiceUseCase} from '@acme/billing-use-case';
 import {InMemoryInvoiceRepository} from '@acme/billing-interface-adapter';
-const initial=Invoice.open('i1',CustomerId.of('C000001'),InvoiceLines.of([InvoiceLine.of(Money.of(100))]));
-assert.equal(initial.ok,true); if(!initial.ok)throw Error('open');
-const repository=new InMemoryInvoiceRepository();
+const open=(id)=>{const opened=Invoice.open(id,CustomerId.of('C000001'),InvoiceLines.of([InvoiceLine.of(Money.of(100))])); if(!opened.ok)throw Error('open'); return opened.value;};
+const addLine=(invoice,commandId)=>{const added=invoice.addLine(commandId,InvoiceLine.of(Money.of(100))); if(!added.ok||added.value.kind!=='applied')throw Error('add'); return added.value;};
+const initial=open('i1');
+assert.equal(initial.sequenceNumber(),1);
+assert.throws(()=>new InMemoryInvoiceRepository(0));
+const repository=new InMemoryInvoiceRepository(2);
 assert.deepEqual(repository.findById('missing'),{ok:true,value:undefined});
-assert.equal(repository.store('i1',initial.value.openedEvent()).ok,true);
-const loaded=repository.findById('i1'); assert.equal(loaded.ok,true); if(!loaded.ok||!loaded.value)throw Error('load');
-assert.notStrictEqual(loaded.value,initial.value);
-const added=loaded.value.addLine('c1',InvoiceLine.of(Money.of(100))); if(!added.ok||added.value.kind!=='applied')throw Error('add');
+assert.equal(repository.store(initial.openedEvent(),open('i2')).ok,false);
+assert.equal(repository.store(initial.openedEvent(),initial).ok,true);
+const second=addLine(repository.findById('i1').value,'c1');
+assert.equal(second.event.sequenceNumber,2);
 assert.equal(repository.findById('i1').value.lines().length,1);
-assert.equal(repository.store('i1',added.value.event).ok,true);
-assert.equal(repository.findById('i1').value.lines().length,2);
+assert.equal(repository.store(second.event,initial).ok,false);
+assert.equal(repository.store(second.event,second.invoice).ok,true);
+assert.equal(repository.store(second.event,second.invoice).ok,false);
 assert.equal(repository.findById('i1').value.addLine('c1',InvoiceLine.of(Money.of(100))).value.kind,'duplicate');
+const third=addLine(repository.findById('i1').value,'c2');
+assert.equal(repository.store(third.event,third.invoice).ok,true);
+const latest=repository.findById('i1').value;
+assert.equal(latest.sequenceNumber(),3);
+assert.equal(latest.lines().length,3);
 assert.equal(new IssueInvoiceUseCase(repository).execute('i1').ok,true);
 assert.equal(new IssueInvoiceUseCase(repository).execute('i1').ok,false);
-assert.equal(repository.findById('i1').value.lines().length,2);
-assert.equal(repository.store('wrong',initial.value.openedEvent()).ok,false);
-assert.throws(()=>Invoice.restore('i1',[initial.value.openedEvent(),initial.value.openedEvent()]));`;
+assert.equal(repository.findById('i1').value.sequenceNumber(),4);
+assert.throws(()=>Invoice.replay([initial.openedEvent()],initial));
+assert.throws(()=>Invoice.replay([second.event,second.event],initial));`;
       const result=spawnSync("bun",["-e",code],{cwd:dir,encoding:"utf8"});
       if(result.status!==0)throw Error(result.stderr+result.stdout); expect(result.status).toBe(0);
     } finally {rmSync(dir,{recursive:true,force:true});}
   });
-  test("Rust retains events while mutation of a loaded aggregate stays local", () => {
+  test("Rust replays the events after the latest snapshot inside the repository", () => {
     const dir=writeProject(eventRustSample().files,"ddd-es-rust-runtime-");
     try {
       const path=join(dir,"packages/command/billing-interface-adapter/tests/history.rs");mkdirSync(dirname(path),{recursive:true});
-      writeFileSync(path,`use billing_domain::{customer_id::CustomerId,invoice::{Invoice,InvoiceEvent,line::InvoiceLine,lines::InvoiceLines},money::Money};
+      writeFileSync(path,`use billing_domain::{customer_id::CustomerId,invoice::{AddInvoiceLineOutcome,Invoice,InvoiceEvent,line::InvoiceLine,lines::InvoiceLines},money::Money};
 use billing_use_case::{invoice_repository::InvoiceRepository,issue_invoice::IssueInvoiceUseCase};
 use billing_interface_adapter::in_memory_invoice_repository::InMemoryInvoiceRepository;
-#[test] fn history_replays_and_only_persisted_events_change_loaded_state() {
- let initial=Invoice::open("i1",CustomerId::of("C000001"),InvoiceLines::of(vec![InvoiceLine::of(Money::of(100))])).unwrap();
- let mut repository=InMemoryInvoiceRepository::new();
+fn open(id: &str) -> Invoice { Invoice::open(id,CustomerId::of("C000001"),InvoiceLines::of(vec![InvoiceLine::of(Money::of(100))])).unwrap() }
+fn add_line(invoice: &mut Invoice, command_id: &str) -> InvoiceEvent {
+ let AddInvoiceLineOutcome::Applied(event)=invoice.add_line(command_id,InvoiceLine::of(Money::of(100))).unwrap() else { panic!("applied") };
+ InvoiceEvent::LineAdded(event)
+}
+#[test] fn find_by_id_replays_the_events_after_the_latest_snapshot() {
+ let initial=open("i1");
+ assert_eq!(initial.sequence_number(),1);
+ let mut repository=InMemoryInvoiceRepository::new(2);
  assert!(repository.find_by_id("missing").unwrap().is_none());
- repository.store("i1",InvoiceEvent::Opened(initial.opened_event())).unwrap();
- let mut loaded=repository.find_by_id("i1").unwrap().unwrap();
- let issued=loaded.issue().unwrap();
- assert!(repository.find_by_id("i1").unwrap().unwrap().issue().is_ok());
- repository.store("i1",InvoiceEvent::Issued(issued)).unwrap();
- assert!(IssueInvoiceUseCase::new(&mut repository).execute("i1").is_err());
+ assert!(repository.store(InvoiceEvent::Opened(initial.opened_event()),open("i2")).is_err());
+ repository.store(InvoiceEvent::Opened(initial.opened_event()),initial.clone()).unwrap();
+ let mut second=repository.find_by_id("i1").unwrap().unwrap();
+ let added=add_line(&mut second,"c1");
+ assert_eq!(added.sequence_number(),2);
  assert_eq!(repository.find_by_id("i1").unwrap().unwrap().lines().to_vec().len(),1);
- assert!(repository.store("wrong",InvoiceEvent::Opened(initial.opened_event())).is_err());
- assert!(Invoice::restore("i1",&[InvoiceEvent::Opened(initial.opened_event()),InvoiceEvent::Opened(initial.opened_event())]).is_err());
-}`);
+ assert!(repository.store(added.clone(),initial.clone()).is_err());
+ repository.store(added.clone(),second.clone()).unwrap();
+ assert!(repository.store(added.clone(),second).is_err());
+ let mut third=repository.find_by_id("i1").unwrap().unwrap();
+ assert_eq!(third.add_line("c1",InvoiceLine::of(Money::of(100))).unwrap(),AddInvoiceLineOutcome::Duplicate);
+ let next=add_line(&mut third,"c2");
+ repository.store(next,third).unwrap();
+ let latest=repository.find_by_id("i1").unwrap().unwrap();
+ assert_eq!(latest.sequence_number(),3);
+ assert_eq!(latest.lines().to_vec().len(),3);
+ assert!(IssueInvoiceUseCase::new(&mut repository).execute("i1").is_ok());
+ assert!(IssueInvoiceUseCase::new(&mut repository).execute("i1").is_err());
+ assert_eq!(repository.find_by_id("i1").unwrap().unwrap().sequence_number(),4);
+ assert!(Invoice::replay(&[InvoiceEvent::Opened(initial.opened_event())],initial.clone()).is_err());
+ assert!(Invoice::replay(&[added.clone(),added],initial).is_err());
+}
+#[test] #[should_panic] fn a_zero_snapshot_interval_is_rejected() { InMemoryInvoiceRepository::new(0); }`);
       const result=spawnSync("cargo",["test","--workspace"],{cwd:dir,encoding:"utf8"});if(result.status!==0)throw Error(result.stderr+result.stdout);expect(result.status).toBe(0);
     } finally {rmSync(dir,{recursive:true,force:true});}
   });

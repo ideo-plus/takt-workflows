@@ -1,3 +1,11 @@
+/** Why an Event Sourcing repository port's store takes the event and the aggregate after it. */
+export const EVENT_SOURCING_STORE =
+  "store takes the domain event, which carries its aggregate ID, and the aggregate after that event as the snapshot: store(event, snapshot), so findById replays only the events after the latest snapshot";
+
+/** Why a repository implementation exposes nothing but its port. */
+export const ADAPTER_SURFACE =
+  "a repository implementation exposes only its port and its constructors; observe it through the port (findById) rather than an extra accessor";
+
 /** Explicit Result spellings only; no inference or alias expansion. */
 export function resultArguments(
   text: string | undefined,

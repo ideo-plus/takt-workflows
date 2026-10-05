@@ -17,13 +17,13 @@
 | 集約や Entity を、どの層のコードであれ、その型の外でリテラル、既定値、キャスト、公開コンストラクタで組み立てている | REJECT。状態全体を受け取る完全コンストラクタを通す |
 | ファクトリが入力を検証する前にインスタンスを作る、または空のインスタンスを作って後から埋める | REJECT |
 | `init`、`setup`、`initialize`、`reset`、`configure` のメソッドで組み立てを完了させている | REJECT |
-| イベント履歴の整合性を検証せず、または宣言した replay メソッドを通さずに集約を復元している | REJECT。restore は履歴を検証し、コマンドと同じ replay 経路で集約を組み立てる |
-| restore ファクトリが壊れた状態を throw で拒否する | OK。壊れた状態は業務上の失敗ではない |
+| イベント履歴の整合性を検証せず、または宣言した replay メソッドを通さずに集約を復元している | REJECT。`replay(events, snapshot)` は、イベントがスナップショットに続くこと（集約 ID とシーケンス番号の連続）を検証し、コマンドと同じ replay 経路で集約を進める |
+| `replay` が壊れた履歴を throw（Rust は専用のエラー型）で拒否する | OK。壊れた履歴は業務上の失敗ではない |
 | 操作に結び付いたファクトリが、宣言済みのエラーがあるのに値そのものを返している | REJECT |
 
 ## 基本コンストラクタと補助の生成経路
 
-状態を持つドメインの class・struct・companion は、状態全体を組み立てる基本コンストラクタを1つ持つ。`of`・`parse`・`create`・`from`・`restore` など、同じ型を新規に構築する補助の生成経路は、直接または別の補助経由で基本コンストラクタへ到達する。Scala の補助コンストラクタと同じ委譲の構造を適用する。[Scala の仕様](https://www.scala-lang.org/files/archive/spec/2.13/05-classes-and-objects.html)
+状態を持つドメインの class・struct・companion は、状態全体を組み立てる基本コンストラクタを1つ持つ。`of`・`parse`・`create`・`from` など、同じ型を新規に構築する補助の生成経路は、直接または別の補助経由で基本コンストラクタへ到達する。既存のインスタンスを受け取って進める関数（ES の `replay(events, snapshot)`）は新規に構築しないので、生成経路に含めない。Scala の補助コンストラクタと同じ委譲の構造を適用する。[Scala の仕様](https://www.scala-lang.org/files/archive/spec/2.13/05-classes-and-objects.html)
 
 | 基準 | 判定 |
 |------|------|
