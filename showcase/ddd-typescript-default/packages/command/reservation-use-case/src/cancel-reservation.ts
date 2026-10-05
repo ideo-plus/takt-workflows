@@ -26,7 +26,7 @@ export class CancelReservationUseCase {
     const cancelled: Result<CancelReservationOutcome, CancelReservationError> = reservation.cancel();
     if (!cancelled.ok) return cancelled;
     const outcome: CancelReservationOutcome = cancelled.value;
-    const stored: Result<void, RepositoryError> = this.#reservationRepository.store(reservationId, outcome.event);
+    const stored: Result<void, RepositoryError> = this.#reservationRepository.store(outcome.event, outcome.reservation);
     if (!stored.ok) return stored;
     return { ok: true, value: outcome.event };
   }

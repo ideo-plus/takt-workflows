@@ -50,6 +50,8 @@ test("会員が会議室を有効な時間帯で予約すると確定済み予�
   assert.equal(reserved.value.startsAt(), startsAt);
   assert.equal(reserved.value.endsAt(), endsAt);
   assert.equal(reserved.value.status(), "confirmed");
+  assert.equal(reserved.value.sequenceNumber(), 1);
+  assert.equal(reserved.value.reservedEvent().sequenceNumber, 1);
 });
 
 test("終了時刻が開始時刻以前の予約を拒否する", () => {
@@ -105,7 +107,10 @@ test("確定済み予約を取り消すと取消済み予約とイベントを�
     cancelled.value.event.reservationId.equals(ReservationId.of(1)),
     true,
   );
+  assert.equal(cancelled.value.event.sequenceNumber, 2);
+  assert.equal(cancelled.value.reservation.sequenceNumber(), 2);
   assert.equal(reservation.status(), "confirmed");
+  assert.equal(reservation.sequenceNumber(), 1);
 });
 
 test("取消済み予約の再取消を拒否する", () => {
@@ -123,36 +128,41 @@ test("取消済み予約の再取消を拒否する", () => {
   });
 });
 
-test("イベント再生は生成時の属性と取消後の状態を復元する", () => {
-  const original = createConfirmedReservation();
-  const cancelled = original.cancel();
+test("スナップショットに続く取消イベントを再生すると取消後の予約になる", () => {
+  const snapshot = createConfirmedReservation();
+  const cancelled = snapshot.cancel();
   if (!cancelled.ok) assert.fail("取消に失敗しました");
-  for (const history of [[original.reservedEvent()], [original.reservedEvent(), cancelled.value.event]]) {
-    const restored = Reservation.restore(ReservationId.of(1), history);
-    assert.equal(restored.memberId().equals(original.memberId()), true);
-    assert.equal(restored.roomId().equals(original.roomId()), true);
-    assert.equal(restored.startsAt(), startsAt);
-    assert.equal(restored.endsAt(), endsAt);
-    assert.equal(restored.status(), history.length === 1 ? "confirmed" : "cancelled");
-  }
+
+  const replayed = Reservation.replay([cancelled.value.event], snapshot);
+
+  assert.equal(replayed.status(), "cancelled");
+  assert.equal(replayed.sequenceNumber(), 2);
+  assert.equal(replayed.memberId().equals(snapshot.memberId()), true);
+  assert.equal(replayed.roomId().equals(snapshot.roomId()), true);
+  assert.equal(replayed.startsAt(), startsAt);
+  assert.equal(replayed.endsAt(), endsAt);
+  assert.equal(Reservation.replay([], snapshot), snapshot);
 });
 
-test("イベント再生は欠落・重複・別予約の履歴を拒否する", () => {
-  const original = createConfirmedReservation();
-  const cancelled = original.cancel();
+test("イベント再生はスナップショットに続かない履歴を拒否する", () => {
+  const snapshot = createConfirmedReservation();
+  const cancelled = snapshot.cancel();
   if (!cancelled.ok) assert.fail("取消に失敗しました");
-  const birth = original.reservedEvent();
   const cancellation = cancelled.value.event;
-  for (const history of [[], [cancellation], [birth, birth], [birth, cancellation, cancellation]]) {
-    assert.throws(() => Reservation.restore(original.id(), history));
-  }
-  assert.throws(() => Reservation.restore(ReservationId.of(2), [birth]));
-});
+  const other = Reservation.reserve(ReservationId.of(2), MemberId.of(2), RoomId.of(3), startsAt, endsAt);
+  if (!other.ok) assert.fail("予約生成に失敗しました");
+  const otherCancelled = other.value.cancel();
+  if (!otherCancelled.ok) assert.fail("取消に失敗しました");
 
-test("イベント再生は時間帯の不変条件を検証する", () => {
-  const original = createConfirmedReservation();
-  for (const endsAt of [original.startsAt(), Number.NaN, Number.POSITIVE_INFINITY]) {
-    const invalid = { ...original.reservedEvent(), endsAt };
-    assert.throws(() => Reservation.restore(original.id(), [invalid]));
+  for (const events of [
+    [snapshot.reservedEvent()],
+    [cancellation, cancellation],
+    [otherCancelled.value.event],
+    [{ ...cancellation, sequenceNumber: 3 }],
+  ]) {
+    assert.throws(() => Reservation.replay(events, snapshot));
   }
+  assert.throws(() =>
+    Reservation.replay([{ ...cancellation, sequenceNumber: 3 }], cancelled.value.reservation),
+  );
 });

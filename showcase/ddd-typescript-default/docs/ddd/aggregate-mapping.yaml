@@ -146,7 +146,7 @@ domain_packages:
 - term: 予約のメモリ保存
   model_refs:
   - aggregate.reservation
-  rationale: 予約ごとのイベント列を追記保存し、再生して集約を返す
+  rationale: 予約ごとのイベント列と最新のスナップショットを保持し、スナップショットより後のイベントを再生して集約を返す
   code:
     language: typescript
     package: '@acme/reservation-interface-adapter'

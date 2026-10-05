@@ -8,5 +8,5 @@ export type RepositoryError = {
 
 export interface ReservationRepository {
   findById(reservationId: ReservationId): Result<Reservation | undefined, RepositoryError>;
-  store(reservationId: ReservationId, event: ReservationEvent): Result<void, RepositoryError>;
+  store(event: ReservationEvent, snapshot: Reservation): Result<void, RepositoryError>;
 }

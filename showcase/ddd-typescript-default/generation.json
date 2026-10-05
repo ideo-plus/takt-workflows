@@ -216,8 +216,8 @@
   "manual_revision": {
     "basis": "Explicit user instruction: remove ReservationSnapshot directly without TAKT; unify both showcases on Event Sourcing; retain no backward compatibility.",
     "started_at": "2026-10-04T05:46:34.699206+00:00",
-    "validation_bundle_commit": "871d0d866516c9264f4f10dbd77126a117ae4af6",
-    "finished_at": "2026-10-04T07:49:05.032104+00:00",
+    "validation_bundle_commit": "a87ca122fa606332e56d68746153e99768ded3f1",
+    "finished_at": "2026-10-05T09:00:02.404996+00:00",
     "versions": {
       "node": "v24.19.0",
       "bun": "1.4.2",
@@ -237,6 +237,7 @@
       "packages/command/reservation-interface-adapter/src/in-memory-reservation-repository.ts",
       "packages/command/reservation-use-case/src/cancel-reservation.ts",
       "packages/command/reservation-use-case/src/reservation-repository.ts",
+      "packages/command/reservation-use-case/tests/cancel-reservation.test.ts",
       "tests/composition-root/cancel-reservation.test.ts"
     ],
     "factory_contract_update": {
@@ -250,6 +251,28 @@
       "rule": "primary-constructor",
       "construction_path": "of -> parse -> private constructor",
       "verified_at": "2026-10-04T07:49:05.032104+00:00"
+    },
+    "snapshot_repository_update": {
+      "basis": "Explicit user instruction (2026-10-05): store each event with the aggregate snapshot right after it, drop the separate reservation ID parameter and the eventsFor accessor, and replay only the events after the latest snapshot.",
+      "rules": [
+        "event-sourcing-store",
+        "event-sourcing-storage",
+        "repository-adapter-surface"
+      ],
+      "port": "store(event: ReservationEvent, snapshot: Reservation): Result<void, RepositoryError>",
+      "restoration": "findById reads the latest snapshot and applies Reservation.replay(events after its sequence number, snapshot)",
+      "snapshot_policy": "the in-memory adapter keeps the snapshot at sequence number 1 and at multiples of the constructor's snapshot interval",
+      "started_at": "2026-10-05T08:58:15.108666+00:00",
+      "changed_files": [
+        "packages/command/reservation-domain/src/reservation.ts",
+        "packages/command/reservation-domain/tests/reservation.test.ts",
+        "packages/command/reservation-interface-adapter/src/in-memory-reservation-repository.ts",
+        "packages/command/reservation-use-case/src/cancel-reservation.ts",
+        "packages/command/reservation-use-case/src/reservation-repository.ts",
+        "packages/command/reservation-use-case/tests/cancel-reservation.test.ts",
+        "tests/composition-root/cancel-reservation.test.ts"
+      ],
+      "verified_at": "2026-10-05T09:00:02.404996+00:00"
     }
   },
   "identifier_domain_assumption": {
@@ -272,28 +295,28 @@
     "packages/command/reservation-interface-adapter/tsconfig.json": "8aaddb5ad9b9a33dec06b79c55e72a828fdc71d7d990a6afb1a9f8487aa5ecfe",
     "packages/command/reservation-use-case/package.json": "4aa9500acf2549c108f7962af7d4143028c05190a799fd6f602355254dec1bd5",
     "packages/command/reservation-use-case/tsconfig.json": "8aaddb5ad9b9a33dec06b79c55e72a828fdc71d7d990a6afb1a9f8487aa5ecfe",
-    "packages/command/reservation-use-case/tests/cancel-reservation.test.ts": "a4f7c9f495d5ac8c8e99325c5e2d45acd1a562eb1d624943fcb2a5167bd6498f",
-    "packages/command/reservation-use-case/src/reservation-repository.ts": "f9011991804a5419c89ea22a327667e2811945e479192a9bc76dbb41062d1da3",
-    "packages/command/reservation-use-case/src/cancel-reservation.ts": "1f8cc340d1e1af5d8389234788090f2cf5fc1c2d750bf078c62f690f8ec4d22a",
+    "packages/command/reservation-use-case/tests/cancel-reservation.test.ts": "3bc4e0c9a81d6fd5b68c06e2bddae8e52792a44b42bbcf20f34bd47f033f8389",
+    "packages/command/reservation-use-case/src/reservation-repository.ts": "64484a3d514709108ca9840412d60dcb326671cf0680825cbedfad043d7a9002",
+    "packages/command/reservation-use-case/src/cancel-reservation.ts": "0bee5d7f605ad17cfa26e0f1c59a2ea722b0221cf45724c04a714d8b15847190",
     "packages/command/reservation-use-case/src/index.ts": "1fcb5349f99431ca24824055707da60f6afa784087cf9f4e05b77bb5a45514b6",
-    "packages/command/reservation-interface-adapter/src/in-memory-reservation-repository.ts": "08d29680730d7892be6180e0032b0ae200ecdec056471399654dd355485317df",
+    "packages/command/reservation-interface-adapter/src/in-memory-reservation-repository.ts": "ad948bc64c663eee718b20aa76c75fba78357202641ed540f37efddd6e55a96e",
     "packages/command/reservation-interface-adapter/src/index.ts": "2fd92afa90aa9045bc87be32c85979dd4136df48051aa4d5a56c7a55a7212594",
-    "packages/command/reservation-domain/tests/reservation.test.ts": "739b8e9cd069883797b5f7897de770113577975e111435695fdd7b5844de9b9b",
+    "packages/command/reservation-domain/tests/reservation.test.ts": "2a705f79facf6affd98d79c823406e513fd296334c967e9acb09881764afec7a",
     "packages/command/reservation-domain/tests/identifiers.test.ts": "50daaaefa5c6549fd30019fe2075736ae099114950ca439c2b7b7c78f0ad0eb8",
     "packages/command/reservation-domain/src/index.ts": "c90ea3d9a3ca97ad786d10d2a28875a5cea0a16ec7e01f901361c54debf08963",
-    "packages/command/reservation-domain/src/reservation.ts": "385d59f1815f4989821b1143e628d2bed4004a95ba61f48eb1f53717ee1285ca",
+    "packages/command/reservation-domain/src/reservation.ts": "7d4b414e0fcb27300d28b675214b094f4fe788b655d7892031d8eb0b48f7d90a",
     "packages/command/reservation-domain/src/member-id.ts": "b4b5d43cd2496f98a399fe111f55c16b6a99a1c656faec511ce70ba2a36a609d",
     "packages/command/reservation-domain/src/room-id.ts": "e7cd8c041384f3746327e2ea4f71fb6aa8864600232c907b6646a2e19f4e32b4",
     "packages/command/reservation-domain/src/reservation/reservation-id.ts": "61faeb4019711c788970c9eabc004f9cde94d6e54705983b5ac949fa6ab596ab",
-    "docs/ddd/aggregate-mapping.yaml": "e599b72f6c53c52e513fbc6ade86dc111d13f889e26a668aaec30542c4060676",
+    "docs/ddd/aggregate-mapping.yaml": "65592777d1c7c23e2a754a5be6becbe1c0ab87dd4361def6b719157df501a3f6",
     "docs/ddd/domain-model.yaml": "5e099c6e8e44c38d36e527cae9d95ba45b875ad6a504a375577f8fc21896398f",
     "docs/ddd/layer-structure.yaml": "d3a79960be3b55fd694ec56d5e52dc9477433ef32e57a5f57fca266c11f66cc9",
-    "tests/composition-root/cancel-reservation.test.ts": "b78b6b447ba460e80269e6ced1b8c70be0edf948c601c2c28dd7846cfd65230e"
+    "tests/composition-root/cancel-reservation.test.ts": "cedf451d49e0a71876644dffa0ec23a4d158b620d8e8cd3b01b04def6b4b0a42"
   },
   "standalone_verification": {
     "pass": true,
     "tests": {
-      "pass": 26,
+      "pass": 30,
       "fail": 0,
       "skipped": 0
     },
@@ -318,6 +341,11 @@
       "artifact_commit": "00977635cf6d9b586d36ab976b67dffd22f70015",
       "validation_bundle_commit": "c41914f72bbad8cb20721852890c02ca8d67662b",
       "verified_at": "2026-10-04T07:03:40.845172+00:00"
+    },
+    {
+      "artifact_commit": "eeea20a364cb5a89a39f12bd77178e1028d20db4",
+      "validation_bundle_commit": "871d0d866516c9264f4f10dbd77126a117ae4af6",
+      "verified_at": "2026-10-04T07:49:05.032104+00:00"
     }
   ]
 }
