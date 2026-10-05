@@ -4,7 +4,7 @@
 #
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/ideo-plus/takt-workflows/main/scripts/install.sh \
-#     | sh -s -- <en|ja> [project-dir] [--no-runtime] [--ref <branch|tag|commit>]
+#     | sh -s -- <en|ja> [project-dir] [--no-config] [--launchers-only] [--ref <branch|tag|commit>]
 #
 #   --ref defaults to "main". TAKT_WORKFLOWS_REF may be used instead of --ref.
 #   Everything else is passed through to scripts/use-lang.sh.
@@ -16,12 +16,12 @@ set -eu
 
 repo="ideo-plus/takt-workflows"
 ref="${TAKT_WORKFLOWS_REF:-main}"
-args=""
-while [ $# -gt 0 ]; do
+remaining=$#
+while [ "$remaining" -gt 0 ]; do
   case "$1" in
-    --ref) [ $# -ge 2 ] || { echo "--ref needs a value" >&2; exit 2; }; ref="$2"; shift 2 ;;
-    --ref=*) ref="${1#--ref=}"; shift ;;
-    *) args="$args \"$1\""; shift ;;
+    --ref) [ "$remaining" -ge 2 ] || { echo "--ref needs a value" >&2; exit 2; }; ref="$2"; shift 2; remaining=$((remaining - 2)) ;;
+    --ref=*) ref="${1#--ref=}"; shift; remaining=$((remaining - 1)) ;;
+    *) arg=$1; shift; set -- "$@" "$arg"; remaining=$((remaining - 1)) ;;
   esac
 done
 
@@ -40,4 +40,4 @@ bundle="$(find "$tmp" -mindepth 1 -maxdepth 1 -type d | head -n 1)"
 [ -n "$bundle" ] && [ -x "$bundle/scripts/use-lang.sh" ] || { echo "unexpected archive layout for ${repo}@${ref}" >&2; exit 1; }
 
 TAKT_WORKFLOWS_SOURCE="https://github.com/${repo}" TAKT_WORKFLOWS_VERSION="$ref" \
-  eval "\"$bundle/scripts/use-lang.sh\" $args"
+  "$bundle/scripts/use-lang.sh" "$@"

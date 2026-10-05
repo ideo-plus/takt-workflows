@@ -24,9 +24,10 @@ See the [code showcase](showcase/README.md) for meeting-room reservation example
 ### Requirements
 - TAKT 0.67 or later (`npm i -g takt`, or pin it per project with [mise](https://mise.jdx.dev): `"npm:takt" = "0.67.0"` under `[tools]` in the project's `mise.toml`, listed before `node` so it wins over a `takt` installed globally into that node)
 - The providers named in the workflow's `runtime.yaml` (see the workflow's section below)
+- For the launcher: `claude` (2.1.280 or later) and `codex` on PATH, with authenticated account configuration directories for both
 
 ### Add it to the project you work in
-Run the one-line installer inside the project. It downloads the bundle as a tarball (no git clone), copies `<lang>/{workflows,steps,facets}` into the project's `.takt/`, and creates `.takt/runtime.yaml` and `.takt/config.yaml` if they do not exist:
+Run the one-line installer inside the project. It downloads the bundle as a tarball (no git clone), copies `<lang>/{workflows,steps,facets}` into the project's `.takt/` and three executable launchers into `.takt/bin/`, and creates `.takt/runtime.yaml` and `.takt/config.yaml` if they do not exist:
 
 ```sh
 cd ~/work/my-app
@@ -46,13 +47,26 @@ cd ~/work/my-app && ~/src/takt-workflows/scripts/use-lang.sh ja
 ```sh
 git add .takt .claude && git commit -m "chore: add takt-workflows bundle"
 takt workflow doctor flash-default
-takt -w flash-default -t "Add ... with tests"
+.takt/bin/run-takt.sh --claude-account <dir> --codex-account <dir> --pipeline --auto-pr -w flash-default -t "Add ... with tests"
 ```
 
-- Commit what the installer wrote: `workflows/`, `steps/`, `facets/`, `tools/`, `runtime.yaml`, `config.yaml`, `.takt-workflows`, and `.claude/settings.json`. TAKT runs tasks in worktree clones of the repository, so untracked files under `.takt/` are invisible to a run. The installer adds `runtime.yaml` to the `.takt/.gitignore` allowlist.
+- Commit what the installer wrote: `workflows/`, `steps/`, `facets/`, `tools/`, `bin/`, `runtime.yaml`, `config.yaml`, `.takt-workflows`, and `.claude/settings.json`. TAKT runs tasks in worktree clones of the repository, so untracked files under `.takt/` are invisible to a run. The installer adds `runtime.yaml` and `bin/` to the `.takt/.gitignore` allowlist.
 - The installer merges Read deny rules for `.takt/tools`, `.takt/facets`, `.takt/workflows`, and `.takt/steps` into `.claude/settings.json`, which TAKT's Claude steps load. A step then runs ddd-lint instead of reading its sources and does not reread the facets it was given; reports and quality gate logs under `.takt/` stay readable. Your interactive Claude Code sessions in the project get the same rules; remove them from `.claude/settings.json` if you edit the bundle there.
 - Before the first run, check that the models in `.takt/runtime.yaml` are available in your environment.
 - To update the bundle or switch language, run the installer again. It replaces only its own files, keeps your `runtime.yaml` and `config.yaml`, and leaves other workflows in `.takt/` untouched.
+
+Run the launcher from your project's root. Replace each `<dir>` with the corresponding account configuration directory; either account option can come first. Remaining arguments go directly to TAKT. The launcher selects the adjacent `takt-claude.sh` and `takt-codex.sh`, resolves the real CLIs to absolute paths, and stops before starting TAKT if either CLI is missing or Claude is older than 2.1.280. Accounts, CLI paths and versions, and the TAKT configuration directory are printed to standard error. If mise is available, TAKT runs through `mise exec` to use the project's pinned version.
+
+### Install or update only the launchers
+From the project root:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/ideo-plus/takt-workflows/main/scripts/install.sh | sh -s -- en --launchers-only
+# Or from a local checkout:
+~/src/takt-workflows/scripts/use-lang.sh en /path/to/project --launchers-only
+```
+
+The language argument (`en` or `ja`) is still required. This mode replaces only `.takt/bin/{run-takt,takt-claude,takt-codex}.sh` and adds their `.takt/.gitignore` permissions. Other files in `bin/` are kept. Workflows, steps, facets, tools, runtime and config files, Claude settings, and the installation record are left untouched.
 
 ## Configuration stays in the project
 All TAKT configuration for the bundle lives in the project and is committed with it.
@@ -62,7 +76,7 @@ All TAKT configuration for the bundle lives in the project and is committed with
 | `.takt/runtime.yaml` | Profiles (provider and model) and the step assignments of each workflow | [`runtime.project.yaml`](runtime.project.yaml) |
 | `.takt/config.yaml` | Language and the rate-limit fallback chain | [`config.project.yaml`](config.project.yaml) |
 
-TAKT still merges `~/.takt/runtime.yaml` and `~/.takt/config.yaml` when they exist. To keep other projects' settings out completely, point `TAKT_CONFIG_DIR` at a directory inside the project, for example with direnv. `.takt/.gitignore` already ignores it.
+The launcher sets `TAKT_CONFIG_DIR` to `<project>/.takt/home`, overriding any inherited value so other projects' global settings stay out. `.takt/.gitignore` ignores this directory. If you invoke TAKT directly, set the same value yourself, for example with direnv:
 
 ```sh
 # .envrc

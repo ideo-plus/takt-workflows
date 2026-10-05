@@ -24,9 +24,10 @@
 ### 必要なもの
 - TAKT 0.67 以降（`npm i -g takt`。プロジェクトごとに [mise](https://mise.jdx.dev) で固定するなら、プロジェクトの `mise.toml` の `[tools]` に `"npm:takt" = "0.67.0"` を書きます。`node` より前に書くと、その node にグローバルで入れた `takt` より優先されます）
 - ワークフローの `runtime.yaml` に書かれた provider（各ワークフローの節を参照）
+- 起動スクリプトを使う場合は、PATH 上の `claude`（2.1.280 以上）と `codex`、および両方の認証済みアカウント設定ディレクトリ
 
 ### 作業するプロジェクトに導入する
-作業プロジェクトの中でワンライナーのインストーラを実行します。バンドルを tarball で取得し（git clone 不要）、`<lang>/{workflows,steps,facets}` をプロジェクトの `.takt/` にコピーし、無ければ `.takt/runtime.yaml` と `.takt/config.yaml` も作ります:
+作業プロジェクトの中でワンライナーのインストーラを実行します。バンドルを tarball で取得し（git clone 不要）、`<lang>/{workflows,steps,facets}` をプロジェクトの `.takt/` に、実行可能な起動スクリプト 3 本を `.takt/bin/` にコピーします。無ければ `.takt/runtime.yaml` と `.takt/config.yaml` も作ります。
 
 ```sh
 cd ~/work/my-app
@@ -46,13 +47,26 @@ cd ~/work/my-app && ~/src/takt-workflows/scripts/use-lang.sh ja
 ```sh
 git add .takt .claude && git commit -m "chore: add takt-workflows bundle"
 takt workflow doctor flash-default
-takt -w flash-default -t "〜をテスト付きで追加する"
+.takt/bin/run-takt.sh --claude-account <dir> --codex-account <dir> --pipeline --auto-pr -w flash-default -t "〜をテスト付きで追加する"
 ```
 
-- インストーラが書いたもの（`workflows/`、`steps/`、`facets/`、`tools/`、`runtime.yaml`、`config.yaml`、`.takt-workflows`、`.claude/settings.json`）をコミットしてください。TAKT はタスクをリポジトリの worktree クローンで実行するため、`.takt/` 配下の未追跡ファイルは実行時に見えません。`runtime.yaml` はインストーラが `.takt/.gitignore` の許可リストに追加します。
+- インストーラが書いたもの（`workflows/`、`steps/`、`facets/`、`tools/`、`bin/`、`runtime.yaml`、`config.yaml`、`.takt-workflows`、`.claude/settings.json`）をコミットしてください。TAKT はタスクをリポジトリの worktree クローンで実行するため、`.takt/` 配下の未追跡ファイルは実行時に見えません。`runtime.yaml` と `bin/` はインストーラが `.takt/.gitignore` の許可リストに追加します。
 - インストーラは、TAKT の Claude のステップが読み込む `.claude/settings.json` に、`.takt/tools`、`.takt/facets`、`.takt/workflows`、`.takt/steps` の Read を禁止するルールをマージします。これで各ステップは ddd-lint のソースを読まずに実行し、渡された facet を読み直しません。`.takt/` のレポートと品質ゲートのログは読めます。プロジェクトで対話的に使う Claude Code にも同じルールが効くので、そこでバンドルを編集するときは `.claude/settings.json` から外してください。
 - 初回実行の前に、`.takt/runtime.yaml` のモデルが自分の環境で使えるか確認してください。
 - バンドルの更新や言語の切り替えは、インストーラをもう一度実行するだけです。自分のファイルだけを置き換え、既存の `runtime.yaml` と `config.yaml` は残し、`.takt/` にある他の workflow には触れません。
+
+起動スクリプトはプロジェクトのルートで実行します。各 `<dir>` を、それぞれのアカウント設定ディレクトリに置き換えてください。アカウント指定の順序は自由で、その後ろの引数はそのまま TAKT に渡します。起動スクリプトは隣の `takt-claude.sh` と `takt-codex.sh` を入口に使い、実際の CLI を絶対パスで渡します。どちらかの CLI が見つからない場合や、Claude が 2.1.280 未満の場合は、TAKT を起動せず停止します。アカウント、CLI の実体と版、TAKT の設定先は標準エラーに表示します。mise があれば `mise exec` を通して、プロジェクトで固定した版の TAKT を使います。
+
+### 起動スクリプトだけを導入・更新する
+プロジェクトのルートで実行します。
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/ideo-plus/takt-workflows/main/scripts/install.sh | sh -s -- ja --launchers-only
+# 手元の checkout を使う場合:
+~/src/takt-workflows/scripts/use-lang.sh ja /path/to/project --launchers-only
+```
+
+言語の引数（`en` または `ja`）は、このモードでも必要です。置き換えるのは `.takt/bin/{run-takt,takt-claude,takt-codex}.sh` の 3 本で、`.takt/.gitignore` にその許可だけを加えます。`bin/` のほかのファイルは残します。ワークフロー、ステップ、ファセット、tools、runtime と config、Claude の設定、導入記録には触れません。
 
 ## 設定はプロジェクトに閉じる
 バンドルの TAKT 設定はすべてプロジェクト内に置き、プロジェクトと一緒にコミットします。
@@ -62,7 +76,7 @@ takt -w flash-default -t "〜をテスト付きで追加する"
 | `.takt/runtime.yaml` | profile（provider と model）と各ワークフローのステップ割り当て | [`runtime.project.yaml`](runtime.project.yaml) |
 | `.takt/config.yaml` | 言語とレート制限時のフォールバック連鎖 | [`config.project.yaml`](config.project.yaml) |
 
-`~/.takt/runtime.yaml` や `~/.takt/config.yaml` があると、TAKT はそれもマージします。他のプロジェクトの設定を完全に締め出すには、`TAKT_CONFIG_DIR` をプロジェクト内のディレクトリに向けます。たとえば direnv を使う場合は次のとおりです。`.takt/.gitignore` はこのディレクトリを最初から無視します。
+起動スクリプトは `TAKT_CONFIG_DIR` を `<project>/.takt/home` に設定します。継承した値も上書きするため、ほかのプロジェクトのグローバル設定は混ざりません。`.takt/.gitignore` はこのディレクトリを無視します。TAKT を直接起動する場合は、direnv などで同じ設定を指定してください。
 
 ```sh
 # .envrc
