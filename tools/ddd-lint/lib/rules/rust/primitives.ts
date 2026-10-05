@@ -11,7 +11,7 @@ export function rulePrimitiveInitialization(
   if (!target.file || context.rustMapping.kind !== "loaded") return [];
   const findings: FindingInput[] = [];
   for (const type of context.program.types.filter(
-    (entry) => entry.file === target.file && entry.kind !== "trait",
+    (entry) => entry.file === target.file && !entry.auxiliary && entry.kind !== "trait",
   )) {
     const operations = context.rustMapping.view.aggregates
       .filter((entry) => entry.crate.replace(/-/g, "_") === type.crate)
