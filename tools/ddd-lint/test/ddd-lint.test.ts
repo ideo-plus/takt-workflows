@@ -516,6 +516,18 @@ describe("primary constructor contracts", () => {
       const result = lint(sample.files, (files) => replace(files, file, "    pub fn of(", "    pub fn build(factory: fn() -> Self) -> Self { factory() }\n\n    pub fn of("));
       expect(result.findings.some((entry) => entry.rule_id === "primary-constructor" && entry.message.includes("reach"))).toBe(true);
     });
+    test(`${sample.name}: cfg(test) helper structs are outside the construction rules`, () => {
+      const result = lint(sample.files, (files) => {
+        files[rustParentModuleFile(sample.layout)] += "\n#[cfg(test)]\nstruct Fixture {\n    value: i64,\n}\n\n#[cfg(test)]\nmod helpers {\n    struct Helper {\n        value: i64,\n    }\n}\n";
+      });
+      expect(result.findings).toEqual([]);
+    });
+    test(`${sample.name}: cfg(test) helper factories are outside the naming rules`, () => {
+      const result = lint(sample.files, (files) => {
+        files[rustParentModuleFile(sample.layout)] += "\n#[cfg(test)]\nstruct Fixture {\n    value: i64,\n}\n\n#[cfg(test)]\nimpl Fixture {\n    fn of(value: i64) -> Option<Self> {\n        Some(Self { value })\n    }\n}\n";
+      });
+      expect(result.findings).toEqual([]);
+    });
   }
 });
 

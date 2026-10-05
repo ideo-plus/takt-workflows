@@ -14,7 +14,7 @@ export function primaryConstructor(type: RustType, context: InspectionContext): 
 export function rulePrimaryConstructor(target: InspectionTarget, context: InspectionContext): FindingInput[] {
   if (!target.file) return [];
   const findings: FindingInput[] = [];
-  for (const type of context.program.types.filter((entry) => entry.layer === "domain" && entry.kind === "struct" && entry.field_count > 0)) {
+  for (const type of context.program.types.filter((entry) => entry.layer === "domain" && !entry.auxiliary && entry.kind === "struct" && entry.field_count > 0)) {
     const primaries = primaryConstructor(type, context);
     const report = (message: string, file = type.file, line?: number) => {
       if (file === target.file) findings.push({ rule_id: "primary-constructor", file, message: `${type.name}: ${message}`, ...(line ? { line } : {}) });

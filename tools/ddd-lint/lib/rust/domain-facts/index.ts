@@ -1,5 +1,5 @@
 /**
- * Protocol version 11 of the native extractor: the facts every Rust rule decides on.
+ * Protocol version 12 of the native extractor: the facts every Rust rule decides on.
  *
  * The launch classification is the shared one in `native/launch.ts`; this module owns the protocol
  * identity, the one batch this inspection sends, and the strict conversion of native spellings into
@@ -15,7 +15,7 @@ import { ToolUnavailableError } from "../../project/context.ts";
 import { classifyNativeExtractor, type NativeOutcome, nativeIssue } from "../native/launch.ts";
 import { NATIVE_BIN_DIR, PLATFORM_KEY } from "../native/manifest.ts";
 
-const PROTOCOL = { flag: "--domain-facts-version", version: 11 };
+const PROTOCOL = { flag: "--domain-facts-version", version: 12 };
 /** The unresolved reason the extractor gives an attribute that may replace the item it annotates. */
 const ATTRIBUTE_MACRO_REASON = "attribute-macro";
 /** The extractor refuses a larger request, so an oversized batch is refused before it is sent. */
@@ -56,6 +56,8 @@ export interface TypeFact {
   /** Named fields only: a tuple element is reached by position and declares no name to resolve. */
   readonly fields: readonly FieldFact[];
   readonly field_count: number;
+  /** Declared under `#[cfg(test)]`, which the normal build never compiles. */
+  readonly auxiliary: boolean;
   readonly derives: readonly string[];
   /** Where the declaration opens, which is where a finding against it sends a reader. */
   readonly line: number;
@@ -309,6 +311,7 @@ function declaredType(value: unknown): TypeFact {
     module: words(raw.module),
     fields: array(raw.fields).map(field),
     field_count: integer(raw.field_count),
+    auxiliary: flag(raw.auxiliary),
     derives: words(raw.derives),
     line: line(raw.line),
   };

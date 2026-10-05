@@ -1,4 +1,4 @@
-//! Version 10 domain facts: the decision base of every rule the domain gate reports. Source is
+//! Version 12 domain facts: the decision base of every rule the domain gate reports. Source is
 //! never compiled or executed.
 //!
 //! One batch carries every source of the inspected program, and the answer carries one record per
@@ -31,7 +31,7 @@ use syn::{
 #[path = "domain_facts_tests.rs"]
 mod tests;
 
-const PROTOCOL_VERSION: u8 = 11;
+const PROTOCOL_VERSION: u8 = 12;
 
 /// The single-segment attributes the compiler itself defines, which expand to nothing and so cannot
 /// replace what they annotate. `cfg` and `cfg_attr` are left out: they are recorded under their own
@@ -810,7 +810,7 @@ impl<'a> Walk<'a> {
         };
         self.types.push(json!({
             "name": spelling(ident), "kind": kind, "module": self.module,
-            "fields": named, "field_count": fields.len(), "derives": self.derives(attrs), "line": line(start),
+            "fields": named, "field_count": fields.len(), "auxiliary": self.auxiliary(), "derives": self.derives(attrs), "line": line(start),
         }));
     }
 

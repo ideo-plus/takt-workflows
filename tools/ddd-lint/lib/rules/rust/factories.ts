@@ -5,7 +5,7 @@ import type { InspectionContext, InspectionTarget } from "../types.ts";
 export function ruleFactoryNaming(target: InspectionTarget, context: InspectionContext): FindingInput[] {
   if (!target.file) return [];
   const findings: FindingInput[] = [];
-  for (const type of context.program.types.filter((entry) => entry.layer === "domain" && entry.kind !== "trait")) {
+  for (const type of context.program.types.filter((entry) => entry.layer === "domain" && !entry.auxiliary && entry.kind !== "trait")) {
     const mappings = context.rustMapping.kind === "loaded" ? context.rustMapping.view.aggregates.filter((entry) => entry.crate.replace(/-/g, "_") === type.crate) : [];
     const kind = mappings.some((entry) => entry.type === type.name && entry.module.join("::") === type.module.join("::"))
       ? "entity" : domainElementKind(context.model, mappings.map((entry) => entry.aggregate_ref), type.name);
