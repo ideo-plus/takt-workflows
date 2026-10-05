@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
@@ -268,6 +268,52 @@ test('launcher runs takt through mise exec when mise is available, so the projec
     { args: ['trust', '--show'], cwd: f.project },
     { args: ['exec', '--', 'takt', '--pipeline'], cwd: f.project },
   ]);
+});
+
+test('without mise, a project that pins tools with mise stops instead of running an unpinned takt', t => {
+  const f = fixture(t);
+  const bin = join(f.root, 'bin');
+  mkdirSync(bin);
+  copyFileSync(f.cli, join(bin, 'takt'));
+  chmodSync(join(bin, 'takt'), 0o755);
+  const { TAKT_REAL_CLI, ...env } = f.env;
+  const path = `${bin}:${dirname(process.execPath)}:/usr/bin:/bin`;
+  const launchRecord = join(f.root, 'launch-record');
+  for (const config of ['mise.toml', '.mise.toml', '.config/mise/config.toml']) {
+    mkdirSync(dirname(join(f.project, config)), { recursive: true });
+    writeFileSync(join(f.project, config), '[tools]\n');
+    const result = spawnSync('sh', [launcher, '--claude-account', f.account, '--codex-account', f.codex, '--pipeline'], {
+      cwd: f.project, env: { ...env, PATH: path, TEST_LAUNCH_RECORD: launchRecord }, encoding: 'utf8',
+    });
+    assert.notEqual(result.status, 0, result.stderr);
+    assert.ok(result.stderr.includes(config), result.stderr);
+    assert.equal(result.stdout, '');
+    assert.equal(existsSync(launchRecord), false);
+    rmSync(join(f.project, config));
+  }
+});
+
+test('without mise and without a mise configuration, the takt on PATH runs', t => {
+  const f = fixture(t);
+  const bin = join(f.root, 'bin');
+  mkdirSync(bin);
+  copyFileSync(f.cli, join(bin, 'takt'));
+  chmodSync(join(bin, 'takt'), 0o755);
+  const { TAKT_REAL_CLI, ...env } = f.env;
+  const result = spawnSync('sh', [launcher, '--claude-account', f.account, '--codex-account', f.codex, '--pipeline'], {
+    cwd: f.project, env: { ...env, PATH: `${bin}:${dirname(process.execPath)}:/usr/bin:/bin`, TEST_EXIT_CODE: '4' }, encoding: 'utf8',
+  });
+  assert.equal(result.status, 4, result.stderr);
+  const got = JSON.parse(result.stdout);
+  assert.equal(got.executable, join(bin, 'takt'));
+  assert.deepEqual(got.args, ['--pipeline']);
+});
+
+test('usage names the path the launcher was invoked by', t => {
+  const f = fixture(t);
+  const result = spawnSync('sh', [launcher], { cwd: f.project, env: f.env, encoding: 'utf8' });
+  assert.notEqual(result.status, 0);
+  assert.ok(result.stderr.includes(`usage: ${launcher} `), result.stderr);
 });
 
 test('untrusted or unconfirmed mise configuration stops without trusting or launching TAKT', t => {
