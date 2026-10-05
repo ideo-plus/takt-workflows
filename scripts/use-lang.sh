@@ -11,12 +11,13 @@
 # Configuration is written to the project, never to ~/.takt:
 #   .takt/runtime.yaml  profiles + step assignments (from runtime.project.yaml, if absent)
 #   .takt/config.yaml   language + rate-limit fallback (from config.project.yaml, if absent)
-#   .takt/.gitignore    allowlists runtime.yaml, config.yaml, .takt-workflows and tools/ for commit
+#   .takt/.gitignore    allowlists runtime.yaml, config.yaml, .takt-workflows, tools/ and bin/ for commit
 #   .claude/settings.json  denies Claude reads of .takt/{tools,facets,workflows,steps} (merged, not replaced)
 #
-# Usage: scripts/use-lang.sh <en|ja> [project-dir] [--no-config]
+# Usage: scripts/use-lang.sh <en|ja> [project-dir] [--no-config] [--launchers-only]
 #   project-dir   target project (default: current directory)
-#   --no-config   do not create runtime.yaml / config.yaml or edit .takt/.gitignore / .claude/settings.json (alias: --no-runtime)
+#   --no-config   skip configuration and Claude settings; still allow bin/ in .takt/.gitignore (alias: --no-runtime)
+#   --launchers-only   install only the three launchers and their .takt/.gitignore permissions
 #
 # Examples:
 #   cd ~/work/my-app && /path/to/takt-workflows/scripts/use-lang.sh ja
@@ -27,23 +28,45 @@ bundle="$(cd "$(dirname "$0")/.." && pwd)"
 lang=""
 project=""
 with_config=1
+launchers_only=0
 for arg in "$@"; do
   case "$arg" in
     --no-config|--no-runtime) with_config=0 ;;
-    -h|--help) sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --launchers-only) launchers_only=1 ;;
+    -h|--help) sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     -*) echo "unknown option: $arg" >&2; exit 2 ;;
     *) if [ -z "$lang" ]; then lang="$arg"; elif [ -z "$project" ]; then project="$arg"; else echo "too many arguments" >&2; exit 2; fi ;;
   esac
 done
 case "$lang" in
   en|ja) ;;
-  *) echo "usage: $0 <en|ja> [project-dir] [--no-config]" >&2; exit 2 ;;
+  *) echo "usage: $0 <en|ja> [project-dir] [--no-config] [--launchers-only]" >&2; exit 2 ;;
 esac
 project="${project:-.}"
 [ -d "$project" ] || { echo "project directory not found: $project" >&2; exit 2; }
 project="$(cd "$project" && pwd)"
 target="$project/.takt"
 mkdir -p "$target"
+
+mkdir -p "$target/bin"
+for launcher in run-takt.sh takt-claude.sh takt-codex.sh; do
+  cp "$bundle/scripts/$launcher" "$target/bin/$launcher"
+  chmod 755 "$target/bin/$launcher"
+done
+
+gitignore="$target/.gitignore"
+if [ ! -e "$gitignore" ]; then
+  printf '# Ignore everything by default\n*\n\n!.gitignore\n' > "$gitignore"
+fi
+# Begin a new line even when a user's existing file has no trailing newline.
+for entry in '!bin/' '!bin/**'; do
+  grep -qxF -- "$entry" "$gitignore" || printf '\n%s\n' "$entry" >> "$gitignore"
+done
+
+if [ "$launchers_only" -eq 1 ]; then
+  echo "takt launchers installed into $target/bin"
+  exit 0
+fi
 
 # Remove files owned by this bundle (either language) so a language switch leaves no stale files.
 for l in en ja; do
@@ -108,51 +131,18 @@ fi
 
 # Make sure the configuration can be committed. TAKT's default .takt/.gitignore ignores
 # everything except an allowlist that does not include runtime.yaml.
-gitignore="$target/.gitignore"
-if [ "$with_config" -eq 0 ]; then
-  : # --no-config: leave .takt/.gitignore alone as well
-elif [ ! -e "$gitignore" ]; then
-  cat > "$gitignore" <<'EOF'
-# Ignore everything by default
-*
-
-# This file itself
-!.gitignore
-
-# Project configuration
-!config.yaml
-!runtime.yaml
-!.takt-workflows
-
-# Facets, workflows and tools (version-controlled)
-!tools/
-!tools/**
-tools/**/target/
-!workflows/
-!workflows/**
-!steps/
-!steps/**
-!facets/
-!facets/personas/
-!facets/personas/**
-!facets/policies/
-!facets/policies/**
-!facets/knowledge/
-!facets/knowledge/**
-!facets/instructions/
-!facets/instructions/**
-!facets/output-contracts/
-!facets/output-contracts/**
-EOF
-  notes="$notes
-  created .takt/.gitignore (TAKT default allowlist + runtime.yaml)"
-else
-  for entry in '!config.yaml' '!runtime.yaml' '!.takt-workflows' '!tools/' '!tools/**' 'tools/**/target/'; do
-    grep -qxF -- "$entry" "$gitignore" || { printf '%s\n' "$entry" >> "$gitignore"; notes="$notes
+if [ "$with_config" -eq 1 ]; then
+  for entry in '!config.yaml' '!runtime.yaml' '!.takt-workflows' \
+    '!tools/' '!tools/**' 'tools/**/target/' \
+    '!workflows/' '!workflows/**' '!steps/' '!steps/**' '!facets/' \
+    '!facets/personas/' '!facets/personas/**' \
+    '!facets/policies/' '!facets/policies/**' \
+    '!facets/knowledge/' '!facets/knowledge/**' \
+    '!facets/instructions/' '!facets/instructions/**' \
+    '!facets/output-contracts/' '!facets/output-contracts/**'; do
+    grep -qxF -- "$entry" "$gitignore" || { printf '\n%s\n' "$entry" >> "$gitignore"; notes="$notes
   added $entry to .takt/.gitignore"; }
   done
-  grep -qxF -- '!workflows/**' "$gitignore" || notes="$notes
-  note: .takt/.gitignore does not allowlist workflows/**; the bundle files will not be committed"
 fi
 
 # Claude steps load the project's .claude/settings.json. Deny reading the bundle's own files, so a
@@ -195,6 +185,6 @@ source="${TAKT_WORKFLOWS_SOURCE:-$bundle}"
 printf 'lang: %s\nsource: %s\nversion: %s\n' "$lang" "$source" "$version" > "$target/.takt-workflows"
 
 echo "takt-workflows ($lang, $version) installed into $target"
-echo "  workflows/steps/facets copied$notes"
+echo "  workflows/steps/facets and bin/ launchers copied$notes"
 echo "  next: git add .takt .claude && git commit   (TAKT runs tasks in worktree clones; untracked files are invisible)"
 echo "        takt workflow doctor flash-default"

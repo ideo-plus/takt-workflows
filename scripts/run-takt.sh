@@ -50,6 +50,53 @@ fi
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 project_dir=$(pwd -P)
+
+resolve_cli() (
+    cli_name=$1
+    cli_candidate=$2
+    if ! cli_path=$(command -v "$cli_candidate"); then
+        echo "run-takt: $cli_name CLI が見つからない: $cli_candidate" >&2
+        exit 1
+    fi
+    case $cli_path in
+        /*) ;;
+        *) cli_path=$project_dir/$cli_path ;;
+    esac
+    if [ ! -f "$cli_path" ] || [ ! -x "$cli_path" ]; then
+        echo "run-takt: $cli_name CLI を実行できない: $cli_path" >&2
+        exit 1
+    fi
+    cli_dir=$(CDPATH= cd -- "$(dirname -- "$cli_path")" && pwd -P)
+    printf '%s/%s\n' "$cli_dir" "$(basename -- "$cli_path")"
+)
+
+cli_version() {
+    if ! version_output=$("$1" --version </dev/null 2>&1); then
+        echo "run-takt: CLI の版を取得できない: $1 ($version_output)" >&2
+        return 1
+    fi
+    if [ -z "$version_output" ]; then
+        echo "run-takt: CLI の版が空: $1" >&2
+        return 1
+    fi
+    printf '%s\n' "$version_output"
+}
+
+TAKT_CLAUDE_REAL_CLI=$(resolve_cli claude "${TAKT_CLAUDE_REAL_CLI:-claude}")
+TAKT_CODEX_REAL_CLI=$(resolve_cli codex "${TAKT_CODEX_REAL_CLI:-codex}")
+claude_version=$(cli_version "$TAKT_CLAUDE_REAL_CLI")
+codex_version=$(cli_version "$TAKT_CODEX_REAL_CLI")
+# Claude Opus 5.5 requires Claude Code 2.1.280 or later.
+if ! printf '%s\n' "$claude_version" | awk '
+    NR == 1 && /^[0-9]+\.[0-9]+\.[0-9]+([[:space:]]|$)/ {
+        split($1, v, ".")
+        valid = v[1] > 2 || (v[1] == 2 && (v[2] > 1 || (v[2] == 1 && v[3] >= 280)))
+    }
+    END { exit !valid }
+'; then
+    echo "run-takt: claude 2.1.280 以上が必要 (取得した版: $claude_version)" >&2
+    exit 1
+fi
 TAKT_CLAUDE_CLI_PATH=$script_dir/takt-claude.sh
 TAKT_CLAUDE_ACCOUNT_DIR=$(CDPATH= cd -- "$claude_account" && pwd)
 TAKT_CODEX_CLI_PATH=$script_dir/takt-codex.sh
@@ -58,9 +105,12 @@ TAKT_CONFIG_DIR=$project_dir/.takt/home
 CODEX_HOME=$TAKT_CODEX_ACCOUNT_DIR
 unset OPENAI_API_KEY CODEX_API_KEY TAKT_OPENAI_API_KEY
 export TAKT_CLAUDE_CLI_PATH TAKT_CLAUDE_ACCOUNT_DIR TAKT_CODEX_CLI_PATH TAKT_CODEX_ACCOUNT_DIR TAKT_CONFIG_DIR CODEX_HOME
+export TAKT_CLAUDE_REAL_CLI TAKT_CODEX_REAL_CLI
 
 echo "run-takt: claude のアカウント設定: $TAKT_CLAUDE_ACCOUNT_DIR" >&2
 echo "run-takt: Codex の設定: $TAKT_CODEX_ACCOUNT_DIR" >&2
+echo "run-takt: claude CLI: $TAKT_CLAUDE_REAL_CLI ($claude_version)" >&2
+echo "run-takt: Codex CLI: $TAKT_CODEX_REAL_CLI ($codex_version)" >&2
 echo "run-takt: TAKT_CONFIG_DIR: $TAKT_CONFIG_DIR" >&2
 # takt は、mise があれば mise exec で起動する。プロジェクトの mise.toml で固定した版を、mise が
 # 有効でないシェルや IDE から呼ばれても使うため。TAKT_REAL_CLI はテストのための差し替え。
