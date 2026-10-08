@@ -5,6 +5,12 @@ Defines the names of domain-layer packages and modules and how types are grouped
 | Criterion | Judgment |
 |-----------|----------|
 | A package or module is named `aggregate(s)`, `impl(s)`, `implementation(s)`, `vo(s)`, `entity`, `entities`, `value_object(s)`, `valueobject(s)`, or a bare `domain` | REJECT |
+| One Module contains one Aggregate or several Aggregates with business cohesion | OK. Do not fix the count; preserve each Aggregate's invariant and consistency boundary |
+| Sharing a Module is used to merge the consistency boundaries of independent Aggregates | REJECT. Judge Aggregate boundaries from the domain model's invariants |
+| A one-to-one correspondence between Aggregates and Modules is enforced without a business grouping rationale | REJECT |
+| Dependencies between peer Modules form a cycle | Warning. Consider unidirectional dependencies; if the cycle remains, record its business rationale in `domain_packages.rationale` |
+| Parent-child Module dependencies are mechanically rejected by the same standard as peer dependencies | REJECT. Consider avoiding cycles, then assess the need for the parent-child relationship; language and layer dependency rules still apply |
+| Bounded Contexts are added solely because the number of Modules or Aggregates grows | REJECT. Establish why the model's terms or rules require separate Contexts |
 | Aggregates, Entities, and value objects of the same business concept are split into modules by type kind only | REJECT |
 | A type that belongs to one business concept (the identifier of an aggregate root, its value objects, a command ID the aggregate remembers) sits outside that concept's module (`invoice-id` beside `invoice`) | REJECT. Place it under the concept's module (`invoice/invoice-id`) |
 | The root of a domain package lines up concepts so that which of them belong together cannot be read from it | REJECT. Group cohesive concepts into modules named in the ubiquitous language, with few dependencies between modules |

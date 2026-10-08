@@ -34,10 +34,13 @@ steps:
         - ddd-typescript
       testing_instruction: scenario-based-write-tests-first
       testing_report_format: scenario-based-test-report
+      # テストの型と配置にも、業務概念によるモジュール分割を適用する。
       testing_policy:
         - coding
         - testing
         - ddd-domain-layer
+        - ddd-domain-packaging
+        - ddd-module-layout
         - ddd-typescript
       testing_knowledge:
         - architecture

@@ -11,6 +11,7 @@
 - [x] Domain layer (construction, state changes, getters, Result errors, ownership)
 - [x] Use-case layer (orchestration, re-execution, recovery)
 - [x] Interface adapter layer (ports, repositories, restoration, CQRS sides)
+- [x] Module meaning (business cohesion, Aggregate boundaries, dependencies, rationale for changes)
 - [x] Structure (dependency directions, package names, module layout)
 
 {{include:output-contracts/base-review-new-findings-scope}}
