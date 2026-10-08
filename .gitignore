@@ -18,3 +18,7 @@ npm-debug.log*
 
 # ddd-lint: Rust extractor build output
 tools/ddd-lint/rust-extractor/target/
+
+# Local book texts
+/ddd.txt
+/iddd.txt
