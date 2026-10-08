@@ -32,6 +32,7 @@ Judges the code of the use-case layer. A use case orchestrates: it loads, calls 
 | One transaction changes several aggregates without an explicit strategy | REJECT |
 | A multi-aggregate use case has no Process Manager and no re-execution rationale | REJECT |
 | All target aggregates use `programming_model: actor` and no Process Manager is used | REJECT |
+| A Process Manager or compensation alone is claimed to atomically preserve an immediate cross-Aggregate invariant | REJECT. State tolerated intermediate states and delay, or the explicit strategy that provides the immediate guarantee |
 | A flow promises automatic rollback across aggregates | REJECT. Compensation is a new business operation |
 
 ## Read Models

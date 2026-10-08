@@ -32,12 +32,13 @@ steps:
         - task-decomposition
         - ddd-modeling
         - ddd-rust
-      testing_instruction: scenario-based-write-tests-first
+      testing_instruction: ddd-write-tests
       testing_report_format: scenario-based-test-report
       # Apply business Module grouping to test types and placement too.
       testing_policy:
         - coding
         - testing
+        - ddd-domain-model
         - ddd-domain-layer
         - ddd-domain-packaging
         - ddd-module-layout

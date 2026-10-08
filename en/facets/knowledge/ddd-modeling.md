@@ -1,5 +1,25 @@
 # DDD Modeling Knowledge
 
+## Validate the Model with Business Examples
+
+Use one model both to explain the business and to implement its behavior. Agreement between declarations and code is not enough if the model fails to express business meaning or makes clients use unnatural operations. Use examples from domain experts, counterexamples from requirements, and client code to assess the model's language and responsibilities.
+
+In the plan, state the model assumptions and reasons relevant to this change. Compare alternatives where the choice is uncertain, and distinguish unconfirmed business rules from facts. Tests illustrate model usage and challenge invariants with invalid inputs and operation sequences. If implementation or tests reveal new business knowledge, record the evidence and affected model elements and use the existing replanning path. Continue to update declarations before changing production code.
+
+The books call for improving the model and implementation together. Declaration files, stable element IDs, update ordering, Result errors, and Event Sourcing are this project's implementation choices. Distinguish the books' principles from project conventions.
+
+Primary sources: Evans, *Domain-Driven Design*, Chapter 3, "Model-Driven Design" (pp. 48–49) and "Hands-On Modelers" (pp. 60–62). Vernon, *Implementing Domain-Driven Design*, Chapter 1, "DDD Is Not Heavy" (pp. 37–38), and Chapter 6, "Testing Value Objects" (pp. 239–240).
+
+## Align Meaning and Relationships between Models
+
+Share business and development language within each Bounded Context. The same term can have different meanings or rules in another Context. For example, a "customer" as the recipient of an invoice and a "customer" subject to identity verification require different information and rules. For terms this change touches, establish their business meanings, examples, and boundaries where those meanings change. Display names, database columns, or technical type names alone do not establish meaning.
+
+When several models interact, describe the current Contexts and their points of contact. State which model supplies information, which consumes it, who controls the contract, and where meanings are translated. Explain adoption of an external model or sharing of part of a model and its consequences. This view is a Context Map; it serves a different purpose from package dependency declarations.
+
+Record terminology and relationship rationale in the plan report with references to existing model elements. Do not add unsupported keys to `docs/ddd/*.yaml`. If this change touches no external relationship, say so; do not require new artifacts or Contexts. Do not expand scope into enterprise-wide language unification or redesign of unrelated models.
+
+Primary sources: Evans, Chapter 2, "Ubiquitous Language" (pp. 24–27), and Chapter 14, "Context Map" (pp. 344–345). Vernon, Chapter 1, "Ubiquitous, but Not Universal" (p. 25), and Chapter 3, "Why Context Maps Are So Essential" (pp. 87–90).
+
 ## Project Files
 
 A DDD project keeps its model and settings in files that live across tasks.
@@ -414,17 +434,32 @@ The naming linter checks the structure of `of`, `parse`, `from`, and Rust `try_f
 
 Primary references: [LocalDate.of](https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/time/LocalDate.html), [Integer.valueOf/parseInt](https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/lang/Integer.html), [Calendar implementation](https://github.com/openjdk/jdk/blob/jdk-25-ga/src/java.base/share/classes/java/util/Calendar.java), [UUID.randomUUID](https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/util/UUID.html), [Rust From](https://doc.rust-lang.org/std/convert/trait.From.html), and [ECMAScript valueOf](https://tc39.es/ecma262/multipage/fundamental-objects.html#sec-object.prototype.valueof). The Java three-argument date example is `LocalDate.of(year, month, day)`; the standard UUID generation example is `UUID.randomUUID()`.
 
+## Distinguish Identity from Interchangeable Attributes
+
+An Entity represents something that must be tracked as the same thing despite changes to its attributes. A Value Object represents something whose equal attributes allow replacement without changing business meaning. Choose by the business role. An address used to describe a delivery destination and a registered address whose history is tracked may call for different classifications.
+
+For an Entity, establish what counts as the same thing, when identity is assigned, and the scope and lifetime in which it is stable. Distinguish a display-name change from an identity change. A database-generated identifier alone does not justify an Entity. For a Value Object, assess attribute equality, replaceability, and its meaning as a conceptual whole.
+
+Distinguish logical value semantics from physical mutation. The books generally recommend immutable Values; this project's Rust policy allows in-place mutation under ownership. Do not replace that language convention merely to assess the classification rationale.
+
+Primary sources: Evans, Chapter 5, "Entities" and "Value Objects" (pp. 89–101), and Chapter 7, "Distinguishing Entities and Value Objects" (pp. 167–168). Vernon, Chapter 5, "Identity Stability" (pp. 188–189), and Chapter 6, "Value Characteristics" (pp. 221–229).
+
 ## Deriving the Model
 
-The model is derived from behavior, not from data tables: stories give past-tense domain events, each event has the command and actor that produce it, events that change the same state group into an aggregate, and the aggregate's invariant explains why they belong together.
+Derive the model from business behavior. Identify past-tense domain events in stories and the commands and actors that produce them. Establish the invariants each operation must preserve immediately, then group the state needed to preserve those invariants into Aggregates. Sharing a screen or business flow alone does not justify one Aggregate.
 
 | Condition | Meaning / options |
 |-----------|-------------------|
 | A candidate cannot state an invariant it protects | Merge it into another aggregate or demote it to a value or Entity |
-| Two candidates must change together to keep a rule true | One aggregate, or a Process Manager if they must stay separate |
+| Two candidates must change together to preserve an immediate invariant | Consider one Aggregate. Keeping them separate requires an explicit strategy that atomically preserves the same invariant; a Process Manager alone cannot guarantee it |
+| A cross-Aggregate rule permits delay before consistency | Establish tolerated delay, intermediate states, retries, and compensation conditions. Use a Process Manager or another mechanism for eventual consistency |
 | A flow crosses aggregates | Process Manager candidate; the steps and compensations are recorded in the model |
 | An operation never changes state | `state_effect: none`, which is a valid declaration |
 | A term exists only in code, not in the business vocabulary | Clarify it before naming a package after it |
+
+For example, compensating by canceling after booking cannot prevent a temporary violation of "no two confirmed reservations for the same room and time." Establish the business guarantee before selecting Aggregate boundaries and persistence constraints. Explain the rationale and guarantees for any exception that updates several Aggregates in one transaction.
+
+Primary sources: Evans, Chapter 6, "Aggregates" (pp. 125–129). Vernon, Chapter 10, "Rule: Model True Invariants in Consistency Boundaries" (pp. 353–355), "Rule: Use Eventual Consistency Outside the Boundary" (pp. 364–366), and "Reasons to Break the Rules" (pp. 367–370).
 
 ## Modules
 

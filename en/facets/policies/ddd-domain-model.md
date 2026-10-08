@@ -21,6 +21,18 @@ Defines what the declarations under `docs/ddd/` (domain model, aggregate mapping
 | A split, merge, or deprecation is not recorded in `lineage` | REJECT |
 | The model decides modules, packages, ports, repositories, or use-case procedures | REJECT. Write them in the aggregate mapping and the layer structure |
 
+## Judge Model Meaning
+
+In addition to structural checks, compare business examples, counterexamples, and design rationale within the change's scope. Record rationale in the plan report with references to existing model elements. Add no unsupported keys to declaration files.
+
+| Criterion | Judgment |
+|-----------|----------|
+| Declaration fidelity alone is used to accept a model that fails requirement examples or counterexamples | REJECT. State the discovery evidence and affected elements, then revisit the model and implementation through replanning |
+| Matching terms or type names alone are used to equate meanings or rules in different Contexts | REJECT. Establish the meaning differences and responsibilities for adoption, sharing, or translation |
+| Aggregate boundaries are chosen without distinguishing immediate invariants from cross-Aggregate rules that permit delay | REJECT. Establish the required guarantee and business rationale |
+| Entities and Value Objects are classified only by persistence identifiers or technical type concerns | REJECT. Assess the need to track identity and attribute-based replaceability |
+| An Entity's identifier changes during its identity-tracking scope and lifetime without business justification | REJECT. Distinguish display-name changes from identity changes |
+
 ## Aggregate Mapping (`docs/ddd/aggregate-mapping.yaml`)
 
 | Criterion | Judgment |
