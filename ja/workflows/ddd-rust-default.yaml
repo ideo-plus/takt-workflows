@@ -32,12 +32,13 @@ steps:
         - task-decomposition
         - ddd-modeling
         - ddd-rust
-      testing_instruction: scenario-based-write-tests-first
+      testing_instruction: ddd-write-tests
       testing_report_format: scenario-based-test-report
       # テストの型と配置にも、業務概念によるモジュール分割を適用する。
       testing_policy:
         - coding
         - testing
+        - ddd-domain-model
         - ddd-domain-layer
         - ddd-domain-packaging
         - ddd-module-layout

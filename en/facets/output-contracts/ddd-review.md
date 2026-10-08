@@ -7,6 +7,7 @@
 
 ## Reviewed Aspects
 - [x] Domain model declaration (invariants, operations, errors, IDs, lineage)
+- [x] Model meaning (examples and counterexamples, language and Contexts, Aggregate consistency, identity and Value classification)
 - [x] Aggregate mapping and layer structure
 - [x] Domain layer (construction, state changes, getters, Result errors, ownership)
 - [x] Use-case layer (orchestration, re-execution, recovery)
