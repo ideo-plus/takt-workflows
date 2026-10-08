@@ -430,6 +430,18 @@ The model is derived from behavior, not from data tables: stories give past-tens
 
 Divide a domain package into Modules in Evans's sense. A Module is part of the model, not a technical bucket that holds code by kind. Put cohesive concepts in one Module and keep the dependencies between Modules few. Name a Module from the ubiquitous language (declared as a business term in `domain_packages` of the aggregate mapping), so the list of Modules tells how the domain is organized. When the model changes, regroup the Modules too.
 
+A Module may hold one Aggregate or several cohesive Aggregates. Choose by the business reason for understanding the concepts together, not by their count. Sharing a Module does not merge the boundaries that protect each Aggregate's invariants and consistency. Vernon's `team` Module contains the `ProductOwner`, `Team`, and `TeamMember` Aggregates together with `MemberService`.
+
+Support both detailed study within a Module and a view of relationships between Modules that omits their internal details. If a partition obscures conceptual relationships, reconsider the grouping or the model itself. When fewer dependencies conflict with conceptual clarity, favor conceptual clarity.
+
+Strive for unidirectional, acyclic dependencies between peer Modules. Avoid cycles between parents and children too, but assess the business need for relationships such as a parent creating a child that refers to the parent's identity. Complete independence and dependency counts alone are not the goal.
+
+Modules organize one model internally. A Bounded Context defines where the model's terms and rules have consistent meaning. When terminology is ambiguous and there is no clear reason for separate models, first consider separate Modules within the same Context. Do not create Contexts merely because the number of Modules or Aggregates grows.
+
+Record Module design decisions in `model_refs` and `rationale` of the aggregate mapping's `domain_packages`: which concepts are grouped, why they should be understood together, dependencies on other Modules, and reasons for splitting, merging, or renaming. Physical file placement follows the module layout policy.
+
+Primary sources: Eric Evans, *Domain-Driven Design*, Chapter 5, "Modules (a.k.a. Packages)" (pp. 109–114), Chapter 7, "Modules in the Shipping Model" (pp. 179–181), and Chapter 14, "Bounded Contexts Are Not Modules" (p. 336). Vaughn Vernon, *Implementing Domain-Driven Design*, Chapter 9, Table 9.1 in "Designing with Modules" (pp. 334–335), "Modules of the Agile Project Management Context" (pp. 340–342), and "Module before Bounded Context" (p. 344). The file layout below is this project's application of these principles.
+
 | Type | Where it goes |
 |------|---------------|
 | A type that belongs to one concept (the aggregate root, its identifier, a value object such as a line, a command ID the aggregate remembers) | Under that concept's Module (`invoice/`) |
