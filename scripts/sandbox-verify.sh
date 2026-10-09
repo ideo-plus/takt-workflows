@@ -9,6 +9,7 @@
 #
 # Usage: scripts/sandbox-verify.sh [--mode real|mock] [--lang ja|en] [--workflow NAME]
 #                                  [--task TEXT] [--check-cmd CMD]
+#                                  [--runtime FILE] [--config FILE]
 #                                  [--dir DIR] [--keep] [--timeout SECONDS]
 #   --mode real   (default) use the profiles in runtime.project.yaml; calls real providers
 #   --mode mock   same routing, but every profile uses TAKT's mock provider; no network,
@@ -19,6 +20,10 @@
 #                 (default: `node --test`; use `cargo test` for Rust tasks)
 #   --task        task text for the run (default: a small TypeScript module with node:test tests,
 #                 or a small Rust crate for ddd-rust-default)
+#   --runtime     replace the installed .takt/runtime.yaml with this file, to run the tiers on
+#                 providers other than runtime.project.yaml names (real mode)
+#   --config      replace the installed .takt/config.yaml with this file (the bundle language is
+#                 prepended as use-lang.sh does), e.g. to change the rate-limit fallback chain
 #   --dir         sandbox directory (default: a new temporary directory)
 #   --keep        keep the sandbox even when verification passes (it is always kept on failure)
 #   --timeout     abort the run after this many seconds (default: 5400 real, 600 mock)
@@ -32,6 +37,8 @@ lang=ja
 workflow=flash-default
 check_cmd=""
 task=""
+runtime_file=""
+config_file=""
 dir=""
 keep=0
 timeout_s=""
@@ -42,6 +49,8 @@ while [ $# -gt 0 ]; do
     --task) task="${2:?--task needs a value}"; shift 2 ;;
     --workflow) workflow="${2:?--workflow needs a value}"; shift 2 ;;
     --check-cmd) check_cmd="${2:?--check-cmd needs a value}"; shift 2 ;;
+    --runtime) runtime_file="${2:?--runtime needs a value}"; shift 2 ;;
+    --config) config_file="${2:?--config needs a value}"; shift 2 ;;
     --dir) dir="${2:?--dir needs a value}"; shift 2 ;;
     --timeout) timeout_s="${2:?--timeout needs a value}"; shift 2 ;;
     --keep) keep=1; shift ;;
@@ -51,6 +60,9 @@ while [ $# -gt 0 ]; do
 done
 case "$mode" in real|mock) ;; *) echo "--mode must be real or mock" >&2; exit 2 ;; esac
 case "$lang" in en|ja) ;; *) echo "--lang must be en or ja" >&2; exit 2 ;; esac
+for override in "$runtime_file" "$config_file"; do
+  [ -z "$override" ] || [ -f "$override" ] || { echo "no such file: $override" >&2; exit 2; }
+done
 command -v takt >/dev/null 2>&1 || { echo "takt is not on PATH" >&2; exit 2; }
 command -v node >/dev/null 2>&1 || { echo "node is not on PATH" >&2; exit 2; }
 [ -n "$timeout_s" ] || { [ "$mode" = real ] && timeout_s=5400 || timeout_s=600; }
@@ -87,6 +99,17 @@ git -C "$project" -c user.email=sandbox@example.invalid -c user.name=sandbox com
 
 # 2. Install the bundle with project-closed configuration.
 "$bundle/scripts/use-lang.sh" "$lang" "$project" > "$dir/install.log"
+
+# 2b. Optional overrides of that configuration, applied before the .takt commit below so that the
+#     run and the verification that reads it back see the same files.
+if [ -n "$runtime_file" ]; then
+  cp "$runtime_file" "$project/.takt/runtime.yaml"
+  echo "runtime overridden from $runtime_file"
+fi
+if [ -n "$config_file" ]; then
+  { printf 'language: %s\n\n' "$lang"; cat "$config_file"; } > "$project/.takt/config.yaml"
+  echo "config overridden from $config_file"
+fi
 
 # 3. Mock mode: same step routing, every profile on the mock provider (model = profile name),
 #    and a scripted judge that selects the happy-path rule of every step.

@@ -191,7 +191,7 @@ scripts/sandbox-verify.sh --mode real --workflow ddd-rust-default   # 結果を 
 - real モードのみ: テストファイルが作られ、サンドボックス内で検証コマンドが通ること（`--check-cmd`。既定は `node --test`、`ddd-rust-default` では `cargo test`）。
 - DDD ワークフロー: DDD レビュアーが動くこと、`.ddd.toml` と `docs/ddd/` のモデル文書が書かれること、プロジェクトが ddd-lint を通ること。mock モードでは実装担当が ddd-lint のサンプルプロジェクトを書くので、品質ゲートも実際に動く。
 
-結果はサンドボックス内の `report.md` に書かれます。サンドボックスは失敗時か `--keep` 指定時に残ります。`--lang`、`--task`、`--timeout` で言語・タスク・制限時間を変えられます。mock モードは経路をそのまま保ち（各 profile を「provider は mock、model は profile 名」に置き換える）、judge の答えを台本化して正常系を通します。確かめるのは配線で、モデルの品質ではありません。
+結果はサンドボックス内の `report.md` に書かれます。サンドボックスは失敗時か `--keep` 指定時に残ります。`--lang`、`--task`、`--timeout` で言語・タスク・制限時間を変えられます。`--runtime` と `--config` は、導入された `.takt/runtime.yaml` と `.takt/config.yaml` を差し替えます。`runtime.project.yaml` が挙げていない provider（たとえば手元のプロキシのアカウント）で実行したいときに、テンプレートを書き換えずに済みます。mock モードは経路をそのまま保ち（各 profile を「provider は mock、model は profile 名」に置き換える）、judge の答えを台本化して正常系を通します。確かめるのは配線で、モデルの品質ではありません。
 
 ## ヘルプ
 - Issues: https://github.com/ideo-plus/takt-workflows/issues
