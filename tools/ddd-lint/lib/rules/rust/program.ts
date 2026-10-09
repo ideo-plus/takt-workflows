@@ -13,6 +13,8 @@ export interface LocatedMethod {
   trait?: string;
 }
 export interface RustType {
+  visibility: string;
+  variants: readonly { readonly name: string; readonly unit: boolean }[];
   key: string;
   name: string;
   crate: string;
@@ -177,6 +179,8 @@ export function buildProgram(sources: RustSourceInventory, facts: DomainFactSet)
       });
       for (const decl of declared.types) {
         types.push({
+          visibility: decl.visibility,
+          variants: decl.variants,
           ...located([...module, ...decl.module], decl.name),
           kind: decl.kind,
           fields: decl.fields,
@@ -189,6 +193,8 @@ export function buildProgram(sources: RustSourceInventory, facts: DomainFactSet)
       }
       for (const decl of declared.traits) {
         types.push({
+          visibility: "private",
+          variants: [],
           ...located([...module, ...decl.module], decl.name),
           kind: "trait",
           fields: [],

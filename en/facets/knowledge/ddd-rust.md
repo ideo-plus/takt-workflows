@@ -1,5 +1,7 @@
 # DDD Rust Knowledge
 
+Independent Service operations take `&self` and shared references to declared input types, returning success or an operation-owned public enum error through Result. Errors contain exactly the mapped unit variants. Fixed scalar configuration, declared Values or Services, and unit-only configuration enums are allowed; retained Entities or interior-mutable state are not. State-bearing types retain their existing private primary constructor; stateless unit types follow existing construction rules. Inspection follows called shared-reference methods. Assignment, unsafe code, macros, free or unresolved calls, mutable/consuming receivers, and container-wrapped inputs are outside the current inspectable read-only form. Report inspection gaps rather than reinterpreting the operation as an Aggregate command or adding exemptions.
+
 ## Numeric Conversion after Validation
 
 A parser may accept `f64` and retain a fixed-width integer without changing the validated numeric value. Reject non-finite values, fractions, and values outside the storage range before converting the argument passed to the primary constructor. Check the business range before conversion too.
@@ -520,4 +522,21 @@ packages/
     billing-rmu/
   composition-root/
     billing-api/               # binary that wires everything
+```
+
+## Domain Service Operation Example
+
+```rust
+use crate::invoice::Invoice;
+use crate::money::Money;
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AssessPaymentEligibilityError { Ineligible }
+pub struct PaymentEligibility;
+impl PaymentEligibility {
+    pub fn create() -> Self { Self }
+    pub fn assess(&self, invoice: &Invoice, funds: &Money) -> Result<bool, AssessPaymentEligibilityError> {
+        if !invoice.allows_payment() || funds.is_negative() { return Err(AssessPaymentEligibilityError::Ineligible); }
+        Ok(true)
+    }
+}
 ```

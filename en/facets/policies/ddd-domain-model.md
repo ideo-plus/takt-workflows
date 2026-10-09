@@ -8,7 +8,7 @@ Defines what the declarations under `docs/ddd/` (domain model, aggregate mapping
 
 | Criterion | Judgment |
 |-----------|----------|
-| An aggregate, element, invariant, command, factory rule, event, error, or state is defined outside the domain model (in the mapping, a plan, code, or a review) | REJECT. Define it in the domain model; cite its model ID everywhere else |
+| An aggregate, element, invariant, command, factory rule, event, error, state, service, or independent operation is defined outside the domain model (in the mapping, a plan, code, or a review) | REJECT. Define it in the domain model; cite its model ID everywhere else |
 | An aggregate has no invariant | REJECT. Merge or demote the candidate |
 | A command does not state its state effect (`transitions` or `none`), or the stated effect disagrees with its transitions | REJECT |
 | A command declares no event or more than one (`events: [...]`), or its `event` is produced by another command | REJECT. A command produces exactly one event (`event: <event ID>`) |
@@ -20,6 +20,8 @@ Defines what the declarations under `docs/ddd/` (domain model, aggregate mapping
 | An accepted model's element ID is renamed, an ID is reused after retirement, or an ID does not follow `<kind>.<segments>` | REJECT. A business rename changes only `name`. Correct invalid IDs and all references in an unaccepted plan or an artifact generated in this task; retain no compatibility path for the invalid IDs |
 | A split, merge, or deprecation is not recorded in `lineage` | REJECT |
 | The model decides modules, packages, ports, repositories, or use-case procedures | REJECT. Write them in the aggregate mapping and the layer structure |
+| A Service has foreign Context ownership, incomplete operations/inputs/results/failures, invalid type references, or foreign error ownership | REJECT. Independent operations belong to Services and reference domain inputs and Value results of their own Context |
+| Independent-operation `failure_order` does not list every owned failure exactly once | REJECT |
 
 ## Judge Model Meaning
 
@@ -43,6 +45,7 @@ In addition to structural checks, compare business examples, counterexamples, an
 | An event-sourced aggregate does not declare the methods that apply its events in `replay_methods` | REJECT |
 | A package or module that holds domain code, or one of its parent levels, is missing from `domain_packages` | REJECT |
 | A `domain_packages` entry has no business term, model references, or rationale | REJECT |
+| A model Service lacks `service_mappings`, operation/input/success/error/case bindings are incomplete, or a code type or error type is shared with another owner | REJECT. Add the Service rows to the existing mapping |
 
 ## Layer Structure (`docs/ddd/layer-structure.yaml`)
 

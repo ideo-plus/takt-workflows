@@ -36,6 +36,7 @@ import { ruleA } from "./state-hiding.ts";
 import { rulePrimitiveInitialization } from "./primitives.ts";
 import { ruleFactoryNaming } from "./factories.ts";
 import { rulePrimaryConstructor } from "./constructors.ts";
+import { ruleServices } from "./services.ts";
 import type { TsGate, TsInspection, TsTarget } from "./types.ts";
 import { ruleH, ruleI, ruleRepositoryResult, ruleRepositoryContract, ruleUseCaseName, ruleEventSourcingStore } from "./use-case.ts";
 
@@ -109,7 +110,7 @@ export function evaluateTypeScriptDomain(run: ProjectContext, api: CheckApi): Ch
       ...ruleD(inspection, target),
     ],
     whole: (inspection, api) => {
-      const findings = ruleG(buildEdges(inspection));
+      const findings = [...ruleG(buildEdges(inspection)), ...ruleServices(inspection)];
       for (const pkg of new Map(inspection.targets.map((target) => [target.pkg.root, target.pkg])).values()) {
         api.checkBudget();
         findings.push(...ruleDomainPackaging(inspection, pkg));

@@ -13,7 +13,7 @@ Defines how the rules of the other DDD policies are judged in TypeScript code, a
 | Go through the primary constructor (domain layer) | A class has one private constructor implementation assigning every instance field; overload declarations are not implementations. A companion has one factory assembling its state closure and instance. Other construction paths delegate to it, directly or through auxiliaries |
 | Whether a domain type changes in place or becomes a new instance (domain layer) | A new instance; follow "Immutability" below |
 | Return business failures as a Result (domain layer) | An expected failure is returned as `{ ok: false, error: "<case>" }`. An operation's error type is the exported union of exactly its case strings |
-| Agreement with the declarations (domain layer) | Mapped factories and commands state `Result<success_type, error_type>` as their return type; a factory's success type is the aggregate. A function bound to no operation (`replay`, a value object's `of`) may return the value itself |
+| Agreement with the declarations (domain layer) | Mapped factories, commands, and independent Service operations state `Result<success_type, error_type>` as their return type; a factory's success type is its constructed element. A function bound to no operation (`replay`, a value object's `of`) may return the value itself |
 | Duplicate success (domain layer idempotency) | The success type has a `kind: "applied"` case (the new instance and the event) and a `kind: "duplicate"` case (the unchanged instance only) |
 
 ## Code Representation

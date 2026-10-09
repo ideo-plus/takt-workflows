@@ -30,6 +30,7 @@ import {
   type MappingLanguage,
   MappingReport,
   type OperationMapping,
+  type ServiceMapping,
   PERSISTENCE_METHODS,
   PROGRAMMING_MODELS,
   type ReplayMethodMapping,
@@ -37,7 +38,7 @@ import {
 import { type LanguageSpelling, type NameTest, SPELLINGS } from "./language.ts";
 
 const KEYS = {
-  root: ["model_ref", "aggregate_mappings", "domain_packages"],
+  root: ["model_ref", "aggregate_mappings", "domain_packages", "service_mappings"],
   aggregate: [
     "aggregate_ref",
     "programming_model",
@@ -176,16 +177,17 @@ function readOperation(
   node: Readonly<Record<string, unknown>>,
   where: string,
   spelling: LanguageSpelling | undefined,
+  allowed: readonly string[] = KEYS.operation,
 ): OperationMapping | undefined {
-  report.unknownKeys(node, KEYS.operation, where);
+  report.unknownKeys(node, allowed, where);
   const operationRef = readText(report, node, "operation_ref", where);
   const code = readCodeNode(report, node, where, KEYS.operationCode);
   const method = code && readName(report, code, "method", `${where}.code`, spelling?.isIdentifier);
   const errorType = code && readName(report, code, "error_type", `${where}.code`, spelling?.isIdentifier);
   const successRead = code && readOptionalName(report, code, "success_type", `${where}.code`, spelling?.isIdentifier);
   const successType = successRead?.present ? successRead.value : undefined;
-  if (code && successRead?.present === false && operationRef?.startsWith("command."))
-    structure(report, `${where}.code: a command names its "success_type"`);
+  if (code && successRead?.present === false && (operationRef?.startsWith("command.") || operationRef?.startsWith("service-operation.")))
+    structure(report, `${where}.code: a ${operationRef.startsWith("command.") ? "command" : "service operation"} names its "success_type"`);
   const errors = readNodes(report, node, "errors", where, true)?.map((entry, index) =>
     readErrorCase(report, entry, `${where}.errors[${index}]`, spelling),
   );
@@ -219,6 +221,31 @@ export function readOperations(
     readOperation(report, entry, `${where}.operations[${index}]`, spelling),
   );
   return operations !== undefined && allDefined(operations) ? operations : undefined;
+}
+
+function readService(report: MappingReport, node: Record<string, unknown>, where: string): ServiceMapping | undefined {
+  report.unknownKeys(node, ["service_ref", "code", "operations"], where);
+  const service_ref = readText(report, node, "service_ref", where);
+  const codeNode = readCodeNode(report, node, where, ["language", "package", "module", "type"]);
+  if (!codeNode) return undefined;
+  const language = readLanguage(report, codeNode, `${where}.code`);
+  const location = readLocation(report, codeNode, `${where}.code`, language);
+  const type = readName(report, codeNode, "type", `${where}.code`, spellingOf(language)?.isIdentifier);
+  const operations = readNodes(report, node, "operations", where, true)?.map((raw, i) => {
+    const at = `${where}.operations[${i}]`;
+    const operation = readOperation(report, raw, at, spellingOf(language), [...KEYS.operation, "inputs"]);
+    const inputs = readNodes(report, raw, "inputs", at, true)?.map((input, j) => {
+      const inputAt = `${at}.inputs[${j}]`;
+      report.unknownKeys(input, ["input", "parameter"], inputAt);
+      const name = readText(report, input, "input", inputAt);
+      const parameter = readName(report, input, "parameter", inputAt, spellingOf(language)?.isIdentifier);
+      return name === undefined || parameter === undefined ? undefined : { input: name, parameter };
+    });
+    if (!operation || !inputs || !allDefined(inputs)) return undefined;
+    return { ...operation, inputs };
+  });
+  if (!service_ref || !location || !type || !operations || !allDefined(operations)) return undefined;
+  return { service_ref, code: { ...location, type }, operations };
 }
 
 /** An optional type name in `code`, checked in `language`. */
@@ -353,13 +380,14 @@ export function readMappingDraft(root: Readonly<Record<string, unknown>>, file: 
   const packages = readNodes(report, root, "domain_packages", "mapping", true)?.map((entry, index) =>
     readPackage(report, entry, `domain_packages[${index}]`),
   );
+  const services = readNodes(report, root, "service_mappings", "mapping", false)?.map((entry, index) => readService(report, entry, `service_mappings[${index}]`));
   if (
     report.findings.length > 0 ||
     modelRef === undefined ||
     aggregates === undefined ||
     !allDefined(aggregates) ||
     packages === undefined ||
-    !allDefined(packages)
+    !allDefined(packages) || services === undefined || !allDefined(services)
   )
     return { kind: "rejected", findings: report.findings };
   return {
@@ -368,6 +396,7 @@ export function readMappingDraft(root: Readonly<Record<string, unknown>>, file: 
       model_ref: modelRef,
       aggregate_mappings: aggregates,
       domain_packages: packages,
+      ...(root.service_mappings === undefined ? {} : { service_mappings: services }),
     },
   };
 }

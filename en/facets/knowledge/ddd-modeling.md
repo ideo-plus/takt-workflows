@@ -48,6 +48,8 @@ Keep only the tables of the languages listed. `file` and `named-file` are the us
 
 ### Domain model declaration
 
+The YAML below declares Aggregates. Follow the addition examples under "Choosing a Domain Service" for independent operations, recorded in the same model and mapping.
+
 An attribute's `type` is a language-independent scalar (`string`, `integer`, `decimal`, `boolean`, `date`, or `datetime`) or a model element ID. Use `integer` for integer identifiers. Do not use implementation-language types such as TypeScript `number` or Rust `u64` here; declare code types, locations, and methods in the aggregate mapping.
 
 ```yaml
@@ -202,7 +204,7 @@ bounded_contexts:
 lineage: []
 ```
 
-Element IDs are `<kind>.<segments>` in lower kebab case. `bc`, `aggregate`, `entity`, `vo`, `primitive`, and `pm` take one segment; `invariant`, `command`, `event`, `transition`, and `factory` take the aggregate and a name; `error` takes the aggregate, the operation, and a name. A `lineage` entry (`lineage-0001`, relation `renamed`, `split`, `merged`, or `deprecated`) records how an ID changed.
+Element IDs are `<kind>.<segments>` in lower kebab case. `bc`, `aggregate`, `entity`, `vo`, `primitive`, `pm`, and `service` take one segment. `invariant`, `command`, `event`, `transition`, and `factory` take the aggregate and a name; `service-operation` takes the service and operation; `error` takes the owning aggregate or service, the operation, and a name. A `lineage` entry (`lineage-0001`, relation `renamed`, `split`, `merged`, or `deprecated`) records how an ID changed.
 
 A Domain Primitive (`kind: domain-primitive`) wraps one attribute and has a domain invariant narrower than its backing type. Declare invariants whose `element` names the primitive and a `parse` factory rule whose `preconditions` include every such invariant. Always provide both `of` and `parse`: `of` passes the unchanged input to `parse` and throws or panics on a caller contract violation; `parse` checks the invariants before initialization and returns its own error type in Result. Do not introduce a DP when the backing type alone expresses the valid domain. Resolve unspecified value rules as open questions rather than declaring an unconstrained DP. Attributes with `collection: true` use first-class collection types.
 
@@ -339,7 +341,7 @@ domain_packages:
     - money
 ```
 
-`model_ref` is relative to `docs/ddd`. `success_type` names what a command returns on success: in TypeScript the outcome type holding the new instance and the event, in Rust the event, or an outcome enum when the command recognizes resent commands. A factory rule's success is the aggregate type. `module` lists the segments below the package root, so the root is `[]`. Every level from the root down is declared. In TypeScript the case strings are the literal union members (`already-issued`); in Rust they are enum variants (`AlreadyIssued`).
+`model_ref` is relative to `docs/ddd`. `success_type` names what a command returns on success: in TypeScript the outcome type holding the new instance and the event, in Rust the event, or an outcome enum when the command recognizes resent commands. A factory rule's success is the constructed element type. `module` lists the segments below the package root, so the root is `[]`. Every level from the root down is declared. In TypeScript the case strings are the literal union members (`already-issued`); in Rust they are enum variants (`AlreadyIssued`).
 
 ### Layer structure
 
@@ -446,7 +448,7 @@ Primary sources: Evans, Chapter 5, "Entities" and "Value Objects" (pp. 89–101)
 
 ## Deriving the Model
 
-Derive the model from business behavior. Identify past-tense domain events in stories and the commands and actors that produce them. Establish the invariants each operation must preserve immediately, then group the state needed to preserve those invariants into Aggregates. Sharing a screen or business flow alone does not justify one Aggregate.
+Derive the model from business behavior. For Aggregate operations, identify past-tense domain events in stories and the commands and actors that produce them. Establish the invariants each operation must preserve immediately, then group the state needed to preserve those invariants into Aggregates. Sharing a screen or business flow alone does not justify one Aggregate. An independent decision or calculation that changes no state and produces no event must instead be assessed against Service selection criteria and declaration support; do not force it through this derivation.
 
 | Condition | Meaning / options |
 |-----------|-------------------|
@@ -454,7 +456,7 @@ Derive the model from business behavior. Identify past-tense domain events in st
 | Two candidates must change together to preserve an immediate invariant | Consider one Aggregate. Keeping them separate requires an explicit strategy that atomically preserves the same invariant; a Process Manager alone cannot guarantee it |
 | A cross-Aggregate rule permits delay before consistency | Establish tolerated delay, intermediate states, retries, and compensation conditions. Use a Process Manager or another mechanism for eventual consistency |
 | A flow crosses aggregates | Process Manager candidate; the steps and compensations are recorded in the model |
-| An operation never changes state | `state_effect: none`, which is a valid declaration |
+| An Aggregate command has no transition between declared states | Use `state_effect: none`. This does not remove changes to internal Values or collections, or event production |
 | A term exists only in code, not in the business vocabulary | Clarify it before naming a package after it |
 
 For example, compensating by canceling after booking cannot prevent a temporary violation of "no two confirmed reservations for the same room and time." Establish the business guarantee before selecting Aggregate boundaries and persistence constraints. Explain the rationale and guarantees for any exception that updates several Aggregates in one transaction.
@@ -519,7 +521,94 @@ When considering a new or changed Service, record the following in "Domain Servi
 | Retained information, independence between invocations, and input/output boundaries | Assess history-dependent decisions, loading, persistence, external communication, and Aggregate consistency |
 | Module placement, model references, and supported declarations | Record placement rationale in `domain_packages` through `model_refs` and `rationale`; check for missing operation declarations |
 
-The current `domain-model.yaml` has neither standalone Service declarations nor a Service element kind. Distinguish responsibilities representable through existing elements, invariants, and operations from those requiring an independent operation declaration. A plan report or `domain_packages` entry alone does not supply that declaration. If a necessary independent operation cannot be represented, report the concrete responsibility and references as a declaration-contract gap and pass it to replanning. Do not invent a `domain_services` key, an artificial Aggregate, or a Value Object disguising a Service.
+Declare independent Services under their Context's `domain_services`, never disguised as Aggregate elements. Bind code placement and operations through `service_mappings` in the existing `aggregate-mapping.yaml`. Adoption rationale and alternatives remain in the plan; distinguish business responsibility, placement rationale, and adoption rationale.
+
+#### Independent Operations and Implementation Mapping
+
+| Location | Contract |
+|----------|----------|
+| Service | `element_id`, `name`, `bounded_context`, `responsibility`, and one or more `operations`. ID: `service.<name>` |
+| Operation | `element_id`, `name`, `service`, `inputs`, `result`, `statement`, `domain_errors`, and `failure_order`. ID: `service-operation.<service>.<operation>` |
+| Inputs | `name` and `type` per entry; reference an Entity, Value Object, or Domain Primitive of the same Context. Input names are unique within the operation |
+| Result | `result.type` names an existing Value of the same Context or a model scalar. State its meaning in `statement`; values with narrower business invariants follow the existing Domain Primitive policy |
+| Failures | Operation-owned `domain_errors`. ID: `error.<service>.<operation>.<reason>`; `operation` references the owning independent operation |
+| Failure priority | List every failure exactly once in `failure_order`; return the first condition that holds. Business tests establish priority behavior |
+| Implementation | Service's `service_ref` and its `code` language, package, module, and type. Each operation names `operation_ref`, method, success type, error type, and every failure case |
+| Parameter bindings | Map model `input` to code `parameter` in each mapped operation's `inputs`; bindings, order, arity, and resolved types must agree |
+| Modules | Reference the owning Service in existing `domain_packages`; add no Service-specific layer or port |
+
+Current support covers synchronous decisions and calculations taking already-loaded domain objects, leaving inputs unchanged, and having expected business failures. Return success and failure through the operation's own `Result`. Report failure-free operations as unsupported rather than inventing an error. Do not impose Aggregate command transitions, events, or idempotency memory on Service operations; preserve the existing command contract.
+
+Passing an object temporarily is distinct from owning it as an Aggregate attribute. Retain the identifier-reference rule for attributes referring to other Aggregates. Invent no Aggregate or disguised Service Value to declare a result; report a necessary result Value that the current model cannot naturally declare.
+
+Follow existing language knowledge and policies for construction paths, the selected code representation, hidden state, and error spelling. Distinguish technical fixed-configuration initialization from the business decision; create no exception bypassing the primary constructor.
+
+Inspection checks ownership and type references, complete operation/error mappings, input/result/error types, and inspectable read-only forms of the Service and called methods. Model review and public-operation business tests also establish natural responsibilities, failure conditions and priority, and independence from invocation history. Passing static inspection alone does not establish business correctness.
+
+The following fragments extend the `bc.billing` example and its mapping. Preserve existing Aggregates, types, and root Module declarations. Complete projects are in the inspectors test/samples/services.ts.
+
+```yaml
+domain_services:
+  - element_id: service.payment-eligibility
+    name: PaymentEligibility
+    bounded_context: bc.billing
+    responsibility: Combine invoice eligibility with the available payment funds without changing either input
+    operations:
+      - element_id: service-operation.payment-eligibility.assess
+        name: AssessPaymentEligibility
+        service: service.payment-eligibility
+        inputs:
+          - name: invoice
+            type: entity.invoice
+          - name: funds
+            type: primitive.money
+        result:
+          type: boolean
+        statement: Return true exactly when the invoice permits payment and the funds are not negative
+        domain_errors:
+          - element_id: error.payment-eligibility.assess.ineligible
+            name: Ineligible
+            operation: service-operation.payment-eligibility.assess
+            condition: The inputs do not permit payment
+        failure_order:
+          - error.payment-eligibility.assess.ineligible
+```
+
+```yaml
+service_mappings:
+  - service_ref: service.payment-eligibility
+    code:
+      language: typescript
+      package: "@acme/billing-domain"
+      module:
+        - payment-eligibility
+      type: PaymentEligibility
+    operations:
+      - operation_ref: service-operation.payment-eligibility.assess
+        code:
+          method: assess
+          error_type: AssessPaymentEligibilityError
+          success_type: boolean
+        inputs:
+          - input: invoice
+            parameter: invoice
+          - input: funds
+            parameter: funds
+        errors:
+          - error_ref: error.payment-eligibility.assess.ineligible
+            code:
+              case: ineligible
+domain_packages:
+  - term: Payment eligibility
+    rationale: Combine the invoice amount and available funds without owning either
+    model_refs:
+      - service.payment-eligibility
+    code:
+      language: typescript
+      package: "@acme/billing-domain"
+      module:
+        - payment-eligibility
+```
 
 Sources: Eric Evans, *Domain-Driven Design*, Chapter 5, "Services" (pp. 104–107); Vaughn Vernon, *Implementing Domain-Driven Design*, Chapter 7, "What a Domain Service Is (but First, What It Is Not)", "Make Sure You Need a Service", and the authentication example (pp. 267–275). Adopt the selection criteria and independence from invocation history; layer ownership and declaration recording follow this project's policies.
 

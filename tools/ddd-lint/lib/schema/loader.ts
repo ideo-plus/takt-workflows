@@ -12,12 +12,15 @@
  */
 
 import { existsSync, readFileSync } from "node:fs";
-import { assertFindingInput, type FindingInput } from "../shared/findings.ts";
+import { type FindingInput } from "../shared/findings.ts";
 import { type ElementId, parseElementId } from "./element-id.ts";
 import { createElementIndex, type ElementIndex, type ResolveReason } from "./index-builder.ts";
+import { readServices, validateServices } from "./services.ts";
+import { Report, readDomainErrors, readObjectArray, readStringArray, SCALAR_TYPES } from "./reader.ts";
 import type {
   Aggregate,
   BoundedContext,
+  DomainService,
   Command,
   CommandEffect,
   DomainElement,
@@ -43,11 +46,10 @@ export type LoadResult =
   | { ok: true; model: DomainModel; index: ElementIndex }
   | { ok: false; findings: FindingInput[] };
 
-const SCALAR_TYPES = new Set(["string", "integer", "decimal", "boolean", "date", "datetime"]);
 
 const ALLOWED: Record<string, readonly string[]> = {
   domainModel: ["bounded_contexts", "lineage"],
-  bc: ["element_id", "name", "aggregates", "process_managers"],
+  bc: ["element_id", "name", "aggregates", "process_managers", "domain_services"],
   aggregate: [
     "element_id",
     "name",
@@ -85,7 +87,6 @@ const ALLOWED: Record<string, readonly string[]> = {
 };
 
 /** Each operation — Command or FactoryRule — owns its own DomainErrors, naming itself in `operation`. */
-const ERROR_KEYS: readonly string[] = ["element_id", "name", "operation", "condition"];
 const FACTORY_KEYS: readonly string[] = ["element_id", "name", "target_element", "preconditions", "domain_errors"];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -94,125 +95,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
-}
-
-class Report {
-  readonly findings: FindingInput[] = [];
-
-  constructor(private readonly file: string) {}
-
-  add(ruleId: string, message: string, line?: number): void {
-    const finding: FindingInput = {
-      rule_id: ruleId,
-      file: this.file,
-      message,
-      ...(line === undefined ? {} : { line }),
-    };
-    assertFindingInput(finding);
-    this.findings.push(finding);
-  }
-
-  checkKeys(node: Record<string, unknown>, allowed: readonly string[], where: string): void {
-    const allow = new Set(allowed);
-    for (const key of Object.keys(node)) {
-      if (!allow.has(key)) {
-        this.add("schema.unknown-key", `${where}: unknown key "${key}"`);
-      }
-    }
-  }
-
-  requiredString(node: Record<string, unknown>, key: string, where: string): string | undefined {
-    const value = node[key];
-    if (typeof value !== "string" || value.length === 0) {
-      this.add("schema.structure", `${where}: "${key}" must be a non-empty string`);
-      return undefined;
-    }
-    return value;
-  }
-
-  optionalString(node: Record<string, unknown>, key: string, where: string): string | undefined {
-    const value = node[key];
-    if (value === undefined) return undefined;
-    if (typeof value !== "string" || value.length === 0) {
-      this.add("schema.structure", `${where}: "${key}" must be a non-empty string`);
-      return undefined;
-    }
-    return value;
-  }
-
-  private idCache = new Map<string, ElementId | undefined>();
-
-  parseId(text: string, where: string): ElementId | undefined {
-    if (this.idCache.has(text)) return this.idCache.get(text);
-    const parsed = parseElementId(text);
-    if (!parsed.ok) {
-      this.add(parsed.rule_id, `${where}: ${parsed.message}`);
-      this.idCache.set(text, undefined);
-      return undefined;
-    }
-    this.idCache.set(text, parsed.id);
-    return parsed.id;
-  }
-
-  idField(node: Record<string, unknown>, key: string, where: string): string | undefined {
-    const value = this.requiredString(node, key, where);
-    if (value === undefined) return undefined;
-    return this.parseId(value, where)?.value;
-  }
-}
-
-function readStringArray(
-  report: Report,
-  node: Record<string, unknown>,
-  key: string,
-  where: string,
-  required: boolean,
-): string[] {
-  const value = node[key];
-  if (value === undefined) {
-    if (required) report.add("schema.structure", `${where}: "${key}" is required`);
-    return [];
-  }
-  if (!Array.isArray(value)) {
-    report.add("schema.structure", `${where}: "${key}" must be a list`);
-    return [];
-  }
-  const out: string[] = [];
-  value.forEach((entry, index) => {
-    if (typeof entry !== "string" || entry.length === 0) {
-      report.add("schema.structure", `${where}: "${key}[${index}]" must be a non-empty string`);
-      return;
-    }
-    out.push(entry);
-  });
-  return out;
-}
-
-function readObjectArray(
-  report: Report,
-  node: Record<string, unknown>,
-  key: string,
-  where: string,
-  required: boolean,
-): Record<string, unknown>[] {
-  const value = node[key];
-  if (value === undefined) {
-    if (required) report.add("schema.structure", `${where}: "${key}" is required`);
-    return [];
-  }
-  if (!Array.isArray(value)) {
-    report.add("schema.structure", `${where}: "${key}" must be a list`);
-    return [];
-  }
-  const out: Record<string, unknown>[] = [];
-  value.forEach((entry, index) => {
-    if (!isRecord(entry)) {
-      report.add("schema.structure", `${where}: "${key}[${index}]" must be an object`);
-      return;
-    }
-    out.push(entry);
-  });
-  return out;
 }
 
 function readAttribute(report: Report, node: Record<string, unknown>, where: string): ElementAttribute | undefined {
@@ -285,34 +167,6 @@ function readIdempotency(
 // ---------------------------------------------------------------------------
 // Structural readers
 // ---------------------------------------------------------------------------
-
-function readDomainError(
-  report: Report,
-  node: Record<string, unknown>,
-  where: string,
-): DomainError | undefined {
-  report.checkKeys(node, ERROR_KEYS, where);
-  const element_id = report.idField(node, "element_id", where);
-  const name = report.requiredString(node, "name", where);
-  // Read as a plain string, not as an element_id: an owner that is not well-formed is reported as
-  // an unresolvable reference by the cross-element pass, where the expected kind is also known.
-  const operation = report.requiredString(node, "operation", where);
-  const condition = report.requiredString(node, "condition", where);
-  if (element_id === undefined || name === undefined || operation === undefined || condition === undefined) {
-    return undefined;
-  }
-  return { element_id, name, operation, condition };
-}
-
-function readDomainErrors(
-  report: Report,
-  node: Record<string, unknown>,
-  where: string,
-): (DomainError | undefined)[] {
-  return readObjectArray(report, node, "domain_errors", where, true).map((raw, index) =>
-    readDomainError(report, raw, `${where}/domain_errors[${index}]`),
-  );
-}
 
 function readCommand(
   report: Report,
@@ -583,6 +437,7 @@ function readBoundedContext(
   const processManagers = readObjectArray(report, node, "process_managers", where, false).map((raw, index) =>
     readProcessManager(report, raw, `${where}/process_managers[${index}]`),
   );
+  const services = readServices(report, node, where);
   if (aggregates.length === 0) {
     report.add("schema.structure", `${where}: aggregates needs at least one entry`);
   }
@@ -590,7 +445,7 @@ function readBoundedContext(
     element_id === undefined ||
     name === undefined ||
     aggregates.some((entry) => entry === undefined) ||
-    processManagers.some((entry) => entry === undefined)
+    processManagers.some((entry) => entry === undefined) || services.some((entry) => entry === undefined)
   ) {
     return undefined;
   }
@@ -599,6 +454,7 @@ function readBoundedContext(
     name,
     aggregates: aggregates as Aggregate[],
     process_managers: processManagers as ProcessManager[],
+    ...(node.domain_services === undefined ? {} : { domain_services: services as DomainService[] }),
   };
 }
 
@@ -696,6 +552,7 @@ function requireRef(
 
 function validateModel(report: Report, model: DomainModel, index: ElementIndex): void {
   for (const bc of model.bounded_contexts) {
+    validateServices(report, bc, index);
     for (const aggregate of bc.aggregates) {
       validateAggregate(report, index, bc, aggregate);
     }
@@ -1153,6 +1010,15 @@ export function loadDomainModelSource(text: string, path: string): LoadResult {
     const bcId = parseElementId(bc.element_id);
     if (bcId.ok) {
       register({ id: bcId.id, kind: "bc", name: bc.name, node: bc });
+    }
+    for (const service of bc.domain_services ?? []) {
+      const id = parseElementId(service.element_id);
+      if (id.ok) register({ id: id.id, kind: "service", name: service.name, owner: bc.element_id, node: service });
+      for (const operation of service.operations) {
+        const opId = parseElementId(operation.element_id);
+        if (opId.ok) register({ id: opId.id, kind: "service-operation", name: operation.name, owner: service.element_id, node: operation });
+        registerDomainErrors(operation.domain_errors, service.element_id);
+      }
     }
     for (const aggregate of bc.aggregates) {
       const aggregateId = parseElementId(aggregate.element_id);

@@ -81,6 +81,16 @@ export interface AggregateMapping {
   readonly operations: readonly OperationMapping[];
 }
 
+export interface ServiceOperationMapping extends OperationMapping {
+  readonly inputs: readonly { readonly input: string; readonly parameter: string }[];
+}
+
+export interface ServiceMapping {
+  readonly service_ref: string;
+  readonly code: CodeLocation & { readonly type: string };
+  readonly operations: readonly ServiceOperationMapping[];
+}
+
 export interface DomainPackageMapping {
   readonly term: string;
   readonly model_refs: readonly string[];
@@ -92,6 +102,7 @@ export interface ImplementationMapping {
   readonly model_ref: string;
   readonly aggregate_mappings: readonly AggregateMapping[];
   readonly domain_packages: readonly DomainPackageMapping[];
+  readonly service_mappings?: readonly ServiceMapping[];
 }
 
 /**
