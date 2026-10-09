@@ -191,7 +191,7 @@ scripts/sandbox-verify.sh --mode real --workflow ddd-rust-default   # checks the
 - Real mode only: test files are created and the check command passes in the sandbox (`--check-cmd`; `node --test` by default, `cargo test` for `ddd-rust-default`).
 - DDD workflows: the DDD reviewer runs, `.ddd.toml` and the model files under `docs/ddd/` are written, and the project passes ddd-lint. In mock mode the coder writes the ddd-lint sample project, so the quality gate runs for real.
 
-The report is written to `report.md` in the sandbox, which is kept on failure or with `--keep`. `--lang`, `--task`, and `--timeout` change the language, the task, and the time limit. Mock mode keeps the routing (each profile becomes the mock provider with the profile name as model) and scripts the judge to take the happy path, so it checks the wiring, not model quality.
+The report is written to `report.md` in the sandbox, which is kept on failure or with `--keep`. `--lang`, `--task`, and `--timeout` change the language, the task, and the time limit. `--runtime` and `--config` replace the installed `.takt/runtime.yaml` and `.takt/config.yaml`, so a run can use providers other than the ones `runtime.project.yaml` names (for example a local proxy account) without editing the templates. Mock mode keeps the routing (each profile becomes the mock provider with the profile name as model) and scripts the judge to take the happy path, so it checks the wiring, not model quality.
 
 ## Getting help
 - Issues: https://github.com/ideo-plus/takt-workflows/issues
