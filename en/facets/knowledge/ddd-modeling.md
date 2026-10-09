@@ -500,6 +500,29 @@ packages/command/billing-domain/src/
 
 Once the concepts grow and the root no longer shows how the domain is organized, regroup cohesive concepts into Modules. For example, when credit is handled, the customer ID moves with the credit limit into a `customer` Module, and handling payments brings a `payment` Module. Do not make Modules that group types by kind, such as `ids`, `primitives`, or `value-objects`. Rust is the same: under the `file` layout, `invoice.rs` and `invoice/invoice_id.rs`.
 
+## Choosing a Domain Service
+
+Consider a Domain Service when an important business operation does not naturally belong to an existing Entity or Value Object. Name the operation in business language and express its inputs and result through model elements. Using several objects is not sufficient reason to introduce a Service. Keep each object's own decisions on that object; use examples and alternatives to establish why an independent operation is needed.
+
+For example, an authentication decision that receives an already-loaded tenant and user and combines the tenant's eligibility with the user's credential check is a candidate. Invoke their business operations rather than extracting state through getters and relocating their decisions. The use-case layer handles loading, persistence, notifications, and retry coordination. This adapts the book's example to the project's layer policy; it does not authorize copying the example's Repository access into the domain layer.
+
+Statelessness means that business state or invocation history retained by the Service itself does not change its decisions on a later call. Remembering the previous user to decide the next authentication is prohibited. A field containing fixed configuration or a dependency alone is not evidence of retained business state: inspect what is retained and what the decision depends on. In the books, statelessness does not require the absence of every side effect. The project's prohibitions on persistence and displaced Aggregate decisions, its port ownership, and dependency directions nevertheless remain in force.
+
+### Record Responsibilities and Establish Declaration Support
+
+When considering a new or changed Service, record the following in "Domain Service Decisions" in the plan report. For a rejected candidate, record the chosen owner and rationale too. A change with no candidate needs no additional Service or recording artifact.
+
+| Record | Establish |
+|--------|-----------|
+| Business name, operation, responsibility, and adoption or rejection rationale | Compare placement on an Entity or Value and coordination in a use case |
+| Inputs, result, and expected business failures | Cite existing model element IDs; distinguish each input object's decisions from the rule the Service combines |
+| Retained information, independence between invocations, and input/output boundaries | Assess history-dependent decisions, loading, persistence, external communication, and Aggregate consistency |
+| Module placement, model references, and supported declarations | Record placement rationale in `domain_packages` through `model_refs` and `rationale`; check for missing operation declarations |
+
+The current `domain-model.yaml` has neither standalone Service declarations nor a Service element kind. Distinguish responsibilities representable through existing elements, invariants, and operations from those requiring an independent operation declaration. A plan report or `domain_packages` entry alone does not supply that declaration. If a necessary independent operation cannot be represented, report the concrete responsibility and references as a declaration-contract gap and pass it to replanning. Do not invent a `domain_services` key, an artificial Aggregate, or a Value Object disguising a Service.
+
+Sources: Eric Evans, *Domain-Driven Design*, Chapter 5, "Services" (pp. 104–107); Vaughn Vernon, *Implementing Domain-Driven Design*, Chapter 7, "What a Domain Service Is (but First, What It Is Not)", "Make Sure You Need a Service", and the authentication example (pp. 267–275). Adopt the selection criteria and independence from invocation history; layer ownership and declaration recording follow this project's policies.
+
 ## Two Axes per Aggregate
 
 This workflow standardizes persistence on Event Sourcing.
