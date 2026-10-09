@@ -415,6 +415,19 @@ An aggregate-only context with no persistence still declares its package, depend
 
 Event Sourcing declares `via: event-replay` regardless of the storage medium. Its repository keeps ordered, append-only domain events and snapshots of the aggregate itself. Loading applies the events after the latest snapshot through the aggregate's declared replay methods. The memory maps are one map of event streams and one map whose values are the aggregate itself as snapshots, not state-storage wrappers that copy the aggregate's state into another type.
 
+## Inspect Declarations Before Completing Implementation
+
+Applying declarations first does not mean every check can pass before implementation. Checks that establish the existence of code and packages cannot finish from declarations alone. Follow this order during implementation.
+
+1. Apply the planned settings, model declarations, mapping, and layer structure. Correct declaration syntax, IDs, references, and binding errors.
+2. Prepare the planned package configuration and placement. Align TypeScript `package.json` and type-check settings, or Rust `Cargo.toml` and workspace configuration, with the declarations. Check the names and placement used to establish layer ownership.
+3. Read inspection results per check. For findings about packages or sources not yet created, complete the planned implementation and inspect again. Distinguish those findings from invalid declarations and findings against implemented code.
+4. Implement public operations and pass type checks, business tests, and every required final inspection. Distinguishing preparation gaps does not exempt any completion gate.
+
+For example, if a no-persistence declaration's empty ports and repositories are rejected, first check the declared domain package's configuration and placement. If its package configuration is absent, prepare it as planned and rerun inspection. Add no unrequested persistence boundary merely to pass. If inspection still fails with implementation and configuration in place, pass the check, target files, actual output, and attempted changes to replanning.
+
+During planning, state this order and its verification conditions. A failing full inspection before implementation alone does not establish missing business requirements or unsupported declaration formats. Investigate through the target project's declarations, configuration, code, and inspection output; do not read the distributed inspector's sources.
+
 ## Choosing Factory Names
 
 Choose the name from its purpose and declare the implementation name in the aggregate mapping's `code.method`. These are this project's conventions, adapted to each language.
@@ -509,6 +522,20 @@ Consider a Domain Service when an important business operation does not naturall
 For example, an authentication decision that receives an already-loaded tenant and user and combines the tenant's eligibility with the user's credential check is a candidate. Invoke their business operations rather than extracting state through getters and relocating their decisions. The use-case layer handles loading, persistence, notifications, and retry coordination. This adapts the book's example to the project's layer policy; it does not authorize copying the example's Repository access into the domain layer.
 
 Statelessness means that business state or invocation history retained by the Service itself does not change its decisions on a later call. Remembering the previous user to decide the next authentication is prohibited. A field containing fixed configuration or a dependency alone is not evidence of retained business state: inspect what is retained and what the decision depends on. In the books, statelessness does not require the absence of every side effect. The project's prohibitions on persistence and displaced Aggregate decisions, its port ownership, and dependency directions nevertheless remain in force.
+
+### Ask Another Aggregate to Make Its Own Decision
+
+Eligibility assessed from an already-loaded Organization and User can distribute decisions as follows. Method names illustrate the call responsibilities; adapt them to business language and language naming conventions.
+
+| Decision owner | Call and responsibility |
+|----------------|-------------------------|
+| Eligibility Service | Combine the Organization's active-status decision with the User's `belongsTo(organization)` and availability decisions, preserving failure priority |
+| User | Use its retained Organization identifier to ask the Organization `isIdentifiedBy(organizationId)` |
+| Organization | Decide whether its own identifier matches, without mixing active status into identity matching |
+
+Calling `organization.id()` from the Service to compare or forward an extracted identifier violates this project's getter-call convention. Identifiers receive no exemption: delegate matching to the object whose identity is being checked. The User may accept an Organization as a temporary parameter while retaining only the Organization identifier as an attribute; it does not own the other Aggregate.
+
+When adopting this collaboration, update the Module dependency rationale too. When changing a decision parameter, migrate direct callers and test calls together, preserving expected failure priority and behavior for different instances with the same identifier. Do not hide the call behind a renamed getter or weaken inspection to preserve an unaccepted old signature.
 
 ### Record Responsibilities and Establish Declaration Support
 
@@ -631,6 +658,18 @@ Execution model and persistence are independent choices, and both are independen
 A root factory validates every invariant before creating a complete aggregate and its creation event. The creation event's produced_by refers to the aggregate root factory. The factory returns the aggregate, which exposes the creation event through a read-only operation. Restoration applies the first creation event through the same replay factory. Do not build an incomplete aggregate and finish initialization later.
 
 Every command that changes state returns the one event it produced, whichever the persistence method. With event sourcing the command changes the state through a declared replay method, and restoring replays the stored events through the same method; the replay method decides nothing.
+
+### Prepare Already-Loaded Input Aggregates
+
+When a Service accepts already-loaded Aggregates, include a path to obtain complete input objects in the plan. Preparing inputs before invocation and making the Service decision are separate responsibilities.
+
+- When an existing model provides creation or restoration paths, reuse their declarations and public operations. Passing already-loaded Aggregates to a Service does not require adding registration or update business operations.
+- In a new project, first plan the factory, creation event, and restoration path that construct complete inputs from the required identities, states, and invariants. If backing-type validation suffices, reject only inputs of the wrong type; invent no identifier format or length constraints. Preparing a factory does not extend scope to a registration use case or persistence implementation.
+- In tests, create valid Aggregates through declared public factories, or restore stored events conforming to the actual contract through the declared path. Restoring past facts produces no new business events. Do not prepare Service inputs through incomplete Aggregates, private-constructor access, type assertions, or mocks replacing business decisions.
+
+For example, when the request supplies an Organization's identity and active status and a User's identity, Organization membership, and eligibility, show a path that validates these inputs and constructs complete Aggregates. Distinguish setup creation events from events produced by the Service decision. Establish the baseline after input preparation and verify that the decision changes no input and produces no new event.
+
+When information needed to determine business creation conditions or the restoration source contract is missing, record the specific missing conditions and required inputs. Resolve questions about declaration formats by inspecting the proposed declarations. Report any inspection failure; do not classify business requirements as unclear solely because a format remains unchecked. This preparation approach follows this workflow's creation and restoration conventions rather than imposing a book-specific requirement.
 
 ## Idempotency and Recovery
 
