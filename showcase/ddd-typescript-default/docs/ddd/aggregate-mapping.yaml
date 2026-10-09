@@ -63,6 +63,56 @@ aggregate_mappings:
   - event_ref: event.reservation.cancelled
     code:
       method: applyCancelled
+- aggregate_ref: aggregate.organization
+  programming_model: class
+  persistence_method: event-sourcing
+  reference_ids:
+    - entity.organization
+  code:
+    language: typescript
+    package: "@acme/access-domain"
+    module:
+      - access
+      - organization
+    type: Organization
+  operations:
+    - operation_ref: factory.organization.create
+      code:
+        method: create
+        error_type: CreateOrganizationError
+      errors:
+        - error_ref: error.organization.create.invalid-input
+          code:
+            case: invalid-input
+  replay_methods:
+    - event_ref: event.organization.created
+      code:
+        method: fromCreated
+- aggregate_ref: aggregate.user
+  programming_model: class
+  persistence_method: event-sourcing
+  reference_ids:
+    - entity.user
+  code:
+    language: typescript
+    package: "@acme/access-domain"
+    module:
+      - access
+      - user
+    type: User
+  operations:
+    - operation_ref: factory.user.create
+      code:
+        method: create
+        error_type: CreateUserError
+      errors:
+        - error_ref: error.user.create.invalid-input
+          code:
+            case: invalid-input
+  replay_methods:
+    - event_ref: event.user.created
+      code:
+        method: fromCreated
 domain_packages:
 - term: 会議室予約
   model_refs:
@@ -152,3 +202,86 @@ domain_packages:
     package: '@acme/reservation-interface-adapter'
     module:
     - in-memory-reservation-repository
+- term: 利用資格
+  model_refs:
+    - bc.access
+    - aggregate.organization
+    - aggregate.user
+    - service.access-eligibility
+  rationale: 利用組織と利用者の独立した判断、および両者を組み合わせる利用資格を一緒に理解するパッケージ。言語拡張の結果型だけに依存する
+  code:
+    language: typescript
+    package: "@acme/access-domain"
+    module:
+      []
+- term: 利用資格
+  model_refs:
+    - aggregate.organization
+    - aggregate.user
+    - service.access-eligibility
+  rationale: 独立した利用組織と利用者、および両者の判断を組み合わせるサービスを一つの業務モジュールで理解する。集約間の所有関係は追加しない
+  code:
+    language: typescript
+    package: "@acme/access-domain"
+    module:
+      - access
+- term: 利用組織
+  model_refs:
+    - aggregate.organization
+  rationale: 組織の同一性、有効性、構築と復元をまとめ、利用者には依存しない
+  code:
+    language: typescript
+    package: "@acme/access-domain"
+    module:
+      - access
+      - organization
+- term: 利用者
+  model_refs:
+    - aggregate.user
+  rationale: 利用者の同一性、利用可否、所属をまとめ、所属判断の一時引数として利用組織へ依存する
+  code:
+    language: typescript
+    package: "@acme/access-domain"
+    module:
+      - access
+      - user
+- term: 利用資格判定
+  model_refs:
+    - service.access-eligibility
+  rationale: 利用組織と利用者の判断を組み合わせる。両モジュールへ依存するが、入力集約を保持しない
+  code:
+    language: typescript
+    package: "@acme/access-domain"
+    module:
+      - access
+      - access-eligibility
+service_mappings:
+- service_ref: service.access-eligibility
+  code:
+    language: typescript
+    package: "@acme/access-domain"
+    module:
+      - access
+      - access-eligibility
+    type: AccessEligibility
+  operations:
+    - operation_ref: service-operation.access-eligibility.assess
+      code:
+        method: assess
+        success_type: boolean
+        error_type: AssessAccessEligibilityError
+      inputs:
+        - input: organization
+          parameter: organization
+        - input: user
+          parameter: user
+      errors:
+        - error_ref: error.access-eligibility.assess.organization-inactive
+          code:
+            case: organization-inactive
+        - error_ref: error.access-eligibility.assess.organization-mismatch
+          code:
+            case: organization-mismatch
+        - error_ref: error.access-eligibility.assess.user-unavailable
+          code:
+            case: user-unavailable

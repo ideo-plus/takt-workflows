@@ -58,3 +58,27 @@ layer_structures:
   - aggregate_ref: aggregate.reservation
     via: event-replay
   persistence_backend: in-memory
+- context_ref: bc.access
+  cqrs: false
+  packages:
+    - role: command
+      code:
+        language: typescript
+        package: "@acme/access-domain"
+  dependencies:
+    - code:
+        language: typescript
+        package: "@acme/access-domain"
+      depends_on:
+        - language: typescript
+          package: "@acme/language-extensions"
+  ports:
+    []
+  repositories:
+    []
+  restoration_paths:
+    - aggregate_ref: aggregate.organization
+      via: event-replay
+    - aggregate_ref: aggregate.user
+      via: event-replay
+  persistence_backend: none

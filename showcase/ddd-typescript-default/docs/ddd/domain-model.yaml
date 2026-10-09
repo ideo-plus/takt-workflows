@@ -156,4 +156,144 @@ bounded_contexts:
         name: InvalidRoomId
         operation: factory.reservation.parse-room-id
         condition: 入力が1以上の整数でない
+- element_id: bc.access
+  name: 利用資格
+  aggregates:
+    - element_id: aggregate.organization
+      name: 利用組織
+      bounded_context: bc.access
+      root_element: entity.organization
+      states:
+        - active
+        - inactive
+      elements:
+        - element_id: entity.organization
+          kind: entity
+          name: 利用組織
+          aggregate: aggregate.organization
+          attributes:
+            - name: id
+              type: string
+              required: true
+            - name: active
+              type: boolean
+              required: true
+      invariants:
+        - element_id: invariant.organization.complete-input
+          name: 完全な現在入力
+          aggregate: aggregate.organization
+          element: entity.organization
+          statement: 識別子は文字列、有効性は真偽値であり、無効な組織も構築できる
+        - element_id: invariant.organization.identity
+          name: 組織の同一性
+          aggregate: aggregate.organization
+          element: entity.organization
+          statement: 組織の同一性は識別子で決まり、判定によって識別子も現在状態も変わらない
+      commands:
+        []
+      events:
+        - element_id: event.organization.created
+          name: 利用組織が構築された
+          aggregate: aggregate.organization
+          produced_by: factory.organization.create
+      transitions:
+        []
+      factory_rules:
+        - element_id: factory.organization.create
+          name: 利用組織を構築する
+          target_element: entity.organization
+          preconditions:
+            - invariant.organization.complete-input
+          domain_errors:
+            - element_id: error.organization.create.invalid-input
+              name: 入力の型が不正
+              operation: factory.organization.create
+              condition: 識別子が文字列でない、または有効性が真偽値でない
+    - element_id: aggregate.user
+      name: 利用者
+      bounded_context: bc.access
+      root_element: entity.user
+      states:
+        - available
+        - unavailable
+      elements:
+        - element_id: entity.user
+          kind: entity
+          name: 利用者
+          aggregate: aggregate.user
+          attributes:
+            - name: id
+              type: string
+              required: true
+            - name: organizationId
+              type: string
+              required: true
+            - name: available
+              type: boolean
+              required: true
+      invariants:
+        - element_id: invariant.user.complete-input
+          name: 完全な現在入力
+          aggregate: aggregate.user
+          element: entity.user
+          statement: 利用者と所属組織の識別子は文字列、利用可否は真偽値であり、利用不可の利用者も構築できる
+        - element_id: invariant.user.identity-and-membership
+          name: 利用者の同一性と所属参照
+          aggregate: aggregate.user
+          element: entity.user
+          statement: 利用者の同一性は識別子で決まり、所属組織は識別子だけで参照し、判定によって属性は変わらない
+      commands:
+        []
+      events:
+        - element_id: event.user.created
+          name: 利用者が構築された
+          aggregate: aggregate.user
+          produced_by: factory.user.create
+      transitions:
+        []
+      factory_rules:
+        - element_id: factory.user.create
+          name: 利用者を構築する
+          target_element: entity.user
+          preconditions:
+            - invariant.user.complete-input
+          domain_errors:
+            - element_id: error.user.create.invalid-input
+              name: 入力の型が不正
+              operation: factory.user.create
+              condition: 利用者または所属組織の識別子が文字列でない、または利用可否が真偽値でない
+  domain_services:
+    - element_id: service.access-eligibility
+      name: 利用資格判定
+      bounded_context: bc.access
+      responsibility: 両集約が担う判断を組み合わせ、入力を変更せず利用資格を判定する
+      operations:
+        - element_id: service-operation.access-eligibility.assess
+          name: 利用資格を判定する
+          service: service.access-eligibility
+          inputs:
+            - name: organization
+              type: entity.organization
+            - name: user
+              type: entity.user
+          result:
+            type: boolean
+          statement: 組織が有効で、利用者がその組織に所属し、利用可能な場合だけ成功値trueを返し、それ以外は優先順位に従った拒否を返す
+          domain_errors:
+            - element_id: error.access-eligibility.assess.organization-inactive
+              name: 組織が無効
+              operation: service-operation.access-eligibility.assess
+              condition: 指定した利用組織が現在無効である
+            - element_id: error.access-eligibility.assess.organization-mismatch
+              name: 所属組織が相違
+              operation: service-operation.access-eligibility.assess
+              condition: 利用者が指定した利用組織に所属しない
+            - element_id: error.access-eligibility.assess.user-unavailable
+              name: 利用者が利用不可
+              operation: service-operation.access-eligibility.assess
+              condition: 利用者が現在利用できない
+          failure_order:
+            - error.access-eligibility.assess.organization-inactive
+            - error.access-eligibility.assess.organization-mismatch
+            - error.access-eligibility.assess.user-unavailable
 lineage: []

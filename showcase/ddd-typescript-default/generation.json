@@ -216,8 +216,8 @@
   "manual_revision": {
     "basis": "Explicit user instruction: remove ReservationSnapshot directly without TAKT; unify both showcases on Event Sourcing; retain no backward compatibility.",
     "started_at": "2026-10-04T05:46:34.699206+00:00",
-    "validation_bundle_commit": "a87ca122fa606332e56d68746153e99768ded3f1",
-    "finished_at": "2026-10-05T09:00:02.404996+00:00",
+    "validation_bundle_commit": "63604264852145232a886bdf88221d61d46323b0",
+    "finished_at": "2026-10-09T14:27:26.722739+00:00",
     "versions": {
       "node": "v24.19.0",
       "bun": "1.4.2",
@@ -273,6 +273,83 @@
         "tests/composition-root/cancel-reservation.test.ts"
       ],
       "verified_at": "2026-10-05T09:00:02.404996+00:00"
+    },
+    "access_service_update": {
+      "basis": "独立した二集約の入力準備、判断委譲、ドメインサービスと複数集約をまとめる業務モジュールを既存ショーケースへ追加するユーザー指示",
+      "completed_at": "2026-10-09T14:27:26.722739+00:00",
+      "validation_bundle_commit": "63604264852145232a886bdf88221d61d46323b0",
+      "source_origin": "adapted-real-typescript-workflow-output",
+      "real_task_source": {
+        "workflow": "ddd-typescript-default",
+        "language": "ja",
+        "run_id": "20261009-125807-typescript",
+        "guidance_commit": "1651d82f8f4f669f4609ae6a59bfcbc623b9b7d2",
+        "task_sha256": "e049e313926513ebd96d3134c1203ca7ea96675dd9f92d61d9c2277b97481cdf",
+        "takt_version": "0.67.0",
+        "elapsed_seconds": 2752,
+        "iterations": 6,
+        "reimplementation_count": 0,
+        "replanning_count": 0,
+        "automatic_checks": {
+          "passed": 24,
+          "failed": 0
+        },
+        "business_tests": {
+          "passed": 21,
+          "failed": 0
+        },
+        "independent_tests": {
+          "passed": 4,
+          "failed": 0,
+          "business_condition_combinations": 8
+        },
+        "generated_source_file_sha256": {
+          "packages/command/access-domain/src/access-eligibility.ts": "0b8ecc472d695c0a1fbbffcd89ed30e7a16bd63efd654e2c3d0ebb4e127fff29",
+          "packages/command/access-domain/src/index.ts": "f740c6d63d5643ba2eb50eb12034e12bb15c18e613c147d6e3a6eb81546cd5b8",
+          "packages/command/access-domain/src/organization.ts": "71b82427780aa8cbb927ef7c10ae8bad61f16774eccd449699c73151dd73d1da",
+          "packages/command/access-domain/src/user.ts": "c666487617cd2f82571897adab89ca1881f1ff087c697b047bb57eb31a2f1127",
+          "packages/infrastructure/language-extensions/src/index.ts": "316d0d8d3a90e15a048111e7074d2f545213a2b035ad2edfcc3817a00f1ff74e"
+        }
+      },
+      "input_contract": "基本型以外の識別子制約を追加しない。Rustの欠落入力はOption::Noneで表す",
+      "business_boundary": "会議室予約とは別の利用資格コンテキスト。コンテキスト間の情報受け渡しは対象外",
+      "verification": {
+        "pass": true,
+        "tests": {
+          "pass": 51,
+          "fail": 0,
+          "skipped": 0
+        },
+        "ddd_lint": {
+          "pass": true,
+          "findings": 0,
+          "unavailable": 0
+        },
+        "typecheck": {
+          "pass": true,
+          "command": "npm run typecheck"
+        },
+        "format": null
+      },
+      "changed_files": [
+        "showcase/ddd-typescript-default/access-task.txt",
+        "showcase/ddd-typescript-default/packages/command/access-domain/package.json",
+        "showcase/ddd-typescript-default/packages/command/access-domain/src/access.ts",
+        "showcase/ddd-typescript-default/packages/command/access-domain/src/access/access-eligibility.ts",
+        "showcase/ddd-typescript-default/packages/command/access-domain/src/access/organization.ts",
+        "showcase/ddd-typescript-default/packages/command/access-domain/src/access/user.ts",
+        "showcase/ddd-typescript-default/packages/command/access-domain/src/index.ts",
+        "showcase/ddd-typescript-default/packages/command/access-domain/test/access-eligibility.test.ts",
+        "showcase/ddd-typescript-default/packages/command/access-domain/test/input-aggregates.test.ts",
+        "showcase/ddd-typescript-default/packages/command/access-domain/tsconfig.json",
+        "showcase/ddd-typescript-default/README.md",
+        "showcase/ddd-typescript-default/docs/ddd/aggregate-mapping.yaml",
+        "showcase/ddd-typescript-default/docs/ddd/domain-model.yaml",
+        "showcase/ddd-typescript-default/docs/ddd/layer-structure.yaml",
+        "showcase/ddd-typescript-default/generation.json",
+        "showcase/ddd-typescript-default/package-lock.json",
+        "showcase/ddd-typescript-default/tsconfig.json"
+      ]
     }
   },
   "identifier_domain_assumption": {
@@ -280,43 +357,56 @@
     "basis": "Confirmed by the user."
   },
   "current_source_file_sha256": {
+    "access-task.txt": "e049e313926513ebd96d3134c1203ca7ea96675dd9f92d61d9c2277b97481cdf",
+    "packages/command/access-domain/package.json": "6a8da91e95ad697023ecc9f9aa3b7d02633c2bc16c3db32744b9bf73f18a0a0c",
+    "packages/command/access-domain/src/access.ts": "69bd65a6c7dddbba27cb0e5652d987238ea93e13ef1759aeecae2163204f7766",
+    "packages/command/access-domain/src/access/access-eligibility.ts": "fe2ae0d611ed5efe83f62ef283bd0b157b0fa49df20ff3a0268b8bb3d0e99fa7",
+    "packages/command/access-domain/src/access/organization.ts": "f9208f02257d12117e48b4ed12a5a4b06d577e8c41fb985b4948cfb5de6e0c43",
+    "packages/command/access-domain/src/access/user.ts": "a79d16fc86b100a01cca014d5856706e7256ad3d9751a15612f0e16dd3b3fe2a",
+    "packages/command/access-domain/src/index.ts": "7f16b564e2e966af915a8a4bc645bae238a9485c7f3b182827f43a929c731187",
+    "packages/command/access-domain/test/access-eligibility.test.ts": "063fc1acfde33471051a0c4524c37af2081483e990622abcb641570e426891d7",
+    "packages/command/access-domain/test/input-aggregates.test.ts": "a871e48153eefd8c3b953fe6325dba19a3e35eb50de4af2aa9081f1a9f30ce86",
+    "packages/command/access-domain/tsconfig.json": "8aaddb5ad9b9a33dec06b79c55e72a828fdc71d7d990a6afb1a9f8487aa5ecfe",
     ".ddd.toml": "2493ae622b5412418a6368546397c2a174107e4b04254b5128733bfa5cc1059f",
     ".gitignore": "54d812f808766fdd595bdd77352a4d5496a66fb636bb28634e214d86d4bcf47f",
-    "package-lock.json": "458d9e951f585ae82735e61c70ddfc0ff1e1f3f23b2fa8e3420aa7eeb4077bf7",
+    "config.yaml": "49911acbbb5a8b44b315348212c0e9b1162e60f862704518285246f55f72d348",
+    "docs/ddd/aggregate-mapping.yaml": "74e93bcdb68858ac5eca02cef47f5539d28ecefc65eb506697c2e6ae6ae2c447",
+    "docs/ddd/domain-model.yaml": "49c03c99857b5acdae4613032588c1111a11a307f3be5c7d1fdc51e086009d30",
+    "docs/ddd/layer-structure.yaml": "4bc76bc3c2186448e3be29ca1ec3823f145d5ded25571fad565d6fa17d311252",
+    "package-lock.json": "d8aa63c8b41b7f0f85ea4aede4106fb1fb7800cda09c50b2adc6e21d19f66376",
     "package.json": "1b9c80de9a044ed5dd1cf9cd5491effd4676cd2b263a64f9dc188f08bd0b0b38",
-    "tsconfig.json": "895afe5207d7f16d22eadfca5024f86420c34666cbbb1eccc1fdc79b791699f1",
-    "tsconfig.typecheck.json": "eb5b58c698ecf76ccbf97c4da250e3b3444da88b9e617cf7debe337227e9cbb8",
-    "packages/infrastructure/language-extensions/package.json": "78d4f2f5ef045bf8ae2586c74ebc8aeaf72b8637267d4c46d21f7cd352805106",
-    "packages/infrastructure/language-extensions/tsconfig.json": "8aaddb5ad9b9a33dec06b79c55e72a828fdc71d7d990a6afb1a9f8487aa5ecfe",
-    "packages/infrastructure/language-extensions/src/index.ts": "316d0d8d3a90e15a048111e7074d2f545213a2b035ad2edfcc3817a00f1ff74e",
     "packages/command/reservation-domain/package.json": "0a2b449fda06a2f3fdccc777c7d697d2df22e6df653dcc6bd3a3e99c47ac632d",
+    "packages/command/reservation-domain/src/index.ts": "c90ea3d9a3ca97ad786d10d2a28875a5cea0a16ec7e01f901361c54debf08963",
+    "packages/command/reservation-domain/src/member-id.ts": "b4b5d43cd2496f98a399fe111f55c16b6a99a1c656faec511ce70ba2a36a609d",
+    "packages/command/reservation-domain/src/reservation.ts": "7d4b414e0fcb27300d28b675214b094f4fe788b655d7892031d8eb0b48f7d90a",
+    "packages/command/reservation-domain/src/reservation/reservation-id.ts": "61faeb4019711c788970c9eabc004f9cde94d6e54705983b5ac949fa6ab596ab",
+    "packages/command/reservation-domain/src/room-id.ts": "e7cd8c041384f3746327e2ea4f71fb6aa8864600232c907b6646a2e19f4e32b4",
+    "packages/command/reservation-domain/tests/identifiers.test.ts": "50daaaefa5c6549fd30019fe2075736ae099114950ca439c2b7b7c78f0ad0eb8",
+    "packages/command/reservation-domain/tests/reservation.test.ts": "2a705f79facf6affd98d79c823406e513fd296334c967e9acb09881764afec7a",
     "packages/command/reservation-domain/tsconfig.json": "8aaddb5ad9b9a33dec06b79c55e72a828fdc71d7d990a6afb1a9f8487aa5ecfe",
     "packages/command/reservation-interface-adapter/package.json": "fe662eaf6346442c14b11c615421dbc79a640eeffeb9201cc04840a6bc1fb64f",
-    "packages/command/reservation-interface-adapter/tsconfig.json": "8aaddb5ad9b9a33dec06b79c55e72a828fdc71d7d990a6afb1a9f8487aa5ecfe",
-    "packages/command/reservation-use-case/package.json": "4aa9500acf2549c108f7962af7d4143028c05190a799fd6f602355254dec1bd5",
-    "packages/command/reservation-use-case/tsconfig.json": "8aaddb5ad9b9a33dec06b79c55e72a828fdc71d7d990a6afb1a9f8487aa5ecfe",
-    "packages/command/reservation-use-case/tests/cancel-reservation.test.ts": "3bc4e0c9a81d6fd5b68c06e2bddae8e52792a44b42bbcf20f34bd47f033f8389",
-    "packages/command/reservation-use-case/src/reservation-repository.ts": "64484a3d514709108ca9840412d60dcb326671cf0680825cbedfad043d7a9002",
-    "packages/command/reservation-use-case/src/cancel-reservation.ts": "0bee5d7f605ad17cfa26e0f1c59a2ea722b0221cf45724c04a714d8b15847190",
-    "packages/command/reservation-use-case/src/index.ts": "1fcb5349f99431ca24824055707da60f6afa784087cf9f4e05b77bb5a45514b6",
     "packages/command/reservation-interface-adapter/src/in-memory-reservation-repository.ts": "ad948bc64c663eee718b20aa76c75fba78357202641ed540f37efddd6e55a96e",
     "packages/command/reservation-interface-adapter/src/index.ts": "2fd92afa90aa9045bc87be32c85979dd4136df48051aa4d5a56c7a55a7212594",
-    "packages/command/reservation-domain/tests/reservation.test.ts": "2a705f79facf6affd98d79c823406e513fd296334c967e9acb09881764afec7a",
-    "packages/command/reservation-domain/tests/identifiers.test.ts": "50daaaefa5c6549fd30019fe2075736ae099114950ca439c2b7b7c78f0ad0eb8",
-    "packages/command/reservation-domain/src/index.ts": "c90ea3d9a3ca97ad786d10d2a28875a5cea0a16ec7e01f901361c54debf08963",
-    "packages/command/reservation-domain/src/reservation.ts": "7d4b414e0fcb27300d28b675214b094f4fe788b655d7892031d8eb0b48f7d90a",
-    "packages/command/reservation-domain/src/member-id.ts": "b4b5d43cd2496f98a399fe111f55c16b6a99a1c656faec511ce70ba2a36a609d",
-    "packages/command/reservation-domain/src/room-id.ts": "e7cd8c041384f3746327e2ea4f71fb6aa8864600232c907b6646a2e19f4e32b4",
-    "packages/command/reservation-domain/src/reservation/reservation-id.ts": "61faeb4019711c788970c9eabc004f9cde94d6e54705983b5ac949fa6ab596ab",
-    "docs/ddd/aggregate-mapping.yaml": "65592777d1c7c23e2a754a5be6becbe1c0ab87dd4361def6b719157df501a3f6",
-    "docs/ddd/domain-model.yaml": "5e099c6e8e44c38d36e527cae9d95ba45b875ad6a504a375577f8fc21896398f",
-    "docs/ddd/layer-structure.yaml": "d3a79960be3b55fd694ec56d5e52dc9477433ef32e57a5f57fca266c11f66cc9",
-    "tests/composition-root/cancel-reservation.test.ts": "cedf451d49e0a71876644dffa0ec23a4d158b620d8e8cd3b01b04def6b4b0a42"
+    "packages/command/reservation-interface-adapter/tsconfig.json": "8aaddb5ad9b9a33dec06b79c55e72a828fdc71d7d990a6afb1a9f8487aa5ecfe",
+    "packages/command/reservation-use-case/package.json": "4aa9500acf2549c108f7962af7d4143028c05190a799fd6f602355254dec1bd5",
+    "packages/command/reservation-use-case/src/cancel-reservation.ts": "0bee5d7f605ad17cfa26e0f1c59a2ea722b0221cf45724c04a714d8b15847190",
+    "packages/command/reservation-use-case/src/index.ts": "1fcb5349f99431ca24824055707da60f6afa784087cf9f4e05b77bb5a45514b6",
+    "packages/command/reservation-use-case/src/reservation-repository.ts": "64484a3d514709108ca9840412d60dcb326671cf0680825cbedfad043d7a9002",
+    "packages/command/reservation-use-case/tests/cancel-reservation.test.ts": "3bc4e0c9a81d6fd5b68c06e2bddae8e52792a44b42bbcf20f34bd47f033f8389",
+    "packages/command/reservation-use-case/tsconfig.json": "8aaddb5ad9b9a33dec06b79c55e72a828fdc71d7d990a6afb1a9f8487aa5ecfe",
+    "packages/infrastructure/language-extensions/package.json": "78d4f2f5ef045bf8ae2586c74ebc8aeaf72b8637267d4c46d21f7cd352805106",
+    "packages/infrastructure/language-extensions/src/index.ts": "316d0d8d3a90e15a048111e7074d2f545213a2b035ad2edfcc3817a00f1ff74e",
+    "packages/infrastructure/language-extensions/tsconfig.json": "8aaddb5ad9b9a33dec06b79c55e72a828fdc71d7d990a6afb1a9f8487aa5ecfe",
+    "runtime.yaml": "72de82d6c7180fdd070fb78f1d87356e47fcf21f46b7782fa1dacbbd5c473d81",
+    "task.txt": "5aff0583dc7527941b00ce312b3631c1f1804c08a3808c90408727926b5a5512",
+    "tests/composition-root/cancel-reservation.test.ts": "cedf451d49e0a71876644dffa0ec23a4d158b620d8e8cd3b01b04def6b4b0a42",
+    "tsconfig.json": "03343a6e62b23795ee40544eb48f295a0802cea7df9147c033a87c9d4f6a820c",
+    "tsconfig.typecheck.json": "eb5b58c698ecf76ccbf97c4da250e3b3444da88b9e617cf7debe337227e9cbb8"
   },
   "standalone_verification": {
     "pass": true,
     "tests": {
-      "pass": 30,
+      "pass": 51,
       "fail": 0,
       "skipped": 0
     },
@@ -346,6 +436,29 @@
       "artifact_commit": "eeea20a364cb5a89a39f12bd77178e1028d20db4",
       "validation_bundle_commit": "871d0d866516c9264f4f10dbd77126a117ae4af6",
       "verified_at": "2026-10-04T07:49:05.032104+00:00"
+    },
+    {
+      "recorded_at": "2026-10-09T14:27:26.722739+00:00",
+      "basis": "利用資格の例を追加する前の検証記録",
+      "standalone_verification": {
+        "pass": true,
+        "tests": {
+          "pass": 30,
+          "fail": 0,
+          "skipped": 0
+        },
+        "ddd_lint": {
+          "pass": true,
+          "findings": 0,
+          "unavailable": 0
+        },
+        "typecheck": {
+          "pass": true,
+          "command": "npm run typecheck"
+        },
+        "format": null
+      },
+      "validation_bundle_commit": "a87ca122fa606332e56d68746153e99768ded3f1"
     }
   ]
 }

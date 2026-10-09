@@ -18,7 +18,8 @@
     { "path": "./packages/infrastructure/language-extensions" },
     { "path": "./packages/command/reservation-domain" },
     { "path": "./packages/command/reservation-use-case" },
-    { "path": "./packages/command/reservation-interface-adapter" }
+    { "path": "./packages/command/reservation-interface-adapter" },
+    { "path": "./packages/command/access-domain" }
   ],
   "files": [],
   "include": []
