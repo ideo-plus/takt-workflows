@@ -2,8 +2,8 @@ use super::*;
 
 fn check(source: &str) -> Value {
     let answer =
-        run(json!({"protocol_version":13,"files":[{"path":"lib.rs","source":source}]})).unwrap();
-    assert_eq!(answer["protocol_version"], 13);
+        run(json!({"protocol_version":14,"files":[{"path":"lib.rs","source":source}]})).unwrap();
+    assert_eq!(answer["protocol_version"], 14);
     answer["files"][0].clone()
 }
 
@@ -960,7 +960,7 @@ fn domain_facts_marks_an_unparsed_file_instead_of_reporting_it_as_declaring_noth
 
 #[test]
 fn domain_facts_answers_one_record_per_requested_file_in_order() {
-    let answer = run(json!({"protocol_version":13,"files":[
+    let answer = run(json!({"protocol_version":14,"files":[
         {"path":"b.rs","source":"pub struct B(pub u64);"},
         {"path":"a.rs","source":"pub struct A(pub u64);"}]}))
     .unwrap();
@@ -974,9 +974,9 @@ fn domain_facts_answers_one_record_per_requested_file_in_order() {
 fn domain_facts_refuses_a_request_that_is_not_this_protocol() {
     for request in [
         json!({"protocol_version":6,"files":[{"path":"lib.rs","source":""}]}),
-        json!({"protocol_version":13,"files":[]}),
-        json!({"protocol_version":13,"files":[{"path":"lib.rs"}]}),
-        json!({"protocol_version":13,"files":[{"path":"lib.rs","source":"","extra":true}]}),
+        json!({"protocol_version":14,"files":[]}),
+        json!({"protocol_version":14,"files":[{"path":"lib.rs"}]}),
+        json!({"protocol_version":14,"files":[{"path":"lib.rs","source":"","extra":true}]}),
     ] {
         assert!(run(request).is_err());
     }

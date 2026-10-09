@@ -1,5 +1,15 @@
 # DDD Rust Knowledge
 
+## Numeric Conversion after Validation
+
+A parser may accept `f64` and retain a fixed-width integer without changing the validated numeric value. Reject non-finite values, fractions, and values outside the storage range before converting the argument passed to the primary constructor. Check the business range before conversion too.
+
+The inspection recognizes a single unmodified, unshadowed `f64` parameter, its `is_finite` and `fract` checks, literal lower and upper bounds, and a direct cast such as `value as u16` or `value as u64` after rejection guards. Combine invalid cases with `||` or use successive rejection guards. Targets are the fixed-width `u8` through `u128` and `i8` through `i128` types; the accepted range must fit the target.
+
+For example, `value as u64` preserves a room identifier proven finite, integral, and between `1` and `9_007_199_254_740_991`. Likewise, `value as u16` preserves a minute value between `0` and `1440`. Since a float cannot represent `u64::MAX` exactly, the inspection uses an exclusive upper boundary for the integer storage range.
+
+Rounding, changed-value expressions, conversion before rejection, an undersized target, and shadowed inputs or primitive names are rejected. Type aliases, bounds expressed through constants or helpers, and platform-width `usize` or `isize` remain findings when the inspection cannot establish the conversion. Distinguish an absent rejection guard from a guard followed by an unverified conversion. Merely moving the cast into the primary constructor does not resolve the finding.
+
 ## Aggregate
 
 Centralize direct initialization in one private primary constructor new. Validating auxiliary factories delegate to it. DPs follow of → parse → new; aggregate creation follows business factory → auxiliary → new. ES `replay(events, snapshot)` takes an existing aggregate and advances it through the replay methods, so it is not a construction path.

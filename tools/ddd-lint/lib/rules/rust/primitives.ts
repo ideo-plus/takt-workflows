@@ -69,7 +69,9 @@ export function rulePrimitiveInitialization(
       creations.some((entry) => !entry.guarded)
     )
       report(
-        `${type.name}::parse must reject invalid input with an invariant guard before calling its primary constructor`,
+        creations.some((entry) => entry.conversion_unproven)
+          ? `${type.name}::parse has an input rejection guard, but the integer conversion cannot be verified to preserve that input; require a direct f64 parameter, finite/integral rejection, and literal bounds within the target integer range`
+          : `${type.name}::parse must reject invalid input with an invariant guard before calling its primary constructor`,
         parsed?.line,
       );
     if (primary && (primary.method.params.length !== 1 || primary.method.initialization.creations.filter((entry) => own(entry.type_text)).some((entry) => !entry.input_unchanged)))
@@ -134,7 +136,9 @@ export function rulePrimitiveInitialization(
         const owner = type.methods.find((entry) => entry.file === file && within(call.span, entry.method.span));
         const resolved = call.type_text === "Self" ? (owner ? type : undefined) : context.program.resolveType(file, source.module, call.type_text);
         if (resolved?.key !== type.key) continue;
-        if (!owner || owner.method.name !== "parse" || !creations.some((site) => site.guarded && within(site.span, call.span) && within(call.span, site.span)))
+        const matched = creations.find((site) => within(site.span, call.span) && within(call.span, site.span));
+        if (owner?.method.name === "parse" && matched?.conversion_unproven) continue; // Reported above, with the missing conversion proof.
+        if (!owner || owner.method.name !== "parse" || !matched?.guarded)
           findings.push({ rule_id: "primitive-initialization", file, line: call.span.start_line, message: `${type.name} primary constructor call bypasses the validated parse path` });
       }
     }
