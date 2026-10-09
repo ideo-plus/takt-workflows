@@ -1,5 +1,5 @@
 /**
- * Protocol version 13 of the native extractor: the facts every Rust rule decides on.
+ * Protocol version 14 of the native extractor: the facts every Rust rule decides on.
  *
  * The launch classification is the shared one in `native/launch.ts`; this module owns the protocol
  * identity, the one batch this inspection sends, and the strict conversion of native spellings into
@@ -15,7 +15,7 @@ import { ToolUnavailableError } from "../../project/context.ts";
 import { classifyNativeExtractor, type NativeOutcome, nativeIssue } from "../native/launch.ts";
 import { NATIVE_BIN_DIR, PLATFORM_KEY } from "../native/manifest.ts";
 
-const PROTOCOL = { flag: "--domain-facts-version", version: 13 };
+const PROTOCOL = { flag: "--domain-facts-version", version: 14 };
 /** The unresolved reason the extractor gives an attribute that may replace the item it annotates. */
 const ATTRIBUTE_MACRO_REASON = "attribute-macro";
 /** The extractor refuses a larger request, so an oversized batch is refused before it is sent. */
@@ -100,7 +100,7 @@ export interface MethodFact {
   readonly span: Span;
   readonly initialization: {
     readonly creations: readonly { readonly type_text: string; readonly guarded: boolean; readonly input_unchanged: boolean; readonly line: number; readonly span: Span }[];
-    readonly delegations: readonly { readonly type_text: string; readonly callee_text: string; readonly guarded: boolean; readonly input_unchanged: boolean; readonly span: Span }[];
+    readonly delegations: readonly { readonly type_text: string; readonly callee_text: string; readonly guarded: boolean; readonly input_unchanged: boolean; readonly conversion_unproven: boolean; readonly span: Span }[];
     readonly parse_delegate?: string;
   };
   readonly line: number;
@@ -373,7 +373,7 @@ function method(value: unknown): MethodFact {
       }),
       delegations: array(initialization.delegations).map((entry) => {
         const call = object(entry);
-        return { type_text: nonempty(call.type_text), callee_text: nonempty(call.callee_text), guarded: flag(call.guarded), input_unchanged: flag(call.input_unchanged), span: span(call.span) };
+        return { type_text: nonempty(call.type_text), callee_text: nonempty(call.callee_text), guarded: flag(call.guarded), input_unchanged: flag(call.input_unchanged), conversion_unproven: flag(call.conversion_unproven), span: span(call.span) };
       }),
       ...(delegate === undefined ? {} : { parse_delegate: delegate }),
     },

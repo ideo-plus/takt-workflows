@@ -6,6 +6,7 @@ import { dirname, join, resolve } from "node:path";
 import { rustParentModuleFile, rustSample, rustSamples } from "./samples/rust.ts";
 import { parentModuleFile, typeScriptSample, typeScriptSamples } from "./samples/typescript.ts";
 import { loadAggregateMapping } from "../lib/aggregate-mapping/index.ts";
+import type { ImplementationMapping } from "../lib/aggregate-mapping/contract.ts";
 import { loadDomainModelSource } from "../lib/schema/loader.ts";
 import { serializedMemoryExamples } from "./samples/serialized-memory.ts";
 import { eventRustSample, eventTypeScriptSample } from "./samples/event-sourcing.ts";
@@ -174,6 +175,137 @@ describe("Domain Primitive validated input", () => {
       expect(result.findings.some((entry) => entry.rule_id === "primitive-initialization" && entry.message.includes("guard"))).toBe(true);
     });
   }
+});
+
+/** A numeric invoice identifier exercises the real model, mapping, and native extraction gates. */
+function numericRustPrimitive(source: string): Record<string, string> {
+  const files = { ...rustSample("file").files };
+  const loaded = loadDomainModelSource(files["docs/ddd/domain-model.yaml"], "numeric-fixture.yaml");
+  if (!loaded.ok) throw new Error("numeric fixture base model does not load");
+  const model = loaded.model;
+  const aggregate = model.bounded_contexts[0].aggregates[0];
+  aggregate.elements.push({ element_id: "primitive.invoice-number", kind: "domain-primitive", name: "InvoiceNumber", aggregate: "aggregate.invoice", attributes: [{ name: "value", type: "integer", required: true, collection: false }], invariants: [] });
+  aggregate.invariants.push({ element_id: "invariant.invoice.number", name: "PositiveSafeInvoiceNumber", aggregate: "aggregate.invoice", element: "primitive.invoice-number", statement: "Invoice numbers are positive safe integers" });
+  aggregate.factory_rules.push({ element_id: "factory.invoice.parse-number", name: "ParseInvoiceNumber", target_element: "primitive.invoice-number", preconditions: ["invariant.invoice.number"], domain_errors: [{ element_id: "error.invoice.parse-number.invalid", name: "InvalidInvoiceNumber", operation: "factory.invoice.parse-number", condition: "Input is not a positive safe integer" }] });
+  files["docs/ddd/domain-model.yaml"] = Bun.YAML.stringify(model);
+  const mapping = Bun.YAML.parse(files["docs/ddd/aggregate-mapping.yaml"]) as ImplementationMapping;
+  files["docs/ddd/aggregate-mapping.yaml"] = Bun.YAML.stringify({
+    ...mapping,
+    aggregate_mappings: mapping.aggregate_mappings.map((entry, index) => index === 0 ? {
+      ...entry,
+      operations: [...entry.operations, { operation_ref: "factory.invoice.parse-number", code: { method: "parse", error_type: "ParseInvoiceNumberError" }, errors: [{ error_ref: "error.invoice.parse-number.invalid", code: { case: "InvalidValue" } }] }],
+    } : entry),
+    domain_packages: [...mapping.domain_packages, { term: "Invoice number", model_refs: ["primitive.invoice-number"], rationale: "An invoice identifier belongs under the invoice module", code: { language: "rust", package: "billing-domain", module: ["invoice", "invoice_number"] } }],
+  });
+  files["packages/command/billing-domain/src/invoice.rs"] += "\npub mod invoice_number;\n";
+  files["packages/command/billing-domain/src/invoice/invoice_number.rs"] = source;
+  return files;
+}
+
+const NUMERIC_PRIMITIVE = `#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InvoiceNumber { value: u64 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ParseInvoiceNumberError { InvalidValue }
+impl InvoiceNumber {
+    fn new(value: u64) -> Self { Self { value } }
+    pub fn of(value: f64) -> Self { Self::parse(value).expect("invalid invoice number") }
+    pub fn parse(value: f64) -> Result<Self, ParseInvoiceNumberError> {
+        if !value.is_finite() || value.fract() != 0.0 || value < 1.0 || value > 9_007_199_254_740_991.0 {
+            return Err(ParseInvoiceNumberError::InvalidValue);
+        }
+        Ok(Self::new(value as u64))
+    }
+}
+`;
+
+describe("Rust validated numeric conversion", () => {
+  test("accepts a lossless float-to-integer conversion after input rejection", () => {
+    const result = lint(numericRustPrimitive(NUMERIC_PRIMITIVE));
+    expect(result.unavailable).toEqual([]);
+    expect(result.findings).toEqual([]);
+    expect(result.pass).toBe(true);
+  });
+  test("rejects a cast of a shadowed value even after guarding the parameter", () => {
+    const source = NUMERIC_PRIMITIVE.replace("Ok(Self::new(value as u64))", "Ok({ let value = -1.0; Self::new(value as u64) })");
+    const result = lint(numericRustPrimitive(source));
+    expect(result.findings.some((entry) => entry.rule_id === "primitive-initialization")).toBe(true);
+  });
+  test("does not trust a shadowed primitive cast target", () => {
+    const source = "type u64 = u8;\n" + NUMERIC_PRIMITIVE;
+    const result = lint(numericRustPrimitive(source));
+    expect(result.findings.some((entry) => entry.rule_id === "primitive-initialization")).toBe(true);
+  });
+
+  for (const [name, edit] of [
+    ["non-finite input", (source: string) => source.replace("!value.is_finite() || ", "")],
+    ["fractional input", (source: string) => source.replace("value.fract() != 0.0 || ", "")],
+    ["missing lower bound", (source: string) => source.replace("value < 1.0 || ", "")],
+    ["missing upper bound", (source: string) => source.replace(" || value > 9_007_199_254_740_991.0", "")],
+    ["negative input to unsigned storage", (source: string) => source.replace("value < 1.0", "value < -1.0")],
+    ["storage overflow", (source: string) => source.replaceAll("u64", "u8")],
+    ["a changed value", (source: string) => source.replace("value as u64", "(value + 1.0) as u64")],
+    ["rounding", (source: string) => source.replace("value as u64", "value.round() as u64")],
+    ["conjunction of invalid cases", (source: string) => source.replaceAll(" || ", " && ")],
+    ["a fractional disjunct", (source: string) => source.replace("value.fract() != 0.0", "(value.fract() != 0.0 && value > 1000.0)")],
+    ["a cast before validation", (source: string) => source.replace("        if !value.is_finite()", "        let unchecked = Self::new(value as u64);\n        if !value.is_finite()")],
+    ["an inclusive u64 upper boundary", (source: string) => source.replace("9_007_199_254_740_991.0", "18_446_744_073_709_551_616.0")],
+  ] as const) test(`rejects ${name}`, () => {
+    const result = lint(numericRustPrimitive(edit(NUMERIC_PRIMITIVE)));
+    expect(result.findings.some((entry) => entry.rule_id === "primitive-initialization")).toBe(true);
+  });
+
+  for (const [name, expression] of [
+    ["tuple binding", "Ok({ let (value, _) = (-1.0, 0); Self::new(value as u64) })"],
+    ["if-let binding", "Ok(if let Some(value) = Some(-1.0) { Self::new(value as u64) } else { panic!(\"missing fixture value\") })"],
+    ["match binding", "Ok(match Some(-1.0) { Some(value) => Self::new(value as u64), None => panic!(\"missing fixture value\") })"],
+  ]) test(`rejects a shadowed input in a ${name}`, () => {
+    const result = lint(numericRustPrimitive(NUMERIC_PRIMITIVE.replace("Ok(Self::new(value as u64))", expression)));
+    expect(result.findings.some((entry) => entry.rule_id === "primitive-initialization" && entry.line === 12)).toBe(true);
+  });
+
+  test("distinguishes missing conversion proof from a missing input guard", () => {
+    const result = lint(numericRustPrimitive(NUMERIC_PRIMITIVE.replace("value.fract() != 0.0 || ", "")));
+    const findings = result.findings.filter((entry) => entry.rule_id === "primitive-initialization");
+    expect(findings).toHaveLength(1);
+    expect(findings[0].message).toContain("has an input rejection guard");
+    expect(findings[0].message).toContain("conversion cannot be verified");
+  });
+  test("accepts u16 storage when literal bounds fit it", () => {
+    const source = NUMERIC_PRIMITIVE.replaceAll("u64", "u16").replace("9_007_199_254_740_991.0", "1440.0");
+    expect(lint(numericRustPrimitive(source)).findings).toEqual([]);
+  });
+  test("accepts the exclusive upper boundary of u64", () => {
+    const source = NUMERIC_PRIMITIVE.replace("value > 9_007_199_254_740_991.0", "value >= 18_446_744_073_709_551_616.0");
+    expect(lint(numericRustPrimitive(source)).findings).toEqual([]);
+  });
+  test("accumulates finite, integral, and range proofs across rejection guards", () => {
+    const source = NUMERIC_PRIMITIVE.replace(" || value.fract() != 0.0 || value < 1.0 || value > 9_007_199_254_740_991.0", "").replace("        Ok(Self::new(value as u64))", `        if value.fract() != 0.0 { return Err(ParseInvoiceNumberError::InvalidValue); }
+        if 1.0 > value || 9_007_199_254_740_991.0 < value { return Err(ParseInvoiceNumberError::InvalidValue); }
+        Ok(Self::new((value as u64)))`);
+    expect(lint(numericRustPrimitive(source)).findings).toEqual([]);
+  });
+  test("converted numbers retain their value and invalid input is rejected at runtime", () => {
+    const source = NUMERIC_PRIMITIVE.replace("    pub fn of(", "    pub fn matches(&self, expected: u64) -> bool { self.value == expected }\n    pub fn of(");
+    const files = numericRustPrimitive(source);
+    files["packages/command/billing-domain/tests/numeric_conversion.rs"] = `use billing_domain::invoice::invoice_number::InvoiceNumber;
+#[test]
+fn retains_values_and_rejects_invalid_input() {
+    for (input, expected) in [(1.0, 1_u64), (1440.0, 1440), (9_007_199_254_740_991.0, 9_007_199_254_740_991)] {
+        assert!(InvoiceNumber::parse(input).unwrap().matches(expected));
+        assert!(InvoiceNumber::of(input).matches(expected));
+    }
+    for input in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY, -1.0, 0.0, 1.5, 9_007_199_254_740_992.0] {
+        assert!(InvoiceNumber::parse(input).is_err());
+    }
+    assert!(std::panic::catch_unwind(|| InvoiceNumber::of(1.5)).is_err());
+}
+`;
+    const dir = writeProject(files, "ddd-numeric-runtime-");
+    try {
+      expect(spawnSync("cargo", ["test", "--quiet", "--test", "numeric_conversion"], { cwd: dir }).status).toBe(0);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+
 });
 
 describe("Domain Primitive construction bypasses", () => {

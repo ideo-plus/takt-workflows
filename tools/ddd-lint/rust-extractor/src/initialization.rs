@@ -1,4 +1,5 @@
 //! The direct constructions protected by an input rejection guard, and of's checked parse wrapper.
+use crate::numeric_cast::{NumericCastProof, PrimitiveNames};
 use serde_json::{json, Value};
 use std::collections::HashSet;
 use syn::{
@@ -70,6 +71,7 @@ fn returns_error(block: &syn::Block) -> bool {
 struct Creations {
     guarded: bool,
     input: Option<String>,
+    numeric: NumericCastProof,
     entries: Vec<Value>,
     delegations: Vec<Value>,
 }
@@ -77,7 +79,7 @@ fn creation_span(span: proc_macro2::Span) -> Value {
     let (start, end) = (span.start(), span.end());
     json!({"start_line":start.line,"start_col":start.column+1,"end_line":end.line,"end_col":end.column+1})
 }
-fn same_input(expression: &syn::Expr, input: Option<&str>) -> bool {
+fn same_input(expression: &syn::Expr, input: Option<&str>, numeric: &NumericCastProof) -> bool {
     match expression {
         syn::Expr::Path(path) => input.is_some_and(|name| path.path.is_ident(name)),
         syn::Expr::MethodCall(call) => {
@@ -85,19 +87,71 @@ fn same_input(expression: &syn::Expr, input: Option<&str>) -> bool {
                 call.method.to_string().as_str(),
                 "to_string" | "to_owned" | "clone"
             ) && call.args.is_empty()
-                && same_input(&call.receiver, input)
+                && same_input(&call.receiver, input, numeric)
         }
+        syn::Expr::Paren(value) => same_input(&value.expr, input, numeric),
+        syn::Expr::Group(value) => same_input(&value.expr, input, numeric),
+        syn::Expr::Cast(_) => input.is_some_and(|name| numeric.preserves(expression, name)),
         _ => false,
     }
 }
+impl Creations {
+    fn scoped(&mut self, visit: impl FnOnce(&mut Self)) {
+        let guarded = self.guarded;
+        let input = self.input.clone();
+        let numeric = self.numeric.clone();
+        visit(self);
+        self.guarded = guarded;
+        self.input = input;
+        self.numeric = numeric;
+    }
+}
+
+fn contains_cast(arguments: &syn::punctuated::Punctuated<syn::Expr, syn::Token![,]>) -> bool {
+    struct Casts(bool);
+    impl<'ast> Visit<'ast> for Casts {
+        fn visit_expr_cast(&mut self, _: &'ast syn::ExprCast) {
+            self.0 = true;
+        }
+        fn visit_expr_closure(&mut self, _: &'ast syn::ExprClosure) {}
+    }
+    let mut casts = Casts(false);
+    for argument in arguments {
+        casts.visit_expr(argument);
+    }
+    casts.0
+}
+
 impl<'ast> Visit<'ast> for Creations {
+    fn visit_pat_ident(&mut self, node: &'ast syn::PatIdent) {
+        if self.input.as_deref() == Some(node.ident.to_string().as_str()) {
+            self.guarded = false;
+            self.input = None;
+        }
+        visit::visit_pat_ident(self, node);
+    }
+    fn visit_block(&mut self, node: &'ast syn::Block) {
+        self.scoped(|this| visit::visit_block(this, node));
+    }
+    fn visit_expr_if(&mut self, node: &'ast syn::ExprIf) {
+        self.scoped(|this| visit::visit_expr_if(this, node));
+    }
+    fn visit_arm(&mut self, node: &'ast syn::Arm) {
+        self.scoped(|this| visit::visit_arm(this, node));
+    }
+    fn visit_expr_for_loop(&mut self, node: &'ast syn::ExprForLoop) {
+        self.scoped(|this| visit::visit_expr_for_loop(this, node));
+    }
+    fn visit_expr_while(&mut self, node: &'ast syn::ExprWhile) {
+        self.scoped(|this| visit::visit_expr_while(this, node));
+    }
     fn visit_expr_call(&mut self, node: &'ast syn::ExprCall) {
         if let syn::Expr::Path(path) = &*node.func {
             if path.path.segments.len() == 1 {
                 let name = path.path.segments[0].ident.to_string();
                 if name == "Self" || name.chars().next().is_some_and(char::is_uppercase) {
-                    let same =
-                        node.args.len() == 1 && same_input(&node.args[0], self.input.as_deref());
+                    let same = node.args.len() == 1
+                        && same_input(&node.args[0], self.input.as_deref(), &self.numeric);
                     self.entries.push(json!({"type_text":name,"guarded":self.guarded && same,"input_unchanged":same,"line":node.span().start().line,"span":creation_span(node.span())}));
                 }
             } else {
@@ -107,8 +161,9 @@ impl<'ast> Visit<'ast> for Creations {
                     .iter()
                     .map(|part| part.ident.to_string())
                     .collect();
-                let same = node.args.len() == 1 && same_input(&node.args[0], self.input.as_deref());
-                self.delegations.push(json!({"type_text":parts[..parts.len()-1].join("::"),"callee_text":parts.last(),"guarded":self.guarded && same,"input_unchanged":same,"span":creation_span(node.span())}));
+                let same = node.args.len() == 1
+                    && same_input(&node.args[0], self.input.as_deref(), &self.numeric);
+                self.delegations.push(json!({"type_text":parts[..parts.len()-1].join("::"),"callee_text":parts.last(),"guarded":self.guarded && same,"input_unchanged":same,"conversion_unproven":self.guarded && !same && contains_cast(&node.args),"span":creation_span(node.span())}));
             }
         }
         visit::visit_expr_call(self, node);
@@ -122,7 +177,7 @@ impl<'ast> Visit<'ast> for Creations {
             .collect::<Vec<_>>()
             .join("::");
         let same = node.fields.len() == 1
-            && same_input(&node.fields[0].expr, self.input.as_deref())
+            && same_input(&node.fields[0].expr, self.input.as_deref(), &self.numeric)
             && node.rest.is_none();
         self.entries.push(json!({"type_text":name,"guarded":self.guarded && same,"input_unchanged":same,"line":node.span().start().line,"span":creation_span(node.span())}));
         visit::visit_expr_struct(self, node);
@@ -131,7 +186,7 @@ impl<'ast> Visit<'ast> for Creations {
     fn visit_item_fn(&mut self, _: &'ast syn::ItemFn) {}
 }
 
-pub fn facts(method: &syn::ImplItemFn) -> Value {
+pub fn facts(method: &syn::ImplItemFn, primitive_names: &PrimitiveNames) -> Value {
     let names = input_names(method);
     let input = if method.sig.inputs.len() == 1 {
         method
@@ -153,24 +208,20 @@ pub fn facts(method: &syn::ImplItemFn) -> Value {
     let mut creations = Creations {
         guarded: false,
         input,
+        numeric: NumericCastProof::new(method, primitive_names),
         entries: Vec::new(),
         delegations: Vec::new(),
     };
     for statement in &method.block.stmts {
-        if let syn::Stmt::Local(local) = statement {
-            if let syn::Pat::Ident(name) = &local.pat {
-                if creations.input.as_deref() == Some(name.ident.to_string().as_str()) {
-                    creations.guarded = false;
-                    creations.input = None;
-                }
-            }
-        }
         creations.visit_stmt(statement);
         if let Some(syn::Expr::If(guard)) = expression(statement) {
             let mut used = Names(&names, false);
             used.visit_expr(&guard.cond);
             if guard.else_branch.is_none() && returns_error(&guard.then_branch) && used.1 {
                 creations.guarded = true;
+                if let Some(input) = creations.input.as_deref() {
+                    creations.numeric.reject(&guard.cond, input);
+                }
             }
         }
     }

@@ -1,4 +1,4 @@
-//! Version 13 domain facts: the decision base of every rule the domain gate reports. Source is
+//! Version 14 domain facts: the decision base of every rule the domain gate reports. Source is
 //! never compiled or executed.
 //!
 //! One batch carries every source of the inspected program, and the answer carries one record per
@@ -31,7 +31,7 @@ use syn::{
 #[path = "domain_facts_tests.rs"]
 mod tests;
 
-const PROTOCOL_VERSION: u8 = 13;
+const PROTOCOL_VERSION: u8 = 14;
 
 /// The single-segment attributes the compiler itself defines, which expand to nothing and so cannot
 /// replace what they annotate. `cfg` and `cfg_attr` are left out: they are recorded under their own
@@ -479,6 +479,7 @@ fn binds_one_name(pattern: &str) -> bool {
 // --- the declaration walk ---------------------------------------------------
 
 struct Walk<'a> {
+    primitive_names: crate::numeric_cast::PrimitiveNames,
     /// The source `parse_file` assigned spans from: the request's text without its BOM and shebang.
     source: &'a str,
     module: Vec<String>,
@@ -507,8 +508,13 @@ struct Walk<'a> {
 }
 
 impl<'a> Walk<'a> {
-    fn new(source: &'a str, file_auxiliary: bool) -> Self {
+    fn new(
+        source: &'a str,
+        file_auxiliary: bool,
+        primitive_names: crate::numeric_cast::PrimitiveNames,
+    ) -> Self {
         Self {
+            primitive_names,
             source,
             module: Vec::new(),
             function_depth: 0,
@@ -861,7 +867,7 @@ impl<'a> Walk<'a> {
                         "returns_field_only": returns_field_only(&method.block),
                         "visibility": visibility(&method.vis),
                         "span": span_json(start, method.span()),
-                        "initialization": crate::initialization::facts(method),
+                        "initialization": crate::initialization::facts(method, &self.primitive_names),
                         "line": line(start),
                     }));
                 }
@@ -1413,7 +1419,11 @@ fn analyze(path: &str, source: &str) -> Value {
     // span is read against that same text.
     let offset = usize::from(source.starts_with('\u{feff}')) * "\u{feff}".len()
         + parsed.shebang.as_ref().map_or(0, String::len);
-    let mut walk = Walk::new(&source[offset..], file_auxiliary);
+    let mut walk = Walk::new(
+        &source[offset..],
+        file_auxiliary,
+        crate::numeric_cast::PrimitiveNames::for_file(&parsed),
+    );
     walk.items(&parsed.items);
     let forwarded = walk.forwarded();
     let calls: Vec<Value> = walk
