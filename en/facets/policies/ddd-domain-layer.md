@@ -104,6 +104,8 @@ Business failures are part of the operation's contract. Generic guidance to thro
 | A domain type holds a collection (an array, `Set`, `Map`, `Vec`, `HashSet`, `HashMap`, and so on) bare beside other state | REJECT. Wrap it in a first-class collection type and put the operations and decisions on the collection in that type. A type whose whole state is the collection is a first-class collection |
 | A domain service holds state, persists data, or decides something an aggregate can own | REJECT |
 
+Assess Service state by whether retained business state or invocation history affects later decisions. A field containing fixed configuration or a dependency alone is not grounds for rejection. The prohibitions on persistence and moving decisions an Aggregate can own remain unchanged. Follow "Choosing a Domain Service" in the modeling knowledge for selection criteria and responsibility recording.
+
 ## Ownership
 
 | Criterion | Judgment |
