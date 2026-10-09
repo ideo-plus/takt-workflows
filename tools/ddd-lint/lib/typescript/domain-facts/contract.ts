@@ -59,6 +59,7 @@ export interface MemberFact {
   readonly return_type_text?: string;
   /** What a member with a body writes; present on members with a body only. */
   readonly writes?: readonly WriteFact[];
+  readonly has_throw?: boolean;
   /**
    * Whether the body is nothing but `return` of one member of `this`, of one member of closure
    * state, or of closure state itself — the shape a getter has. Closure state is a binding an
@@ -101,6 +102,8 @@ export type InitializerFact =
 
 /** One declaration at the top of a file. An `export` written on it is recorded here, not as an export. */
 export interface DeclarationFact {
+  /** A direct finite string-literal union; absent for aliases and other type expressions. */
+  readonly string_union?: readonly string[];
   /** `default` for an anonymous default-exported class or function. */
   readonly name: string;
   readonly kind: DeclarationKind;

@@ -11,7 +11,7 @@ import { barePackageName, isPackageName } from "../shared/package-name.ts";
 import type { MappingLanguage } from "./contract.ts";
 
 /** The two kinds of model operation a mapping binds to a method. */
-export type OperationKind = "command" | "factory";
+export type OperationKind = "command" | "factory" | "service-operation";
 
 export type NameTest = (name: string) => boolean;
 

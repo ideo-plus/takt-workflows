@@ -21,6 +21,16 @@ export interface OperationView {
   readonly method: string;
   readonly error_type: string;
   readonly success_type?: string;
+  readonly inputs?: readonly { readonly input: string; readonly parameter: string }[];
+  readonly errors?: readonly { readonly error_ref: string; readonly code: { readonly case: string } }[];
+}
+
+export interface ServiceMappingView {
+  readonly service_ref: string;
+  readonly type: string;
+  readonly package: string;
+  readonly module: readonly string[];
+  readonly operations: readonly OperationView[];
 }
 
 /** One aggregate placed in the view's language: its type, operations, replay methods, package and module path. */
@@ -38,11 +48,13 @@ export interface AggregateMappingView {
 interface PackageMappingView {
   readonly package: string;
   readonly module: readonly string[];
+  readonly model_refs: readonly string[];
 }
 
 interface MappingView {
   readonly aggregates: readonly AggregateMappingView[];
   readonly packages: readonly PackageMappingView[];
+  readonly services: readonly ServiceMappingView[];
 }
 
 export type MappingViewLoad =
@@ -67,6 +79,10 @@ export function loadMappingView(modelDir: string, language: MappingLanguage): Ma
   return {
     kind: "loaded",
     view: {
+      services: (loaded.mapping.service_mappings ?? []).filter(entry => entry.code.language === language).map(entry => ({
+        service_ref: entry.service_ref, type: entry.code.type, package: entry.code.package, module: entry.code.module,
+        operations: entry.operations.map(operation => ({ operation_ref: operation.operation_ref, method: operation.code.method, error_type: operation.code.error_type, success_type: operation.code.success_type, inputs: operation.inputs, errors: operation.errors })),
+      })),
       aggregates: loaded.mapping.aggregate_mappings
         .filter((entry) => entry.code.language === language)
         .map((entry) => ({
@@ -88,7 +104,7 @@ export function loadMappingView(modelDir: string, language: MappingLanguage): Ma
         })),
       packages: loaded.mapping.domain_packages
         .filter((entry) => entry.code.language === language)
-        .map((entry) => ({ package: entry.code.package, module: entry.code.module })),
+        .map((entry) => ({ package: entry.code.package, module: entry.code.module, model_refs: entry.model_refs })),
     },
   };
 }

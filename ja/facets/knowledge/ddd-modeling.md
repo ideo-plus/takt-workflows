@@ -50,6 +50,8 @@ code_representation = "class"     # または "companion"
 
 属性の `type` は、言語に依存しないスカラー `string`、`integer`、`decimal`、`boolean`、`date`、`datetime`、またはモデル要素の ID を使う。整数の識別子は `integer` とする。TypeScript の `number` や Rust の `u64` など、実装言語の型名をここに書かない。実装上の型・配置・メソッドは集約写像に宣言する。
 
+以下は集約の宣言例である。独立したサービス操作は「ドメインサービスを選ぶ条件」の追加例に従い、同じモデル宣言と写像へ記録する。
+
 ```yaml
 bounded_contexts:
 - element_id: bc.billing
@@ -202,7 +204,7 @@ bounded_contexts:
 lineage: []
 ```
 
-要素 ID は小文字のケバブケースで `<kind>.<segments>` と書く。`bc`、`aggregate`、`entity`、`vo`、`primitive`、`pm` は区切り 1 つ、`invariant`、`command`、`event`、`transition`、`factory` は集約と名前の 2 つ、`error` は集約、操作、名前の 3 つをとる。`lineage` の項目（`lineage-0001`、関係は `renamed`、`split`、`merged`、`deprecated`）が ID の変化を記録する。
+要素 ID は小文字のケバブケースで `<kind>.<segments>` と書く。`bc`、`aggregate`、`entity`、`vo`、`primitive`、`pm`、`service` は区切り1つをとる。`invariant`、`command`、`event`、`transition`、`factory` は集約と名前の2つ、`service-operation` はサービスと操作の2つ、`error` は所有する集約またはサービス、操作、名前の3つをとる。`lineage` の項目（`lineage-0001`、関係は `renamed`、`split`、`merged`、`deprecated`）が ID の変化を記録する。
 
 Domain Primitive（`kind: domain-primitive`）は属性を1つ包み、基本データ型より狭いドメインの不変条件を持つ。`element` でその Primitive を指す不変条件と、それらすべてを `preconditions` に取って規則違反を返す `parse` のファクトリ規則を必ず宣言する。コードには `of` と `parse` を両方置き、どちらも不変条件に基づいて初期化する。`of` は同じ入力を `parse` に渡し、域外なら契約違反として例外にする。`parse` は入力を検証して、自分のエラー型の `Result` を返す。基本データ型の値域だけで足りるものには DP を作らない。未指定の規則は未決事項として確認し、無制約の DP にしない。`collection: true` の属性はファーストクラスコレクションの型で持つ。
 
@@ -339,7 +341,7 @@ domain_packages:
     - money
 ```
 
-`model_ref` は `docs/ddd` からの相対パスで書く。`success_type` はコマンドが成功時に返すものの型名である。TypeScript では新しいインスタンスとイベントを持つ成功値の型、Rust ではイベント、再送されたコマンドを認識するコマンドでは成功値の enum になる。ファクトリ規則の成功値は集約の型である。`module` はパッケージのルートより下の区切りを並べたもので、ルートは `[]` になる。ルートから下のすべての階層を宣言する。TypeScript では case の文字列がリテラルの union のメンバー（`already-issued`）になり、Rust では enum のバリアント（`AlreadyIssued`）になる。
+`model_ref` は `docs/ddd` からの相対パスで書く。`success_type` はコマンドが成功時に返すものの型名である。TypeScript では新しいインスタンスとイベントを持つ成功値の型、Rust ではイベント、再送されたコマンドを認識するコマンドでは成功値の enum になる。ファクトリ規則の成功値は生成対象の型である。`module` はパッケージのルートより下の区切りを並べたもので、ルートは `[]` になる。ルートから下のすべての階層を宣言する。TypeScript では case の文字列がリテラルの union のメンバー（`already-issued`）になり、Rust では enum のバリアント（`AlreadyIssued`）になる。
 
 ### 層構造
 
@@ -446,7 +448,7 @@ Rust では `value_of`・`get_instance`・`new_instance` のように snake_case
 
 ## モデルの導き方
 
-モデルは業務の振る舞いから導く。ストーリーから過去形のドメインイベントを挙げ、各イベントを生むコマンドとアクターを特定する。各操作で即時に守る不変条件を確かめ、その成立に必要な状態を集約にまとめる。同じ画面や一つの業務フローで使うことだけを、同じ集約にする理由にしない。
+モデルは業務の振る舞いから導く。集約の操作では、ストーリーから過去形のドメインイベントを挙げ、各イベントを生むコマンドとアクターを特定する。各操作で即時に守る不変条件を確かめ、その成立に必要な状態を集約にまとめる。同じ画面や一つの業務フローで使うことだけを、同じ集約にする理由にしない。状態を変えずイベントも生まない独立した判断・計算は、この導出へ無理に当てはめず、ドメインサービスの選択条件と宣言の対応範囲を確認する。
 
 | 条件 | 意味・選択肢 |
 |------|-------------|
@@ -454,7 +456,7 @@ Rust では `value_of`・`get_instance`・`new_instance` のように snake_case
 | 即時の不変条件を守るために二つの候補が一緒に変わる必要がある | 一つの集約にする案を検討する。分ける場合は、同じ不変条件を原子的に守る明示的な戦略が必要。プロセスマネージャーだけでは保証できない |
 | 集約間の規則に、整合するまでの遅延が許される | 許容遅延、中間状態、再試行と補償の条件を確認する。プロセスマネージャーなどで結果整合性を実現する |
 | フローが集約をまたぐ | Process Manager の候補。ステップと補償をモデルに記録する |
-| 操作が状態を変えない | `state_effect: none` とする。これは有効な宣言である |
+| 集約コマンドが宣言した状態間の遷移を伴わない | `state_effect: none` とする。内部の値やコレクションの変更、イベント生成まで不要になる意味ではない |
 | 用語がコードにだけあり、業務の語彙にない | パッケージの名前にする前に意味を確かめる |
 
 たとえば「同じ部屋の同じ時間帯に確定予約を二つ作らない」という規則を、予約後の取消で補償しても、一時的な違反は防げない。業務が要求する保証を先に確かめ、集約の境界と保存先の制約を選ぶ。複数集約を一つのトランザクションで扱う例外は、その理由と保証を明示する。
@@ -519,7 +521,94 @@ packages/command/billing-domain/src/
 | 保持する情報、呼び出し間の独立性、入出力の境界 | 過去の呼び出しによる判断の変化、取得・永続化・外部通信、集約の整合性への影響を確認する |
 | 配置モジュール、モデル参照、宣言できる範囲 | `domain_packages` の `model_refs` と `rationale` に配置の根拠を記録し、操作の宣言が不足しないか確認する |
 
-現行の `domain-model.yaml` には独立したサービス宣言やサービス用の要素種別がない。既存の要素・不変条件・操作への参照で表せる責務と、独立した操作の宣言が必要な責務を区別する。計画レポートや `domain_packages` への記録だけで、操作の宣言も対応したとは扱わない。表現できない独立操作が必要なら、宣言契約の不足として具体的な責務と参照を報告し、再計画へ渡す。未対応の `domain_services` キー、架空の集約、サービスを偽装した値オブジェクトは生成しない。
+独立したサービスはコンテキストの `domain_services` に宣言し、集約の要素へ偽装しない。コードの配置と操作の対応は既存の `aggregate-mapping.yaml` の `service_mappings` に記録する。サービスの採用理由と代替案は計画レポートに残し、業務上の責務、配置理由、採用理由を混ぜない。
+
+#### 独立操作の宣言と実装写像
+
+| 記録する箇所 | 契約 |
+|--------------|------|
+| サービス | `element_id`、`name`、`bounded_context`、`responsibility`、1件以上の `operations`。識別子は `service.<name>` |
+| 操作 | `element_id`、`name`、`service`、`inputs`、`result`、`statement`、`domain_errors`、`failure_order`。識別子は `service-operation.<service>.<operation>` |
+| 入力 | 各項目の `name` と `type`。同じコンテキストのエンティティ・値オブジェクト・Domain Primitiveを参照する。名前は操作内で一意にする |
+| 結果 | `result.type` は同じコンテキストの既存の値の参照、またはモデル宣言のスカラー。意味は `statement` に記録する。狭い業務上の不変条件を持つ値は既存のDomain Primitiveの規約に従う |
+| 拒否 | 操作固有の `domain_errors`。識別子は `error.<service>.<operation>.<reason>`、`operation` は所有する独立操作を参照する |
+| 拒否の優先順位 | `failure_order` に全拒否理由を重複なく並べる。先に成立した理由を返す。優先順位の振る舞いは業務テストで確認する |
+| 実装写像 | サービスの `service_ref` と `code` の言語・パッケージ・モジュール・型。各操作は `operation_ref`、メソッド、成功型、エラー型、全拒否のcaseを持つ |
+| 引数の対応 | 写像の操作の `inputs` で、モデルの `input` とコードの `parameter` を一対一に結ぶ。順序・個数・型の解決結果も一致させる |
+| モジュール | 既存の `domain_packages` で所属サービスを参照する。サービス用の層やポートを増やさない |
+
+現在の対応範囲は、取得済みのドメインオブジェクトを受け取り、入力を変更せず、想定された業務上の拒否を持つ同期的な判断・計算である。成功と拒否を操作固有の `Result` で返す。拒否がない操作は未対応として報告し、架空のエラーを作らない。サービス操作に、集約コマンドの状態遷移・イベント・冪等性の記憶を要求しない。既存の集約コマンドの契約は維持する。
+
+入力として一時的に渡すことと、集約の属性として所有することは区別する。他の集約を属性として持つ場合の識別子参照の規則は維持する。結果を宣言するために、架空の集約やサービスを偽装した値を作らない。必要な結果の値を現行形式で自然に宣言できない場合は、その不足を報告する。
+
+サービスの生成経路、選択したコード表現、非公開状態、エラーの言語での形は、既存の言語ナレッジとポリシーに従う。固定設定の技術的な初期化と、業務上の判定操作を区別する。基本コンストラクタへの委譲を迂回する例外は作らない。
+
+検査が確認するのは、所属と型参照、操作と拒否理由の全件対応、入力・結果・エラー型、サービスと呼び出すメソッドの検査可能な読み取り専用の形である。責務の自然さ、拒否条件の意味と優先順位、呼び出し履歴への非依存は、モデルレビューと公開操作の業務テストでも確認する。静的検査の成功だけで、業務上の正しさを判断しない。
+
+上の `bc.billing` に加える宣言の断片と、写像の追加項目は次のとおり。既存の集約・型・ルートのモジュール宣言は保つ。サンプル全体は検査ツールの `test/samples/services.ts` にある。
+
+```yaml
+domain_services:
+  - element_id: service.payment-eligibility
+    name: PaymentEligibility
+    bounded_context: bc.billing
+    responsibility: Combine invoice eligibility with the available payment funds without changing either input
+    operations:
+      - element_id: service-operation.payment-eligibility.assess
+        name: AssessPaymentEligibility
+        service: service.payment-eligibility
+        inputs:
+          - name: invoice
+            type: entity.invoice
+          - name: funds
+            type: primitive.money
+        result:
+          type: boolean
+        statement: Return true exactly when the invoice permits payment and the funds are not negative
+        domain_errors:
+          - element_id: error.payment-eligibility.assess.ineligible
+            name: Ineligible
+            operation: service-operation.payment-eligibility.assess
+            condition: The inputs do not permit payment
+        failure_order:
+          - error.payment-eligibility.assess.ineligible
+```
+
+```yaml
+service_mappings:
+  - service_ref: service.payment-eligibility
+    code:
+      language: typescript
+      package: "@acme/billing-domain"
+      module:
+        - payment-eligibility
+      type: PaymentEligibility
+    operations:
+      - operation_ref: service-operation.payment-eligibility.assess
+        code:
+          method: assess
+          error_type: AssessPaymentEligibilityError
+          success_type: boolean
+        inputs:
+          - input: invoice
+            parameter: invoice
+          - input: funds
+            parameter: funds
+        errors:
+          - error_ref: error.payment-eligibility.assess.ineligible
+            code:
+              case: ineligible
+domain_packages:
+  - term: Payment eligibility
+    rationale: Combine the invoice amount and available funds without owning either
+    model_refs:
+      - service.payment-eligibility
+    code:
+      language: typescript
+      package: "@acme/billing-domain"
+      module:
+        - payment-eligibility
+```
 
 根拠: エリック・エヴァンス『Domain-Driven Design』第5章「Services」（104〜107ページ）、ヴァーン・ヴァーノン『Implementing Domain-Driven Design』第7章「What a Domain Service Is (but First, What It Is Not)」「Make Sure You Need a Service」と認証の例（267〜275ページ）。選択条件と呼び出し履歴に依存しない性質を採用し、層の所属と宣言への記録方法はこのプロジェクトの規約に従う。
 

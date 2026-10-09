@@ -8,6 +8,7 @@
 
 import { loadMappingView } from "../../aggregate-mapping/index.ts";
 import type { OperationView } from "../../aggregate-mapping/view.ts";
+import type { ServiceMappingView } from "../../aggregate-mapping/view.ts";
 import type { FindingInput } from "../../shared/findings.ts";
 
 /** One aggregate as the Rust rules compare it: replay methods, its crate and its module path. */
@@ -25,11 +26,13 @@ export interface RustAggregateMapping {
 export interface RustPackageMapping {
   readonly crate: string;
   readonly module: readonly string[];
+  readonly model_refs: readonly string[];
 }
 
 export interface RustMappingView {
   readonly aggregates: readonly RustAggregateMapping[];
   readonly packages: readonly RustPackageMapping[];
+  readonly services: readonly (Omit<ServiceMappingView, "package"> & { readonly crate: string })[];
 }
 
 export type RustMappingLoad =
@@ -47,8 +50,9 @@ export function loadRustMapping(modelDir: string): RustMappingLoad {
   return {
     kind: "loaded",
     view: {
+      services: loaded.view.services.map(({ package: crate, ...entry }) => ({ ...entry, crate })),
       aggregates: loaded.view.aggregates.map(({ package: crate, ...entry }) => ({ ...entry, crate })),
-      packages: loaded.view.packages.map(({ package: crate, module }) => ({ crate, module })),
+      packages: loaded.view.packages.map(({ package: crate, module, model_refs }) => ({ crate, module, model_refs })),
     },
   };
 }

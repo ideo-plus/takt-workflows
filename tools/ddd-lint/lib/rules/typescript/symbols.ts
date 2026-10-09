@@ -43,6 +43,7 @@ function methodsOf(file: string, members: readonly MemberFact[]): TsMethod[] {
             span: member.span,
             params: member.params ?? [],
             writes: member.writes,
+            has_throw: member.has_throw === true,
             returns_state_only: member.returns_state_only === true,
           },
         ]

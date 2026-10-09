@@ -1,5 +1,7 @@
 # DDD Rust 知識
 
+独立したサービス操作は、`&self` とモデルで宣言した入力型の共有参照を受け取り、成功と操作固有の公開enumエラーを `Result` で返す。エラーは写像された単位バリアントだけを持つ。固定の基本値、宣言された値やサービス、単位バリアントだけの設定用enumは保持できるが、エンティティや内部可変性を持つ状態は保持しない。状態を持つ型は既存の非公開の基本コンストラクタを通し、状態のない単位型は既存の生成規則に従う。検査は呼び出す共有参照メソッドも辿る。代入・unsafe・マクロ、自由関数や型を解決できない呼び出し、可変・所有権移動の受け手、入力のコンテナ化は現在の読み取り専用の検査形式では確認できない。検査不能を報告し、集約のコマンドへ読み替えたり例外を追加したりしない。
+
 ## 検証後の数値変換
 
 `parse` の入力が `f64`、保持する基本値が固定幅の整数型の場合も、検証した数値を変えずに保持できる。元の入力について、非有限値、小数、保持型の下限未満・上限以上を拒否してから、基本コンストラクタへ渡す値を変換する。業務上の値域も、変換前に検証する。
@@ -520,4 +522,21 @@ packages/
     billing-rmu/
   composition-root/
     billing-api/               # すべてを結線するバイナリ
+```
+
+## ドメインサービスの操作例
+
+```rust
+use crate::invoice::Invoice;
+use crate::money::Money;
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AssessPaymentEligibilityError { Ineligible }
+pub struct PaymentEligibility;
+impl PaymentEligibility {
+    pub fn create() -> Self { Self }
+    pub fn assess(&self, invoice: &Invoice, funds: &Money) -> Result<bool, AssessPaymentEligibilityError> {
+        if !invoice.allows_payment() || funds.is_negative() { return Err(AssessPaymentEligibilityError::Ineligible); }
+        Ok(true)
+    }
+}
 ```

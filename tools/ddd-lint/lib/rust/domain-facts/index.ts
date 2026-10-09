@@ -1,5 +1,5 @@
 /**
- * Protocol version 14 of the native extractor: the facts every Rust rule decides on.
+ * Protocol version 15 of the native extractor: the facts every Rust rule decides on.
  *
  * The launch classification is the shared one in `native/launch.ts`; this module owns the protocol
  * identity, the one batch this inspection sends, and the strict conversion of native spellings into
@@ -15,7 +15,7 @@ import { ToolUnavailableError } from "../../project/context.ts";
 import { classifyNativeExtractor, type NativeOutcome, nativeIssue } from "../native/launch.ts";
 import { NATIVE_BIN_DIR, PLATFORM_KEY } from "../native/manifest.ts";
 
-const PROTOCOL = { flag: "--domain-facts-version", version: 14 };
+const PROTOCOL = { flag: "--domain-facts-version", version: 15 };
 /** The unresolved reason the extractor gives an attribute that may replace the item it annotates. */
 const ATTRIBUTE_MACRO_REASON = "attribute-macro";
 /** The extractor refuses a larger request, so an oversized batch is refused before it is sent. */
@@ -50,6 +50,8 @@ export interface FieldFact {
 }
 
 export interface TypeFact {
+  readonly visibility: Visibility;
+  readonly variants: readonly { readonly name: string; readonly unit: boolean }[];
   readonly name: string;
   readonly kind: "struct" | "enum";
   readonly module: readonly string[];
@@ -90,6 +92,7 @@ export interface ParamFact {
 }
 
 export interface MethodFact {
+  readonly unverified_effects: boolean;
   readonly name: string;
   readonly receiver: Receiver;
   readonly params: readonly ParamFact[];
@@ -308,6 +311,8 @@ function parameter(value: unknown): ParamFact {
 function declaredType(value: unknown): TypeFact {
   const raw = object(value);
   return {
+    visibility: oneOf(raw.visibility, ["private", "pub", "pub-crate", "pub-super", "pub-in"] as const),
+    variants: array(raw.variants).map(value => { const variant = object(value); return { name: nonempty(variant.name), unit: flag(variant.unit) }; }),
     name: nonempty(raw.name),
     kind: oneOf(raw.kind, ["struct", "enum"] as const),
     module: words(raw.module),
@@ -359,6 +364,7 @@ function method(value: unknown): MethodFact {
   const initialization = object(raw.initialization);
   const delegate = optional(initialization.parse_delegate);
   return {
+    unverified_effects: flag(raw.unverified_effects),
     name: nonempty(raw.name),
     receiver: oneOf(raw.receiver, ["none", "self", "ref-self", "mut-self", "other"] as const),
     params: array(raw.params).map(parameter),

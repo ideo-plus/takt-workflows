@@ -4,6 +4,8 @@
 
 基本経路は class の唯一の private constructor、または companion の唯一のインスタンス生成ファクトリである。補助の生成経路は検証を済ませてそこへ委譲する。DP の companion では、入力を検証してクロージャを組み立てる parse が基本経路を兼ねる。
 
+独立したサービス操作も、プロジェクトで選んだ `class`／`companion` と基本の生成経路に従う。固定設定の初期化と業務上の判定は区別する。写像された操作は公開インスタンスメソッドで、入力の名前・順序・型、`Result` の成功型と操作固有の文字列エラーを宣言に揃える。固定の基本値や宣言された値・サービスへの読み取り専用の依存は持てるが、エンティティや過去の入力・結果を保持しない。呼び出すインスタンスメソッドの受け手には明示した型が必要で、検査はその先のメソッドも確認する。型を確認できない呼び出し、連鎖した呼び出し、直接生成・型アサーション・throwを含む経路は、現在の読み取り専用の検査形式では確認できない。未対応事項を報告し、検査を免除しない。
+
 ファクトリ名はモデリング知識の「ファクトリ名の選択」に従う。`from` は別の型からの変換であり、失敗する場合は操作固有のエラーを持つ Result を返す。インスタンスの `valueOf()` は JavaScript の変換フックとして扱い、静的ファクトリの命名検査とは分ける。
 
 プロジェクト設定で、すべての集約、Entity、Domain Primitive、値オブジェクトに使う表現を 1 つ選ぶ。どちらも実行時に状態を隠し、1 つの完全コンストラクタで組み立てる。違いは型の書き方にある。
@@ -453,3 +455,20 @@ packages/
 ```
 
 各パッケージは `exports` を持つ `package.json` を持ち、ソースを `src/` の下に置き、テスト、宣言ファイル、`.tsx`・`.mts`・`.cts` のソースを `src` の外に置く。参照される `tsconfig.json` はすべて `module: esnext`、`moduleResolution: bundler`、`strict: true`、es2017 から esnext までの target で揃え、どれも `baseUrl` を設定しない。
+
+## ドメインサービスの操作例
+
+```ts
+import type { Result } from '@acme/language-extensions';
+import type { Invoice } from './invoice.ts';
+import type { Money } from './money.ts';
+export type AssessPaymentEligibilityError = 'ineligible';
+export class PaymentEligibility {
+  private constructor() {}
+  static create(): PaymentEligibility { return new PaymentEligibility(); }
+  assess(this: PaymentEligibility, invoice: Invoice, funds: Money): Result<boolean, AssessPaymentEligibilityError> {
+    if (funds.isNegative() || !invoice.allowsPayment()) return { ok: false, error: 'ineligible' };
+    return { ok: true, value: true };
+  }
+}
+```

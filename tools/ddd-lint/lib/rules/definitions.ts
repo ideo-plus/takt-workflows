@@ -16,6 +16,7 @@ export interface RuleDefinition {
 }
 
 export const RULES: readonly RuleDefinition[] = [
+  { rule_id: "service-contract", name: "independent-service-contract", statement: "a mapped service operation violates its inputs, result, error cases, or inspectable read-only responsibilities", target_layers: ["domain"], requires_model: true, facts: ["domain-model", "aggregate-mapping", "methods", "fields"], per_file: true },
   { rule_id: "primary-constructor", name: "unique-primary-constructor", statement: "a domain type lacks one complete primary constructor, directly initializes elsewhere, or has cyclic/unconnected auxiliary construction paths", target_layers: ["domain"], requires_model: false, facts: ["constructors", "calls", "fields"], per_file: true },
   {
     rule_id: "factory-naming",

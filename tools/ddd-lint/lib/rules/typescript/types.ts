@@ -49,6 +49,7 @@ export interface TsTarget {
 
 /** A method of a domain type that has a body, as the rules judge it. */
 export interface TsMethod {
+  readonly has_throw: boolean;
   readonly name: string;
   readonly file: string;
   readonly span: Span;

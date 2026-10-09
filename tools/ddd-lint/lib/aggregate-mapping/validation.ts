@@ -95,7 +95,7 @@ function resolveOperation(
 ): ResolvedOperation | undefined {
   const element = resolveReference(report, index, id, where, ANY_ELEMENT);
   if (element === undefined) return undefined;
-  if (element.kind === "command" || element.kind === "factory")
+  if (element.kind === "command" || element.kind === "factory" || element.kind === "service-operation")
     return { element_id: id, kind: element.kind, owner: element.owner };
   report.add(
     MAPPING_RULES.reference,
@@ -164,6 +164,7 @@ function checkPackageChains(report: MappingReport, draft: MappingDraft, declared
   for (const location of [
     ...draft.domain_packages.map((entry) => entry.code),
     ...draft.aggregate_mappings.map((entry) => entry.code),
+    ...(draft.service_mappings ?? []).map((entry) => entry.code),
   ]) {
     const root = rootLocation(location);
     roots.set(locationKey(root), root);
@@ -296,8 +297,7 @@ export function validateMapping(
       .map((aggregate) => [aggregate.element_id, aggregate]),
   );
   const errorOwners = new Map(
-    [...modelAggregates.values()]
-      .flatMap(operationsOf)
+    [...[...modelAggregates.values()].flatMap(operationsOf), ...model.bounded_contexts.flatMap(bc => (bc.domain_services ?? []).flatMap(service => service.operations))]
       .flatMap((operation) =>
         operation.domain_errors.map((domainError) => [domainError.element_id, operation.element_id] as const),
       ),
@@ -342,6 +342,47 @@ export function validateMapping(
   for (const id of modelAggregates.keys()) {
     if (!mapped.has(id)) document.add(MAPPING_RULES.coverage, `the model aggregate ${id} has no mapping`);
   }
+
+  const services = new Map(model.bounded_contexts.flatMap(bc => (bc.domain_services ?? []).map(service => [service.element_id, service] as const)));
+  const mappedServices = new Set<string>();
+  const errorTypes = new Set<string>();
+  for (const aggregate of draft.aggregate_mappings) for (const operation of aggregate.operations)
+    errorTypes.add(JSON.stringify([aggregate.code.language, aggregate.code.package, aggregate.code.module, operation.code.error_type]));
+  for (const entry of draft.service_mappings ?? []) {
+    const where = `service_mappings[${entry.service_ref}]`;
+    resolveReference(document, index, entry.service_ref, where, { kind: "service", label: "a domain service" });
+    const service = services.get(entry.service_ref);
+    if (mappedServices.has(entry.service_ref)) document.add(MAPPING_RULES.duplicate, `${where}: service is mapped more than once`);
+    mappedServices.add(entry.service_ref);
+    if (!declared.has(locationKey(entry.code))) document.add(MAPPING_RULES.coverage, `${where}: domain package is not declared`);
+    const typeKey = JSON.stringify([locationKey(entry.code), entry.code.type]);
+    if (types.has(typeKey)) document.add(MAPPING_RULES.duplicate, `${where}: type already implements another model owner`);
+    types.add(typeKey);
+    const methods = new Set<string>();
+    const operations = new Set<string>();
+    for (const operation of entry.operations) {
+      const at = `${where}.operations[${operation.operation_ref}]`;
+      const resolved = resolveOperation(document, index, operation.operation_ref, at);
+      if (resolved && (resolved.kind !== "service-operation" || resolved.owner !== entry.service_ref)) document.add(MAPPING_RULES.ownerMismatch, `${at}: operation does not belong to this service`);
+      if (operations.has(operation.operation_ref) || methods.has(operation.code.method)) document.add(MAPPING_RULES.duplicate, `${at}: operation or method is mapped more than once`);
+      operations.add(operation.operation_ref);
+      methods.add(operation.code.method);
+      checkErrorCases(document, index, errorOwners, operation, resolved, at);
+      const declaredOperation = service?.operations.find(x => x.element_id === operation.operation_ref);
+      if (declaredOperation) {
+        for (const error of declaredOperation.domain_errors) if (!operation.errors.some(x => x.error_ref === error.element_id)) missing.push(`${at}.errors[${error.element_id}]`);
+        const actual = operation.inputs.map(x => x.input);
+        const expected = declaredOperation.inputs.map(x => x.name);
+        if (actual.length !== expected.length || actual.some((name, i) => name !== expected[i]) || new Set(operation.inputs.map(x => x.parameter)).size !== expected.length)
+          document.add(MAPPING_RULES.coverage, `${at}: inputs must bind every declared input exactly once in model order`);
+      }
+      const errorKey = JSON.stringify([entry.code.language, entry.code.package, entry.code.module, operation.code.error_type]);
+      if (errorTypes.has(errorKey)) document.add(MAPPING_RULES.duplicate, `${at}: error type is shared with another operation`);
+      errorTypes.add(errorKey);
+    }
+    if (service) for (const operation of service.operations) if (!operations.has(operation.element_id)) missing.push(`${where}.operations[${operation.element_id}]`);
+  }
+  for (const id of services.keys()) if (!mappedServices.has(id)) document.add(MAPPING_RULES.coverage, `the model service ${id} has no mapping`);
 
   const findings = [...document.findings, ...names.findings];
   if (missing.length > 0) return { complete: false, findings, missing };

@@ -17,6 +17,8 @@ export const ELEMENT_KINDS = [
   "transition",
   "factory",
   "pm",
+  "service",
+  "service-operation",
 ] as const;
 
 export type ElementKind = (typeof ELEMENT_KINDS)[number];
@@ -33,6 +35,8 @@ const SEGMENT_ARITY: Readonly<Record<ElementKind, number>> = {
   vo: 1,
   primitive: 1,
   pm: 1,
+  service: 1,
+  "service-operation": 2,
   invariant: 2,
   command: 2,
   event: 2,

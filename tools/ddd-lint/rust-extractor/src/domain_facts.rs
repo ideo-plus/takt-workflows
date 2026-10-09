@@ -1,4 +1,4 @@
-//! Version 14 domain facts: the decision base of every rule the domain gate reports. Source is
+//! Version 15 domain facts: the decision base of every rule the domain gate reports. Source is
 //! never compiled or executed.
 //!
 //! One batch carries every source of the inspected program, and the answer carries one record per
@@ -31,7 +31,7 @@ use syn::{
 #[path = "domain_facts_tests.rs"]
 mod tests;
 
-const PROTOCOL_VERSION: u8 = 14;
+const PROTOCOL_VERSION: u8 = 15;
 
 /// The single-segment attributes the compiler itself defines, which expand to nothing and so cannot
 /// replace what they annotate. `cfg` and `cfg_attr` are left out: they are recorded under their own
@@ -219,6 +219,45 @@ fn span_json(start: proc_macro2::Span, end: proc_macro2::Span) -> Value {
         "start_line": start.line, "start_col": start.column + 1,
         "end_line": end.line, "end_col": end.column + 1,
     })
+}
+
+fn unverified_effects(block: &syn::Block) -> bool {
+    struct Effects(bool);
+    impl<'ast> Visit<'ast> for Effects {
+        fn visit_expr_assign(&mut self, _: &'ast syn::ExprAssign) {
+            self.0 = true;
+        }
+        fn visit_expr_unsafe(&mut self, _: &'ast syn::ExprUnsafe) {
+            self.0 = true;
+        }
+        fn visit_expr_macro(&mut self, _: &'ast syn::ExprMacro) {
+            self.0 = true;
+        }
+        fn visit_macro(&mut self, _: &'ast syn::Macro) {
+            self.0 = true;
+        }
+        fn visit_expr_binary(&mut self, node: &'ast syn::ExprBinary) {
+            if matches!(
+                node.op,
+                syn::BinOp::AddAssign(_)
+                    | syn::BinOp::SubAssign(_)
+                    | syn::BinOp::MulAssign(_)
+                    | syn::BinOp::DivAssign(_)
+                    | syn::BinOp::RemAssign(_)
+                    | syn::BinOp::BitXorAssign(_)
+                    | syn::BinOp::BitAndAssign(_)
+                    | syn::BinOp::BitOrAssign(_)
+                    | syn::BinOp::ShlAssign(_)
+                    | syn::BinOp::ShrAssign(_)
+            ) {
+                self.0 = true;
+            }
+            visit::visit_expr_binary(self, node);
+        }
+    }
+    let mut effects = Effects(false);
+    effects.visit_block(block);
+    effects.0
 }
 
 fn visibility(vis: &syn::Visibility) -> &'static str {
@@ -644,22 +683,33 @@ impl<'a> Walk<'a> {
 
     fn item_body(&mut self, item: &syn::Item) {
         match item {
-            syn::Item::Struct(node) => self.declared_type(
-                &node.ident,
-                "struct",
-                &node.fields,
-                &node.attrs,
-                declared_start(&node.vis, node.struct_token.span),
-            ),
+            syn::Item::Struct(node) => {
+                self.declared_type(
+                    &node.ident,
+                    "struct",
+                    &node.fields,
+                    &node.attrs,
+                    declared_start(&node.vis, node.struct_token.span),
+                );
+                if let Some(record) = self.types.last_mut() {
+                    record["visibility"] = json!(visibility(&node.vis));
+                }
+            }
             // An enum's members are reached through a variant, so it declares no field a rule
             // resolves a type through; only its name and derives are facts here.
-            syn::Item::Enum(node) => self.declared_type(
-                &node.ident,
-                "enum",
-                &syn::Fields::Unit,
-                &node.attrs,
-                declared_start(&node.vis, node.enum_token.span),
-            ),
+            syn::Item::Enum(node) => {
+                self.declared_type(
+                    &node.ident,
+                    "enum",
+                    &syn::Fields::Unit,
+                    &node.attrs,
+                    declared_start(&node.vis, node.enum_token.span),
+                );
+                if let Some(record) = self.types.last_mut() {
+                    record["visibility"] = json!(visibility(&node.vis));
+                    record["variants"] = json!(node.variants.iter().map(|variant| json!({ "name": spelling(&variant.ident), "unit": matches!(variant.fields, syn::Fields::Unit) && !variant.attrs.iter().any(|attr| attr.path().is_ident("cfg") || attr.path().is_ident("cfg_attr")) })).collect::<Vec<_>>());
+                }
+            }
             syn::Item::Trait(node) => {
                 let methods: Vec<Value> = node
                     .items
@@ -816,6 +866,7 @@ impl<'a> Walk<'a> {
             _ => Vec::new(),
         };
         self.types.push(json!({
+            "visibility": "private", "variants": [],
             "name": spelling(ident), "kind": kind, "module": self.module,
             "fields": named, "field_count": fields.len(), "auxiliary": self.auxiliary(), "derives": self.derives(attrs), "line": line(start),
         }));
@@ -865,6 +916,7 @@ impl<'a> Walk<'a> {
                             syn::ReturnType::Default => Value::Null,
                         },
                         "returns_field_only": returns_field_only(&method.block),
+                        "unverified_effects": unverified_effects(&method.block),
                         "visibility": visibility(&method.vis),
                         "span": span_json(start, method.span()),
                         "initialization": crate::initialization::facts(method, &self.primitive_names),

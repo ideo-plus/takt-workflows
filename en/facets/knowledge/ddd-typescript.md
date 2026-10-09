@@ -4,6 +4,8 @@
 
 The primary path is the single private class constructor or the single companion instance factory. Auxiliary construction delegates after validation. For a DP companion, parse both validates input and assembles the state closure as its primary path.
 
+Independent Service operations follow the project-selected `class` or `companion` representation and primary construction path. Distinguish fixed-configuration initialization from the business decision. A mapped operation is a public instance method whose input names, order, resolved types, Result success type, and operation-owned string errors match the declarations. Read-only fixed scalar configuration and dependencies on declared Values or Services are allowed; retained Entities or previous inputs/results are not. Called instance-method receivers must have explicit types, and inspection follows the called methods. Unresolved or chained calls, direct construction, assertions, and throw paths are outside the current inspectable read-only form; report the unsupported form rather than exempting it.
+
 Follow "Choosing Factory Names" in the modeling knowledge. A `from` converts another type and returns a Result with an operation-owned error when fallible. Instance `valueOf()` is a JavaScript conversion hook, separate from static-factory naming checks.
 
 The project settings choose one representation for every aggregate, Entity, Domain Primitive, and value object. Both hide state at run time and build through one full constructor; they differ in how the type is written.
@@ -453,3 +455,20 @@ packages/
 ```
 
 Each package has a `package.json` with `exports`, keeps sources under `src/`, and keeps tests, declaration files, and `.tsx` / `.mts` / `.cts` sources outside `src`. The referenced `tsconfig.json` files agree on `module: esnext`, `moduleResolution: bundler`, `strict: true`, and a target from es2017 to esnext, and none sets `baseUrl`.
+
+## Domain Service Operation Example
+
+```ts
+import type { Result } from '@acme/language-extensions';
+import type { Invoice } from './invoice.ts';
+import type { Money } from './money.ts';
+export type AssessPaymentEligibilityError = 'ineligible';
+export class PaymentEligibility {
+  private constructor() {}
+  static create(): PaymentEligibility { return new PaymentEligibility(); }
+  assess(this: PaymentEligibility, invoice: Invoice, funds: Money): Result<boolean, AssessPaymentEligibilityError> {
+    if (funds.isNegative() || !invoice.allowsPayment()) return { ok: false, error: 'ineligible' };
+    return { ok: true, value: true };
+  }
+}
+```

@@ -128,6 +128,31 @@ export interface BoundedContext {
   name: string;
   aggregates: Aggregate[];
   process_managers: ProcessManager[];
+  domain_services?: DomainService[];
+}
+
+export interface ServiceInput {
+  name: string;
+  type: string;
+}
+
+export interface ServiceOperation {
+  element_id: string;
+  name: string;
+  service: string;
+  inputs: ServiceInput[];
+  result: { type: string };
+  statement: string;
+  domain_errors: DomainError[];
+  failure_order: string[];
+}
+
+export interface DomainService {
+  element_id: string;
+  name: string;
+  bounded_context: string;
+  responsibility: string;
+  operations: ServiceOperation[];
 }
 
 export type LineageRelation = "renamed" | "split" | "merged" | "deprecated";

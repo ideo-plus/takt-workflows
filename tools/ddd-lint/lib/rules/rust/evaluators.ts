@@ -14,6 +14,7 @@ import { evaluateDomainPackaging } from "./packaging.ts";
 import { rulePrimitiveInitialization } from "./primitives.ts";
 import { ruleFactoryNaming } from "./factories.ts";
 import { rulePrimaryConstructor } from "./constructors.ts";
+import { ruleServices } from "./services.ts";
 import { inMemoryAggregates, storedMapValue, eventStreamElement, isAggregateStateElement, EVENT_SOURCING_STORAGE, eventSourcingStorageGaps } from "../in-memory.ts";
 import { repositoryContractProblem, resultArguments, expandGenericStoreResult, EVENT_SOURCING_STORE, ADAPTER_SURFACE } from "../repository-contract.ts";
 import { within as withinSpan } from "./program.ts";
@@ -815,6 +816,7 @@ export const PER_FILE_EVALUATORS: Record<
   a: ruleA,
   b: ruleB,
   operation: ruleOperation,
+  "service-contract": ruleServices,
   "primitive-initialization": rulePrimitiveInitialization,
   "factory-naming": ruleFactoryNaming,
   "primary-constructor": rulePrimaryConstructor,

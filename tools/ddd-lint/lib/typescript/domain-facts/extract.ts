@@ -112,6 +112,14 @@ export function extractFileFacts(api: CompilerApi, file: ts.SourceFile): TypeScr
     const signature =
       api.isMethodDeclaration(node) || api.isMethodSignature(node) || api.isConstructorDeclaration(node);
     const body = api.isMethodDeclaration(node) && node.body ? bodyEffects(api, node) : null;
+    let hasThrow = false;
+    if (api.isMethodDeclaration(node) && node.body) {
+      const visit = (child: ts.Node): void => {
+        if (api.isThrowStatement(child)) hasThrow = true;
+        api.forEachChild(child, visit);
+      };
+      visit(node.body);
+    }
     return [
       {
         ...spelled,
@@ -137,7 +145,7 @@ export function extractFileFacts(api: CompilerApi, file: ts.SourceFile): TypeScr
         ...((api.isMethodDeclaration(node) || api.isMethodSignature(node)) && node.type
           ? { return_type_text: node.type.getText(file) }
           : {}),
-        ...(body ? { writes: body.writes, returns_state_only: body.returns_state_only } : {}),
+        ...(body ? { writes: body.writes, returns_state_only: body.returns_state_only, has_throw: hasThrow } : {}),
         ...(api.isMethodDeclaration(node) && node.body ? { initialization: initializationFacts(api, node, file, spanOf) } : {}),
         span: spanOf(node),
       },
@@ -235,7 +243,7 @@ export function extractFileFacts(api: CompilerApi, file: ts.SourceFile): TypeScr
   /** What only some kinds of declaration record: heritage, a type literal, a stated type, an initializer. */
   type DeclarationDetail = Pick<
     DeclarationFact,
-    "binding" | "heritage" | "type_literal" | "type_text" | "initializer" | "params" | "generic"
+    "binding" | "heritage" | "type_literal" | "type_text" | "initializer" | "params" | "generic" | "string_union"
   >;
 
   function recordDeclaration(
@@ -394,10 +402,14 @@ export function extractFileFacts(api: CompilerApi, file: ts.SourceFile): TypeScr
       const aliased = statement.type;
       const literal = api.isTypeLiteralNode(aliased);
       const members = literal ? typeMembers(aliased.members) : [];
+      const alternatives = api.isUnionTypeNode(aliased) ? [...aliased.types] : [aliased];
+      const stringUnion = alternatives.every(node => api.isLiteralTypeNode(node) && api.isStringLiteral(node.literal))
+        ? alternatives.map(node => (node as ts.LiteralTypeNode).literal as ts.StringLiteral).map(node => node.text) : undefined;
       recordDeclaration(statement, statement, statement.name, "type-alias", members, {
         type_literal: literal,
         type_text: aliased.getText(file),
         generic: (statement.typeParameters?.length ?? 0) > 0,
+        ...(stringUnion === undefined ? {} : { string_union: stringUnion }),
       });
     } else if (api.isEnumDeclaration(statement)) {
       const members = statement.members.flatMap((element) =>
