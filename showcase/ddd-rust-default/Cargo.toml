@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "packages/command/access-domain",
     "packages/command/reservation-domain",
     "packages/command/reservation-use-case",
     "packages/command/reservation-interface-adapter",

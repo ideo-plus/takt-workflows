@@ -89,3 +89,51 @@ jobs:
       # The Rust samples need the extractor, which ships for darwin-arm64 only.
       - run: bun build-extractor.ts
       - run: bun test
+
+  showcase:
+    name: showcase (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [typescript, rust]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - name: TypeScript example
+        if: matrix.language == 'typescript'
+        working-directory: showcase/ddd-typescript-default
+        run: |
+          npm ci --ignore-scripts
+          node --test
+          npm run typecheck
+      - name: Rust example
+        if: matrix.language == 'rust'
+        working-directory: showcase/ddd-rust-default
+        run: |
+          cargo fmt --all -- --check
+          cargo test --locked
+      - name: Build the Rust inspector
+        if: matrix.language == 'rust'
+        run: bun tools/ddd-lint/build-extractor.ts
+      - name: Inspect current declarations and code
+        run: bun tools/ddd-lint/ddd-lint.ts --project "showcase/ddd-${{ matrix.language }}-default"
+      - name: Verify recorded source hashes
+        env:
+          SHOWCASE_LANGUAGE: ${{ matrix.language }}
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+          root = Path("showcase") / ("ddd-" + os.environ["SHOWCASE_LANGUAGE"] + "-default")
+          record = json.loads((root / "generation.json").read_text())
+          for name, expected in record["current_source_file_sha256"].items():
+              actual = hashlib.sha256((root / name).read_bytes()).hexdigest()
+              if actual != expected:
+                  raise SystemExit("Source hash differs: " + name)
+          PY
