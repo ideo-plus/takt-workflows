@@ -179,8 +179,7 @@ bounded_contexts:
       bounded_context: bc.access
       root_element: entity.organization
       states:
-        - active
-        - inactive
+        []
       elements:
         - element_id: entity.organization
           kind: entity
@@ -198,7 +197,7 @@ bounded_contexts:
           name: 完全な現在入力
           aggregate: aggregate.organization
           element: entity.organization
-          statement: 必要な識別子と真偽値の入力が揃っている。空文字や無効・利用不可の状態も構築できる
+          statement: 識別子と現在の有効性が存在する。識別子の空文字と無効状態は許容する。
         - element_id: invariant.organization.identity
           name: 組織の同一性
           aggregate: aggregate.organization
@@ -220,17 +219,20 @@ bounded_contexts:
           preconditions:
             - invariant.organization.complete-input
           domain_errors:
-            - element_id: error.organization.create.invalid-input
-              name: 入力が欠落
+            - element_id: error.organization.create.missing-id
+              name: MissingId
               operation: factory.organization.create
-              condition: 必須の入力項目がOption::Noneで渡された
+              condition: 識別子が存在しない。
+            - element_id: error.organization.create.missing-active
+              name: MissingActive
+              operation: factory.organization.create
+              condition: 現在の有効性が存在しない。
     - element_id: aggregate.user
       name: 利用者
       bounded_context: bc.access
       root_element: entity.user
       states:
-        - available
-        - unavailable
+        []
       elements:
         - element_id: entity.user
           kind: entity
@@ -240,7 +242,7 @@ bounded_contexts:
             - name: id
               type: string
               required: true
-            - name: organizationId
+            - name: organization_id
               type: string
               required: true
             - name: available
@@ -251,7 +253,7 @@ bounded_contexts:
           name: 完全な現在入力
           aggregate: aggregate.user
           element: entity.user
-          statement: 必要な識別子と真偽値の入力が揃っている。空文字や無効・利用不可の状態も構築できる
+          statement: 識別子、所属組織識別子、現在の利用可否が存在する。識別子の空文字と利用不可状態は許容する。
         - element_id: invariant.user.identity-and-membership
           name: 利用者の同一性と所属参照
           aggregate: aggregate.user
@@ -273,15 +275,23 @@ bounded_contexts:
           preconditions:
             - invariant.user.complete-input
           domain_errors:
-            - element_id: error.user.create.invalid-input
-              name: 入力が欠落
+            - element_id: error.user.create.missing-id
+              name: MissingId
               operation: factory.user.create
-              condition: 必須の入力項目がOption::Noneで渡された
+              condition: 利用者識別子が存在しない。
+            - element_id: error.user.create.missing-organization-id
+              name: MissingOrganizationId
+              operation: factory.user.create
+              condition: 所属組織識別子が存在しない。
+            - element_id: error.user.create.missing-available
+              name: MissingAvailable
+              operation: factory.user.create
+              condition: 現在の利用可否が存在しない。
   domain_services:
     - element_id: service.access-eligibility
       name: 利用資格判定
       bounded_context: bc.access
-      responsibility: 両集約が担う判断を組み合わせ、入力を変更せず利用資格を判定する
+      responsibility: 各集約に判断を依頼し、指定組織に対する利用資格と拒否理由を判定する。
       operations:
         - element_id: service-operation.access-eligibility.assess
           name: 利用資格を判定する
@@ -293,20 +303,20 @@ bounded_contexts:
               type: entity.user
           result:
             type: boolean
-          statement: 組織が有効で、利用者がその組織に所属し、利用可能な場合だけ成功値trueを返し、それ以外は優先順位に従った拒否を返す
+          statement: 組織が有効で、利用者がその組織に所属し、利用可能な場合だけtrueを返す。入力を変更せず、イベントを生まず、呼び出し履歴に依存しない。
           domain_errors:
             - element_id: error.access-eligibility.assess.organization-inactive
               name: 組織が無効
               operation: service-operation.access-eligibility.assess
-              condition: 指定した利用組織が現在無効である
+              condition: 指定された組織が無効である。
             - element_id: error.access-eligibility.assess.organization-mismatch
               name: 所属組織が相違
               operation: service-operation.access-eligibility.assess
-              condition: 利用者が指定した利用組織に所属しない
+              condition: 利用者が指定された組織に所属しない。
             - element_id: error.access-eligibility.assess.user-unavailable
               name: 利用者が利用不可
               operation: service-operation.access-eligibility.assess
-              condition: 利用者が現在利用できない
+              condition: 利用者が利用不可である。
           failure_order:
             - error.access-eligibility.assess.organization-inactive
             - error.access-eligibility.assess.organization-mismatch
@@ -322,3 +332,20 @@ lineage:
   relation: deprecated
   successors: []
   deprecated_at: '2026-10-04'
+- lineage_id: lineage-0003
+  element_id: error.organization.create.invalid-input
+  previous_name: 入力が欠落
+  relation: split
+  successors:
+    - error.organization.create.missing-id
+    - error.organization.create.missing-active
+  deprecated_at: 2026-10-10
+- lineage_id: lineage-0004
+  element_id: error.user.create.invalid-input
+  previous_name: 入力が欠落
+  relation: split
+  successors:
+    - error.user.create.missing-id
+    - error.user.create.missing-organization-id
+    - error.user.create.missing-available
+  deprecated_at: 2026-10-10

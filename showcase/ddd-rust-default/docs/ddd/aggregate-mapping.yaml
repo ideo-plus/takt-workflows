@@ -90,9 +90,12 @@ aggregate_mappings:
         method: create
         error_type: CreateOrganizationError
       errors:
-        - error_ref: error.organization.create.invalid-input
+        - error_ref: error.organization.create.missing-id
           code:
-            case: InvalidInput
+            case: MissingId
+        - error_ref: error.organization.create.missing-active
+          code:
+            case: MissingActive
   replay_methods:
     - event_ref: event.organization.created
       code:
@@ -115,9 +118,15 @@ aggregate_mappings:
         method: create
         error_type: CreateUserError
       errors:
-        - error_ref: error.user.create.invalid-input
+        - error_ref: error.user.create.missing-id
           code:
-            case: InvalidInput
+            case: MissingId
+        - error_ref: error.user.create.missing-organization-id
+          code:
+            case: MissingOrganizationId
+        - error_ref: error.user.create.missing-available
+          code:
+            case: MissingAvailable
   replay_methods:
     - event_ref: event.user.created
       code:
@@ -221,13 +230,10 @@ domain_packages:
     package: reservation-interface-adapter
     module:
     - in_memory_reservation_repository
-- term: 利用資格
+- term: 利用資格のドメイン
   model_refs:
     - bc.access
-    - aggregate.organization
-    - aggregate.user
-    - service.access-eligibility
-  rationale: 利用組織と利用者の独立した判断、および両者を組み合わせる利用資格を一緒に理解するパッケージ。言語拡張の結果型だけに依存する
+  rationale: 利用資格に関係する概念を公開するパッケージ。外部取得や保存には依存しない。
   code:
     language: rust
     package: access-domain
@@ -238,7 +244,7 @@ domain_packages:
     - aggregate.organization
     - aggregate.user
     - service.access-eligibility
-  rationale: 独立した利用組織と利用者、および両者の判断を組み合わせるサービスを一つの業務モジュールで理解する。集約間の所有関係は追加しない
+  rationale: 独立した組織と利用者、その組み合わせによる判定を一緒に理解する。各集約の境界は維持する。
   code:
     language: rust
     package: access-domain
@@ -247,7 +253,7 @@ domain_packages:
 - term: 利用組織
   model_refs:
     - aggregate.organization
-  rationale: 組織の同一性、有効性、構築と復元をまとめ、利用者には依存しない
+  rationale: 組織の同一性、有効性、構築と復元を所有する。利用者モジュールには依存しない。
   code:
     language: rust
     package: access-domain
@@ -257,7 +263,7 @@ domain_packages:
 - term: 利用者
   model_refs:
     - aggregate.user
-  rationale: 利用者の同一性、利用可否、所属をまとめ、所属判断の一時引数として利用組織へ依存する
+  rationale: 利用者の同一性、利用可否、所属を所有する。所属判断では組織へ識別子の照合を依頼する。
   code:
     language: rust
     package: access-domain
@@ -267,13 +273,13 @@ domain_packages:
 - term: 利用資格判定
   model_refs:
     - service.access-eligibility
-  rationale: 利用組織と利用者の判断を組み合わせる。両モジュールへ依存するが、入力集約を保持しない
+  rationale: 組織と利用者の業務判断を組み合わせ、拒否順位を決める。両集約からこのモジュールへの依存は持たない。
   code:
     language: rust
     package: access-domain
     module:
       - access
-      - access_eligibility
+      - eligibility
 service_mappings:
 - service_ref: service.access-eligibility
   code:
@@ -281,7 +287,7 @@ service_mappings:
     package: access-domain
     module:
       - access
-      - access_eligibility
+      - eligibility
     type: AccessEligibility
   operations:
     - operation_ref: service-operation.access-eligibility.assess

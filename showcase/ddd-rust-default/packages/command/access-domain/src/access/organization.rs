@@ -1,12 +1,11 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CreateOrganizationError {
-    InvalidInput,
+    MissingId,
+    MissingActive,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CorruptOrganizationHistory {
-    InvalidHistory,
-}
+pub struct CorruptOrganizationHistory;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OrganizationCreated {
@@ -16,80 +15,60 @@ pub struct OrganizationCreated {
 }
 
 impl OrganizationCreated {
-    fn new(organization_id: String, active: bool, sequence_number: u64) -> Self {
+    fn new(organization_id: &str, active: bool) -> Self {
         Self {
-            organization_id,
+            organization_id: organization_id.to_string(),
             active,
-            sequence_number,
+            sequence_number: 1,
         }
-    }
-
-    pub fn from_record(organization_id: String, active: bool, sequence_number: u64) -> Self {
-        Self::new(organization_id, active, sequence_number)
-    }
-
-    pub fn organization_id(&self) -> &str {
-        &self.organization_id
-    }
-
-    pub fn sequence_number(&self) -> u64 {
-        self.sequence_number
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct Organization {
-    created: OrganizationCreated,
+    creation: OrganizationCreated,
 }
 
 impl Organization {
-    fn new(created: OrganizationCreated) -> Self {
-        Self { created }
+    fn new(creation: OrganizationCreated) -> Self {
+        Self { creation }
     }
 
-    pub fn create(
-        id: Option<String>,
-        active: Option<bool>,
-    ) -> Result<Self, CreateOrganizationError> {
-        let (Some(id), Some(active)) = (id, active) else {
-            return Err(CreateOrganizationError::InvalidInput);
-        };
-        let event = OrganizationCreated::new(id, active, 1);
+    pub fn create(id: Option<&str>, active: Option<bool>) -> Result<Self, CreateOrganizationError> {
+        let id = id.ok_or(CreateOrganizationError::MissingId)?;
+        let active = active.ok_or(CreateOrganizationError::MissingActive)?;
+        let event = OrganizationCreated::new(id, active);
         Ok(Self::from_created(&event))
     }
 
-    pub fn replay(events: &[OrganizationCreated]) -> Result<Self, CorruptOrganizationHistory> {
-        if events.len() != 1 {
-            return Err(CorruptOrganizationHistory::InvalidHistory);
-        }
-        let event = &events[0];
-        if event.sequence_number != 1 {
-            return Err(CorruptOrganizationHistory::InvalidHistory);
-        }
-        Ok(Self::from_created(event))
-    }
-
-    fn from_created(event: &OrganizationCreated) -> Self {
+    pub fn from_created(event: &OrganizationCreated) -> Self {
         Self::new(event.clone())
     }
 
     pub fn created_event(&self) -> OrganizationCreated {
-        self.created.clone()
+        self.creation.clone()
+    }
+
+    pub fn sequence_number(&self) -> u64 {
+        self.creation.sequence_number
+    }
+
+    pub fn replay(
+        events: &[OrganizationCreated],
+        snapshot: Self,
+    ) -> Result<Self, CorruptOrganizationHistory> {
+        // 宣言されたイベントは生成だけなので、既存集約に有効な続きはない。
+        if !events.is_empty() {
+            return Err(CorruptOrganizationHistory);
+        }
+        Ok(snapshot)
     }
 
     pub fn is_active(&self) -> bool {
-        self.created.active == true
+        self.creation.active
     }
 
-    pub fn is_identified_by(&self, organization_id: &str) -> bool {
-        self.created.organization_id == organization_id
-    }
-}
-
-impl PartialEq for Organization {
-    fn eq(&self, other: &Self) -> bool {
-        self.created.organization_id == other.created.organization_id
+    pub fn is_identified_by(&self, identifier: &str) -> bool {
+        self.creation.organization_id == identifier
     }
 }
-
-impl Eq for Organization {}
