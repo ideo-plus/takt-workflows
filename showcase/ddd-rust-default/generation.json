@@ -112,8 +112,8 @@
   "manual_revision": {
     "basis": "Explicit user instruction: remove ReservationSnapshot directly without TAKT; unify both showcases on Event Sourcing; retain no backward compatibility.",
     "started_at": "2026-10-04T05:46:34.820720+00:00",
-    "validation_bundle_commit": "7c9bb51c7fc9027d8b2480df12b86d79884bb180",
-    "finished_at": "2026-10-10T12:16:45.454028+00:00",
+    "validation_bundle_commit": "ae21a8b74d20b9b5e1016e0e8fe4e41f4ea38157",
+    "finished_at": "2026-10-10T14:54:31.972771+00:00",
     "versions": {
       "node": "v24.19.0",
       "bun": "1.4.2",
@@ -311,6 +311,39 @@
           "command": "cargo fmt --all -- --check"
         }
       }
+    },
+    "book_review_integrity_update": {
+      "basis": "セキュア・バイ・デザインの生成時の検証・データの完全性と、単体テストの考え方／使い方の公開操作による振る舞いの検証から、再現した不整合を直接修正する。",
+      "issues": [
+        "https://github.com/ideo-plus/takt-workflows/issues/84"
+      ],
+      "verified_at": "2026-10-10T14:54:31.972771+00:00",
+      "changes": [
+        "イベントを適用した業務状態と保存スナップショットの一致を保存前に検証する",
+        "不整合を拒否した後の読込と正しい再保存を公開操作で検証する"
+      ],
+      "changed_files": [
+        "showcase/ddd-rust-default/packages/command/reservation-interface-adapter/src/in_memory_reservation_repository.rs",
+        "showcase/ddd-rust-default/packages/command/reservation-interface-adapter/tests/store_integrity.rs"
+      ],
+      "verification": {
+        "pass": true,
+        "tests": {
+          "pass": 67,
+          "fail": 0,
+          "skipped": 0
+        },
+        "ddd_lint": {
+          "pass": true,
+          "findings": 0,
+          "unavailable": 0
+        },
+        "typecheck": null,
+        "format": {
+          "pass": true,
+          "command": "cargo fmt --all -- --check"
+        }
+      }
     }
   },
   "identifier_domain_assumption": {
@@ -348,7 +381,7 @@
     "packages/command/reservation-domain/src/room_id.rs": "8978302434fc3288101270c505416ea558ec23bd8d1da77ed753c58b9f3e197b",
     "packages/command/reservation-domain/src/room_id/tests.rs": "e4c06bb14c02994f3b87f6cfe05317adc499ae9bab23c72cc034969af7b6bb0c",
     "packages/command/reservation-interface-adapter/Cargo.toml": "7263d4e799e0f31db00e696208c128c03df91ab0aa84c30606bffc14d4bdb924",
-    "packages/command/reservation-interface-adapter/src/in_memory_reservation_repository.rs": "59719e5383dd344b398165dd748070223070408693b6043d985d7f3a83ba837c",
+    "packages/command/reservation-interface-adapter/src/in_memory_reservation_repository.rs": "2481bb89e0f8def2439897e1cadf961c4915432c52d9be4daf3f3e4721b573e1",
     "packages/command/reservation-interface-adapter/src/in_memory_reservation_repository/tests.rs": "2cd06909ae1aedd45991a6f21213fb4390b9866c611ec7a7ad3f936577a601af",
     "packages/command/reservation-interface-adapter/src/lib.rs": "d72d0e55088eee814f164de63f16738f1a7c30ae86dff7dab44eedd650f17cc9",
     "packages/command/reservation-interface-adapter/tests/cancel_reservation.rs": "bd765460a27ec3688152a7d5623a9f1909f707177661ae44e3a5d58151e80a05",
@@ -358,12 +391,13 @@
     "packages/command/reservation-use-case/src/lib.rs": "641d19e8b29f9fec7b37278b31209949d8be2aced2282fa0bc998bc1ea6aff14",
     "packages/command/reservation-use-case/src/reservation_repository.rs": "15d271dd401faf06315591d0f10b57ec4b47f3dc93d70d0c1a383bf84dc441ac",
     "runtime.yaml": "72de82d6c7180fdd070fb78f1d87356e47fcf21f46b7782fa1dacbbd5c473d81",
-    "task.txt": "2bdd77f37c78d4844eaac66ac6bb090cdcba201272923a46c8b67b510489245e"
+    "task.txt": "2bdd77f37c78d4844eaac66ac6bb090cdcba201272923a46c8b67b510489245e",
+    "packages/command/reservation-interface-adapter/tests/store_integrity.rs": "751d685fc7d5bdde5e72ea22c2fcac02bcccd1d148a256ab0e77ea62b153fef0"
   },
   "standalone_verification": {
     "pass": true,
     "tests": {
-      "pass": 65,
+      "pass": 67,
       "fail": 0,
       "skipped": 0
     },
@@ -522,6 +556,29 @@
         "packages/command/access-domain/src/lib.rs": "e4c48c07f696209cba3ccdd7c94c5686a7051a1341240a2b4107cb68cc0f89c5",
         "packages/command/access-domain/tests/access_eligibility.rs": "2e4a82ef59f452b726386e97a600ac90a3294de1836e57c500d791f59b98e4df"
       }
+    },
+    {
+      "recorded_at": "2026-10-10T14:54:31.972771+00:00",
+      "basis": "書籍レビューの指摘を修正する前の検証記録",
+      "standalone_verification": {
+        "pass": true,
+        "tests": {
+          "pass": 65,
+          "fail": 0,
+          "skipped": 0
+        },
+        "ddd_lint": {
+          "pass": true,
+          "findings": 0,
+          "unavailable": 0
+        },
+        "typecheck": null,
+        "format": {
+          "pass": true,
+          "command": "cargo fmt --all -- --check"
+        }
+      },
+      "validation_bundle_commit": "7c9bb51c7fc9027d8b2480df12b86d79884bb180"
     }
   ]
 }

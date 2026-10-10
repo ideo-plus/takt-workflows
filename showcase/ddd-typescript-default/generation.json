@@ -216,8 +216,8 @@
   "manual_revision": {
     "basis": "Explicit user instruction: remove ReservationSnapshot directly without TAKT; unify both showcases on Event Sourcing; retain no backward compatibility.",
     "started_at": "2026-10-04T05:46:34.699206+00:00",
-    "validation_bundle_commit": "63604264852145232a886bdf88221d61d46323b0",
-    "finished_at": "2026-10-09T14:27:26.722739+00:00",
+    "validation_bundle_commit": "ae21a8b74d20b9b5e1016e0e8fe4e41f4ea38157",
+    "finished_at": "2026-10-10T14:54:31.972771+00:00",
     "versions": {
       "node": "v24.19.0",
       "bun": "1.4.2",
@@ -350,6 +350,45 @@
         "showcase/ddd-typescript-default/package-lock.json",
         "showcase/ddd-typescript-default/tsconfig.json"
       ]
+    },
+    "book_review_integrity_update": {
+      "basis": "セキュア・バイ・デザインの生成時の検証・データの完全性と、単体テストの考え方／使い方の公開操作による振る舞いの検証から、再現した不整合を直接修正する。",
+      "issues": [
+        "https://github.com/ideo-plus/takt-workflows/issues/84",
+        "https://github.com/ideo-plus/takt-workflows/issues/85"
+      ],
+      "verified_at": "2026-10-10T14:54:31.972771+00:00",
+      "changes": [
+        "イベントを適用した業務状態と保存スナップショットの一致を保存前に検証する",
+        "不整合を拒否した後の読込と正しい再保存を公開操作で検証する",
+        "履歴の各入力値を取得し、同じ値で検証と構築を行う"
+      ],
+      "changed_files": [
+        "showcase/ddd-typescript-default/packages/command/access-domain/src/access/organization.ts",
+        "showcase/ddd-typescript-default/packages/command/access-domain/src/access/user.ts",
+        "showcase/ddd-typescript-default/packages/command/reservation-interface-adapter/src/in-memory-reservation-repository.ts",
+        "showcase/ddd-typescript-default/tests/composition-root/cancel-reservation.test.ts",
+        "showcase/ddd-typescript-default/packages/command/access-domain/test/replay-capture.test.ts",
+        "showcase/ddd-typescript-default/tests/composition-root/reservation-store-integrity.test.ts"
+      ],
+      "verification": {
+        "pass": true,
+        "tests": {
+          "pass": 55,
+          "fail": 0,
+          "skipped": 0
+        },
+        "ddd_lint": {
+          "pass": true,
+          "findings": 0,
+          "unavailable": 0
+        },
+        "typecheck": {
+          "pass": true,
+          "command": "npm run typecheck"
+        },
+        "format": null
+      }
     }
   },
   "identifier_domain_assumption": {
@@ -361,8 +400,8 @@
     "packages/command/access-domain/package.json": "6a8da91e95ad697023ecc9f9aa3b7d02633c2bc16c3db32744b9bf73f18a0a0c",
     "packages/command/access-domain/src/access.ts": "69bd65a6c7dddbba27cb0e5652d987238ea93e13ef1759aeecae2163204f7766",
     "packages/command/access-domain/src/access/access-eligibility.ts": "fe2ae0d611ed5efe83f62ef283bd0b157b0fa49df20ff3a0268b8bb3d0e99fa7",
-    "packages/command/access-domain/src/access/organization.ts": "f9208f02257d12117e48b4ed12a5a4b06d577e8c41fb985b4948cfb5de6e0c43",
-    "packages/command/access-domain/src/access/user.ts": "a79d16fc86b100a01cca014d5856706e7256ad3d9751a15612f0e16dd3b3fe2a",
+    "packages/command/access-domain/src/access/organization.ts": "feb9fed160a84cd18989ecba26ec462980ee310f87ea4e2783843327f5d1f756",
+    "packages/command/access-domain/src/access/user.ts": "038ad79630aff8501cdfb6f9d9e749b8809f9bca1b2c1219960dde22f56beb75",
     "packages/command/access-domain/src/index.ts": "7f16b564e2e966af915a8a4bc645bae238a9485c7f3b182827f43a929c731187",
     "packages/command/access-domain/test/access-eligibility.test.ts": "063fc1acfde33471051a0c4524c37af2081483e990622abcb641570e426891d7",
     "packages/command/access-domain/test/input-aggregates.test.ts": "a871e48153eefd8c3b953fe6325dba19a3e35eb50de4af2aa9081f1a9f30ce86",
@@ -385,7 +424,7 @@
     "packages/command/reservation-domain/tests/reservation.test.ts": "2a705f79facf6affd98d79c823406e513fd296334c967e9acb09881764afec7a",
     "packages/command/reservation-domain/tsconfig.json": "8aaddb5ad9b9a33dec06b79c55e72a828fdc71d7d990a6afb1a9f8487aa5ecfe",
     "packages/command/reservation-interface-adapter/package.json": "fe662eaf6346442c14b11c615421dbc79a640eeffeb9201cc04840a6bc1fb64f",
-    "packages/command/reservation-interface-adapter/src/in-memory-reservation-repository.ts": "ad948bc64c663eee718b20aa76c75fba78357202641ed540f37efddd6e55a96e",
+    "packages/command/reservation-interface-adapter/src/in-memory-reservation-repository.ts": "6f783127e29f20671ad060eb5c27de437592a821085dcaab24d566bcb24037a0",
     "packages/command/reservation-interface-adapter/src/index.ts": "2fd92afa90aa9045bc87be32c85979dd4136df48051aa4d5a56c7a55a7212594",
     "packages/command/reservation-interface-adapter/tsconfig.json": "8aaddb5ad9b9a33dec06b79c55e72a828fdc71d7d990a6afb1a9f8487aa5ecfe",
     "packages/command/reservation-use-case/package.json": "4aa9500acf2549c108f7962af7d4143028c05190a799fd6f602355254dec1bd5",
@@ -399,14 +438,16 @@
     "packages/infrastructure/language-extensions/tsconfig.json": "8aaddb5ad9b9a33dec06b79c55e72a828fdc71d7d990a6afb1a9f8487aa5ecfe",
     "runtime.yaml": "72de82d6c7180fdd070fb78f1d87356e47fcf21f46b7782fa1dacbbd5c473d81",
     "task.txt": "5aff0583dc7527941b00ce312b3631c1f1804c08a3808c90408727926b5a5512",
-    "tests/composition-root/cancel-reservation.test.ts": "cedf451d49e0a71876644dffa0ec23a4d158b620d8e8cd3b01b04def6b4b0a42",
+    "tests/composition-root/cancel-reservation.test.ts": "1a9f30f6c3c65c465d3bdb7a4dc9c8feb50ecdf86dd2bb1aab295f2d696fdfc5",
     "tsconfig.json": "03343a6e62b23795ee40544eb48f295a0802cea7df9147c033a87c9d4f6a820c",
-    "tsconfig.typecheck.json": "eb5b58c698ecf76ccbf97c4da250e3b3444da88b9e617cf7debe337227e9cbb8"
+    "tsconfig.typecheck.json": "eb5b58c698ecf76ccbf97c4da250e3b3444da88b9e617cf7debe337227e9cbb8",
+    "tests/composition-root/reservation-store-integrity.test.ts": "5cb33c3ee20b7d78fa09a781985a07f5ad081024d04e436e3e9fb801b70894a3",
+    "packages/command/access-domain/test/replay-capture.test.ts": "1140871b4a4a081ec7910e9e0ba5495f26b660572ef85c08532eb5d389d7319b"
   },
   "standalone_verification": {
     "pass": true,
     "tests": {
-      "pass": 51,
+      "pass": 55,
       "fail": 0,
       "skipped": 0
     },
@@ -459,6 +500,29 @@
         "format": null
       },
       "validation_bundle_commit": "a87ca122fa606332e56d68746153e99768ded3f1"
+    },
+    {
+      "recorded_at": "2026-10-10T14:54:31.972771+00:00",
+      "basis": "書籍レビューの指摘を修正する前の検証記録",
+      "standalone_verification": {
+        "pass": true,
+        "tests": {
+          "pass": 51,
+          "fail": 0,
+          "skipped": 0
+        },
+        "ddd_lint": {
+          "pass": true,
+          "findings": 0,
+          "unavailable": 0
+        },
+        "typecheck": {
+          "pass": true,
+          "command": "npm run typecheck"
+        },
+        "format": null
+      },
+      "validation_bundle_commit": "63604264852145232a886bdf88221d61d46323b0"
     }
   ]
 }
