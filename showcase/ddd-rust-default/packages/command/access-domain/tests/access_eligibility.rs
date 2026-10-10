@@ -1,162 +1,217 @@
-use access_domain::access::access_eligibility::{AccessEligibility, AssessAccessEligibilityError};
-use access_domain::access::organization::{
-    CorruptOrganizationHistory, CreateOrganizationError, Organization, OrganizationCreated,
-};
-use access_domain::access::user::{CorruptUserHistory, CreateUserError, User, UserCreated};
+use access_domain::access::eligibility::{AccessEligibility, AssessAccessEligibilityError};
+use access_domain::access::organization::Organization;
+use access_domain::access::user::User;
 
-fn inputs(active: bool, matching: bool, available: bool) -> (Organization, User) {
-    let organization = Organization::create(Some("ORG-A".into()), Some(active)).unwrap();
-    let user = User::create(
-        Some("USER-A".into()),
-        Some(if matching { "ORG-A" } else { "ORG-B" }.into()),
-        Some(available),
-    )
-    .unwrap();
-    (organization, user)
+fn organization(id: &str, active: bool) -> Organization {
+    Organization::create(Some(id), Some(active)).expect("利用組織を作成できる入力")
+}
+
+fn user(id: &str, organization_id: &str, available: bool) -> User {
+    User::create(Some(id), Some(organization_id), Some(available)).expect("利用者を作成できる入力")
 }
 
 #[test]
-fn all_eight_conditions_preserve_failure_priority_and_input_events() {
-    use AssessAccessEligibilityError::{
-        OrganizationInactive, OrganizationMismatch, UserUnavailable,
-    };
-    let cases = [
-        (true, true, true, Ok(true)),
-        (true, true, false, Err(UserUnavailable)),
-        (true, false, true, Err(OrganizationMismatch)),
-        (true, false, false, Err(OrganizationMismatch)),
-        (false, true, true, Err(OrganizationInactive)),
-        (false, true, false, Err(OrganizationInactive)),
-        (false, false, true, Err(OrganizationInactive)),
-        (false, false, false, Err(OrganizationInactive)),
-    ];
-    let service = AccessEligibility::create();
-    for (active, matching, available, expected) in cases {
-        let (organization, user) = inputs(active, matching, available);
-        let before = (organization.created_event(), user.created_event());
-        assert_eq!(service.assess(&organization, &user), expected);
-        assert_eq!((organization.created_event(), user.created_event()), before);
-        let restored_organization = Organization::replay(&[before.0.clone()]).unwrap();
-        let restored_user = User::replay(&[before.1.clone()]).unwrap();
-        assert_eq!(
-            service.assess(&restored_organization, &restored_user),
-            expected
-        );
-        assert_eq!(
-            (
-                restored_organization.created_event(),
-                restored_user.created_event()
-            ),
-            before
-        );
-    }
+fn active_organization_allows_an_available_member() {
+    let organization = organization("org-a", true);
+    let user = user("user-a", "org-a", true);
+    let eligibility = AccessEligibility::create();
+
+    let result = eligibility.assess(&organization, &user);
+
+    assert_eq!(result, Ok(true));
 }
 
 #[test]
-fn unrelated_calls_and_other_instances_do_not_change_allow_or_deny() {
-    let service = AccessEligibility::create();
-    let (allowed_organization, allowed_user) = inputs(true, true, true);
-    let (denied_organization, denied_user) = inputs(true, true, false);
-    let before = (allowed_user.created_event(), denied_user.created_event());
+fn active_organization_rejects_an_unavailable_member() {
+    let organization = organization("org-a", true);
+    let user = user("user-a", "org-a", false);
+    let eligibility = AccessEligibility::create();
+
+    let result = eligibility.assess(&organization, &user);
+
+    assert_eq!(result, Err(AssessAccessEligibilityError::UserUnavailable));
+}
+
+#[test]
+fn active_organization_rejects_an_available_non_member() {
+    let organization = organization("org-a", true);
+    let user = user("user-a", "org-b", true);
+    let eligibility = AccessEligibility::create();
+
+    let result = eligibility.assess(&organization, &user);
+
     assert_eq!(
-        service.assess(&allowed_organization, &allowed_user),
-        Ok(true)
-    );
-    assert_eq!(
-        service.assess(&denied_organization, &denied_user),
-        Err(AssessAccessEligibilityError::UserUnavailable)
-    );
-    assert_eq!(
-        service.assess(&allowed_organization, &allowed_user),
-        Ok(true)
-    );
-    assert_eq!(
-        service.assess(&denied_organization, &denied_user),
-        Err(AssessAccessEligibilityError::UserUnavailable)
-    );
-    assert_eq!(
-        AccessEligibility::create().assess(&allowed_organization, &allowed_user),
-        Ok(true)
-    );
-    assert_eq!(
-        (allowed_user.created_event(), denied_user.created_event()),
-        before
+        result,
+        Err(AssessAccessEligibilityError::OrganizationMismatch)
     );
 }
 
 #[test]
-fn missing_current_inputs_are_rejected_but_empty_identifiers_and_false_states_are_valid() {
+fn organization_mismatch_precedes_user_unavailability() {
+    let organization = organization("org-a", true);
+    let user = user("user-a", "org-b", false);
+    let eligibility = AccessEligibility::create();
+
+    let result = eligibility.assess(&organization, &user);
+
     assert_eq!(
-        Organization::create(None, Some(true)),
-        Err(CreateOrganizationError::InvalidInput)
+        result,
+        Err(AssessAccessEligibilityError::OrganizationMismatch)
     );
-    assert_eq!(
-        Organization::create(Some("ORG-A".into()), None),
-        Err(CreateOrganizationError::InvalidInput)
-    );
-    assert_eq!(
-        User::create(None, Some("ORG-A".into()), Some(true)),
-        Err(CreateUserError::InvalidInput)
-    );
-    assert_eq!(
-        User::create(Some("USER-A".into()), None, Some(true)),
-        Err(CreateUserError::InvalidInput)
-    );
-    assert_eq!(
-        User::create(Some("USER-A".into()), Some("ORG-A".into()), None),
-        Err(CreateUserError::InvalidInput)
-    );
-    let organization = Organization::create(Some(String::new()), Some(false)).unwrap();
-    let user = User::create(Some(String::new()), Some(String::new()), Some(false)).unwrap();
-    assert!(!organization.is_active());
-    assert!(!user.is_available());
-    assert!(user.belongs_to(&organization));
-    assert_eq!(organization.created_event().sequence_number(), 1);
-    assert_eq!(user.created_event().sequence_number(), 1);
 }
 
 #[test]
-fn identity_and_membership_do_not_depend_on_instance_or_availability() {
-    let active = Organization::create(Some("ORG-A".into()), Some(true)).unwrap();
-    let inactive = Organization::create(Some("ORG-A".into()), Some(false)).unwrap();
-    let other = Organization::create(Some("ORG-B".into()), Some(true)).unwrap();
-    let user = User::create(Some("USER-A".into()), Some("ORG-A".into()), Some(true)).unwrap();
-    let unavailable =
-        User::create(Some("USER-A".into()), Some("ORG-B".into()), Some(false)).unwrap();
-    assert_eq!(active, inactive);
-    assert_ne!(active, other);
-    assert_eq!(user, unavailable);
-    assert!(user.belongs_to(&active));
-    assert!(user.belongs_to(&inactive));
-    assert!(!user.belongs_to(&other));
+fn inactive_organization_rejects_an_available_member() {
+    let organization = organization("org-a", false);
+    let user = user("user-a", "org-a", true);
+    let eligibility = AccessEligibility::create();
+
+    let result = eligibility.assess(&organization, &user);
+
+    assert_eq!(
+        result,
+        Err(AssessAccessEligibilityError::OrganizationInactive)
+    );
 }
 
 #[test]
-fn restoration_rejects_missing_duplicate_or_out_of_sequence_history() {
-    let (organization, user) = inputs(true, true, true);
+fn organization_inactivity_precedes_user_unavailability() {
+    let organization = organization("org-a", false);
+    let user = user("user-a", "org-a", false);
+    let eligibility = AccessEligibility::create();
+
+    let result = eligibility.assess(&organization, &user);
+
+    assert_eq!(
+        result,
+        Err(AssessAccessEligibilityError::OrganizationInactive)
+    );
+}
+
+#[test]
+fn organization_inactivity_precedes_organization_mismatch() {
+    let organization = organization("org-a", false);
+    let user = user("user-a", "org-b", true);
+    let eligibility = AccessEligibility::create();
+
+    let result = eligibility.assess(&organization, &user);
+
+    assert_eq!(
+        result,
+        Err(AssessAccessEligibilityError::OrganizationInactive)
+    );
+}
+
+#[test]
+fn organization_inactivity_precedes_all_other_rejections() {
+    let organization = organization("org-a", false);
+    let user = user("user-a", "org-b", false);
+    let eligibility = AccessEligibility::create();
+
+    let result = eligibility.assess(&organization, &user);
+
+    assert_eq!(
+        result,
+        Err(AssessAccessEligibilityError::OrganizationInactive)
+    );
+}
+
+#[test]
+fn matching_empty_identifiers_can_be_eligible() {
+    let organization = organization("", true);
+    let user = user("", "", true);
+    let eligibility = AccessEligibility::create();
+
+    let result = eligibility.assess(&organization, &user);
+
+    assert_eq!(result, Ok(true));
+}
+
+#[test]
+fn an_allowed_result_is_stable_across_an_unrelated_rejection() {
+    let organization = organization("org-a", true);
+    let original_user = user("user-a", "org-a", true);
+    let unrelated_user = user("user-b", "org-b", true);
+    let eligibility = AccessEligibility::create();
+
+    let before = eligibility.assess(&organization, &original_user);
+    let unrelated = eligibility.assess(&organization, &unrelated_user);
+    let after = eligibility.assess(&organization, &original_user);
+
+    assert_eq!(before, Ok(true));
+    assert_eq!(
+        unrelated,
+        Err(AssessAccessEligibilityError::OrganizationMismatch)
+    );
+    assert_eq!(after, before);
+}
+
+#[test]
+fn a_rejection_reason_is_stable_across_an_unrelated_allowance() {
+    let organization = organization("org-a", true);
+    let original_user = user("user-a", "org-b", false);
+    let unrelated_user = user("user-b", "org-a", true);
+    let eligibility = AccessEligibility::create();
+
+    let before = eligibility.assess(&organization, &original_user);
+    let unrelated = eligibility.assess(&organization, &unrelated_user);
+    let after = eligibility.assess(&organization, &original_user);
+
+    assert_eq!(
+        before,
+        Err(AssessAccessEligibilityError::OrganizationMismatch)
+    );
+    assert_eq!(unrelated, Ok(true));
+    assert_eq!(after, before);
+}
+
+#[test]
+fn allowance_does_not_change_inputs_or_creation_events() {
+    let organization = organization("org-a", true);
+    let user = user("user-a", "org-a", true);
     let organization_event = organization.created_event();
     let user_event = user.created_event();
+    let organization_sequence = organization.sequence_number();
+    let user_sequence = user.sequence_number();
+    let eligibility = AccessEligibility::create();
+
+    let result = eligibility.assess(&organization, &user);
+
+    assert_eq!(result, Ok(true));
+    assert!(organization.is_active());
+    assert!(organization.is_identified_by("org-a"));
+    assert!(user.is_available());
+    assert!(user.is_identified_by("user-a"));
+    assert!(user.belongs_to(&organization));
+    assert_eq!(organization.created_event(), organization_event);
+    assert_eq!(user.created_event(), user_event);
+    assert_eq!(organization.sequence_number(), organization_sequence);
+    assert_eq!(user.sequence_number(), user_sequence);
+}
+
+#[test]
+fn rejection_does_not_change_inputs_or_creation_events() {
+    let organization = organization("org-a", true);
+    let user = user("user-a", "org-b", false);
+    let organization_event = organization.created_event();
+    let user_event = user.created_event();
+    let organization_sequence = organization.sequence_number();
+    let user_sequence = user.sequence_number();
+    let eligibility = AccessEligibility::create();
+
+    let result = eligibility.assess(&organization, &user);
+
     assert_eq!(
-        Organization::replay(&[]),
-        Err(CorruptOrganizationHistory::InvalidHistory)
+        result,
+        Err(AssessAccessEligibilityError::OrganizationMismatch)
     );
-    assert_eq!(User::replay(&[]), Err(CorruptUserHistory::InvalidHistory));
-    assert_eq!(
-        Organization::replay(&[organization_event.clone(), organization_event]),
-        Err(CorruptOrganizationHistory::InvalidHistory)
-    );
-    assert_eq!(
-        User::replay(&[user_event.clone(), user_event]),
-        Err(CorruptUserHistory::InvalidHistory)
-    );
-    let wrong_organization = OrganizationCreated::from_record("ORG-A".into(), true, 2);
-    let wrong_user = UserCreated::from_record("USER-A".into(), "ORG-A".into(), true, 0);
-    assert_eq!(
-        Organization::replay(&[wrong_organization]),
-        Err(CorruptOrganizationHistory::InvalidHistory)
-    );
-    assert_eq!(
-        User::replay(&[wrong_user]),
-        Err(CorruptUserHistory::InvalidHistory)
-    );
+    assert!(organization.is_active());
+    assert!(organization.is_identified_by("org-a"));
+    assert!(!user.is_available());
+    assert!(user.is_identified_by("user-a"));
+    assert!(!user.belongs_to(&organization));
+    assert_eq!(organization.created_event(), organization_event);
+    assert_eq!(user.created_event(), user_event);
+    assert_eq!(organization.sequence_number(), organization_sequence);
+    assert_eq!(user.sequence_number(), user_sequence);
 }

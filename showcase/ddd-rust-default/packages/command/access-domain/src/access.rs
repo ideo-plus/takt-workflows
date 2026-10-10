@@ -1,3 +1,3 @@
-pub mod access_eligibility;
+pub mod eligibility;
 pub mod organization;
 pub mod user;

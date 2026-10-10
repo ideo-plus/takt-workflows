@@ -112,8 +112,8 @@
   "manual_revision": {
     "basis": "Explicit user instruction: remove ReservationSnapshot directly without TAKT; unify both showcases on Event Sourcing; retain no backward compatibility.",
     "started_at": "2026-10-04T05:46:34.820720+00:00",
-    "validation_bundle_commit": "63604264852145232a886bdf88221d61d46323b0",
-    "finished_at": "2026-10-09T14:27:26.722739+00:00",
+    "validation_bundle_commit": "7c9bb51c7fc9027d8b2480df12b86d79884bb180",
+    "finished_at": "2026-10-10T12:16:45.454028+00:00",
     "versions": {
       "node": "v24.19.0",
       "bun": "1.4.2",
@@ -249,6 +249,68 @@
         "showcase/ddd-rust-default/docs/ddd/layer-structure.yaml",
         "showcase/ddd-rust-default/generation.json"
       ]
+    },
+    "access_service_generation_update": {
+      "basis": "Rustショーケースを成功したRustワークフローの実生成結果へ更新するユーザー指示",
+      "completed_at": "2026-10-10T12:16:45.454028+00:00",
+      "source_origin": "real-rust-workflow-output",
+      "workflow": "ddd-rust-default",
+      "bundle_commit": "7c9bb51c7fc9027d8b2480df12b86d79884bb180",
+      "language": "ja",
+      "run_id": "20261009-215143-rust-packag",
+      "takt_version": "0.67.0",
+      "task_sha256": "2a4be78916f3da0d5b0c34209ef5e37d8a66136d96fa24c196629f670d5053aa",
+      "execution": {
+        "exit_code": 0,
+        "elapsed_seconds": 1982,
+        "iterations": 6,
+        "reimplementation_count": 0,
+        "replanning_count": 0
+      },
+      "sandbox_verification": {
+        "passed": 24,
+        "failed": 0
+      },
+      "generated_tests": {
+        "passed": 25,
+        "failed": 0
+      },
+      "independent_tests": {
+        "passed": 4,
+        "failed": 0,
+        "business_condition_combinations": 8
+      },
+      "generated_source_file_sha256": {
+        "packages/command/access-domain/src/access/eligibility.rs": "47ab0b9b52061abad143414d2cdfeba4f2aafcf167f2fce11c46dff77ca28628",
+        "packages/command/access-domain/src/access/organization.rs": "6c2dc638571cc1af23b3fc8e10ced2fe8aa65001d2443d7a10efb8560f1ac1e5",
+        "packages/command/access-domain/src/access/user.rs": "836f15482756c8f88953fdb97de7a9a0b05c0afd58155db3c4a38f3b0b1bcd91",
+        "packages/command/access-domain/src/access.rs": "1644e478a29c0307a87ecb9635884d229a60a0c3f3ab38301f30bd7d688b7adf",
+        "packages/command/access-domain/src/lib.rs": "e4c48c07f696209cba3ccdd7c94c5686a7051a1341240a2b4107cb68cc0f89c5"
+      },
+      "adaptations": [
+        "予約コンテキストと既存ワークスペース設定は保持",
+        "既存の不変条件識別子と同一性の宣言を再利用",
+        "旧入力欠落エラーを項目別に分割しlineageへ記録"
+      ],
+      "restoration_scope": "公開ファクトリ由来の生成イベント、from_createdによる初期復元、空の続き、非空の生成イベント再適用の拒否を確認。任意の番号2を持つイベントの直接入力は未実行。",
+      "verification": {
+        "pass": true,
+        "tests": {
+          "pass": 65,
+          "fail": 0,
+          "skipped": 0
+        },
+        "ddd_lint": {
+          "pass": true,
+          "findings": 0,
+          "unavailable": 0
+        },
+        "typecheck": null,
+        "format": {
+          "pass": true,
+          "command": "cargo fmt --all -- --check"
+        }
+      }
     }
   },
   "identifier_domain_assumption": {
@@ -256,22 +318,23 @@
     "basis": "Confirmed by the user."
   },
   "current_source_file_sha256": {
-    "access-task.txt": "2a4be78916f3da0d5b0c34209ef5e37d8a66136d96fa24c196629f670d5053aa",
-    "packages/command/access-domain/Cargo.toml": "c14292352331e4bf7836127ef43bd633c3c241c7675fcbdc544de30de07aae91",
-    "packages/command/access-domain/src/access.rs": "c27b540ea87209207699de89494be36700638295eb753e6f84693c9476c2b299",
-    "packages/command/access-domain/src/access/access_eligibility.rs": "47ab0b9b52061abad143414d2cdfeba4f2aafcf167f2fce11c46dff77ca28628",
-    "packages/command/access-domain/src/access/organization.rs": "3e008c19e2fd071c1c16b526caa0f68e741157c5d5266c6b5bcd9fe878c1aec4",
-    "packages/command/access-domain/src/access/user.rs": "aab50d3a07d4676f1af0c10b28b802ff8fa0d4da94a286c9bf9297586a3b1e8f",
-    "packages/command/access-domain/src/lib.rs": "e4c48c07f696209cba3ccdd7c94c5686a7051a1341240a2b4107cb68cc0f89c5",
-    "packages/command/access-domain/tests/access_eligibility.rs": "2e4a82ef59f452b726386e97a600ac90a3294de1836e57c500d791f59b98e4df",
+    "packages/command/access-domain/src/access/eligibility.rs": "47ab0b9b52061abad143414d2cdfeba4f2aafcf167f2fce11c46dff77ca28628",
+    "packages/command/access-domain/tests/aggregate_construction.rs": "da71ca817ece97bc46b224f39ffbc6b59263941efd15f4701f5af1551676c398",
     ".ddd.toml": "e72b3a506a3db23660fd9dc481bacd7821940f3e0f075f1d767947033f39b9e9",
     ".gitignore": "54d812f808766fdd595bdd77352a4d5496a66fb636bb28634e214d86d4bcf47f",
     "Cargo.lock": "d352b5c889386d0fb5827650369e5a4e6b8131d0fed4ed9ebb5a2337fe11d193",
     "Cargo.toml": "350c950e27e69bcd7065622a4589591cd751700b4e574411ce7bafc16675bcc4",
+    "access-task.txt": "2a4be78916f3da0d5b0c34209ef5e37d8a66136d96fa24c196629f670d5053aa",
     "config.yaml": "49911acbbb5a8b44b315348212c0e9b1162e60f862704518285246f55f72d348",
-    "docs/ddd/aggregate-mapping.yaml": "b7026c33d86d99fa6a159c983d78afb2bc1020831304b3d9f38a565b75a6b949",
-    "docs/ddd/domain-model.yaml": "e405456ac23c99809ee581d8ffca78dfd3d72272ce8c332c0c152e5b75b704ee",
+    "docs/ddd/aggregate-mapping.yaml": "12d5b34674069e4131b154bdcc38b083a1e0fe6344c4c2a205ff2508ffa00e7b",
+    "docs/ddd/domain-model.yaml": "29d0155784dd43f8827f1861b430071fa5f26795c4bc65e19136868a147b0af4",
     "docs/ddd/layer-structure.yaml": "bbb2b3a0294751eb05966f33210dd59275f68d79c39efd4adab1d9f5d18ce3ae",
+    "packages/command/access-domain/Cargo.toml": "c14292352331e4bf7836127ef43bd633c3c241c7675fcbdc544de30de07aae91",
+    "packages/command/access-domain/src/access.rs": "1644e478a29c0307a87ecb9635884d229a60a0c3f3ab38301f30bd7d688b7adf",
+    "packages/command/access-domain/src/access/organization.rs": "6c2dc638571cc1af23b3fc8e10ced2fe8aa65001d2443d7a10efb8560f1ac1e5",
+    "packages/command/access-domain/src/access/user.rs": "836f15482756c8f88953fdb97de7a9a0b05c0afd58155db3c4a38f3b0b1bcd91",
+    "packages/command/access-domain/src/lib.rs": "e4c48c07f696209cba3ccdd7c94c5686a7051a1341240a2b4107cb68cc0f89c5",
+    "packages/command/access-domain/tests/access_eligibility.rs": "0ed1f9d77f233a09031f50481fe79d842a253684e2d9d96700b4b5afa488b0bc",
     "packages/command/reservation-domain/Cargo.toml": "b09e94b7ed4cd71eca16441af5891832d437ba54e44929ddba8b452b8996da09",
     "packages/command/reservation-domain/src/lib.rs": "51ec988f8d557d6a265c0b2d56de0b7debddf8d3c93b91023f9d9c297b01119d",
     "packages/command/reservation-domain/src/member_id.rs": "a35baef0835767c9a3479dd6a4713d1b1df5a176011aae456a530172a846851e",
@@ -300,7 +363,7 @@
   "standalone_verification": {
     "pass": true,
     "tests": {
-      "pass": 45,
+      "pass": 65,
       "fail": 0,
       "skipped": 0
     },
@@ -353,6 +416,112 @@
         }
       },
       "validation_bundle_commit": "a87ca122fa606332e56d68746153e99768ded3f1"
+    },
+    {
+      "recorded_at": "2026-10-10T12:16:45.454028+00:00",
+      "basis": "Rust利用資格の手動移植例を実生成へ更新する前の記録",
+      "standalone_verification": {
+        "pass": true,
+        "tests": {
+          "pass": 45,
+          "fail": 0,
+          "skipped": 0
+        },
+        "ddd_lint": {
+          "pass": true,
+          "findings": 0,
+          "unavailable": 0
+        },
+        "typecheck": null,
+        "format": {
+          "pass": true,
+          "command": "cargo fmt --all -- --check"
+        }
+      },
+      "access_service_update": {
+        "basis": "独立した二集約の入力準備、判断委譲、ドメインサービスと複数集約をまとめる業務モジュールを既存ショーケースへ追加するユーザー指示",
+        "completed_at": "2026-10-09T14:27:26.722739+00:00",
+        "validation_bundle_commit": "63604264852145232a886bdf88221d61d46323b0",
+        "source_origin": "manual-rust-port-of-real-typescript-example",
+        "real_task_source": {
+          "workflow": "ddd-typescript-default",
+          "language": "ja",
+          "run_id": "20261009-125807-typescript",
+          "guidance_commit": "1651d82f8f4f669f4609ae6a59bfcbc623b9b7d2",
+          "task_sha256": "e049e313926513ebd96d3134c1203ca7ea96675dd9f92d61d9c2277b97481cdf",
+          "takt_version": "0.67.0",
+          "elapsed_seconds": 2752,
+          "iterations": 6,
+          "reimplementation_count": 0,
+          "replanning_count": 0,
+          "automatic_checks": {
+            "passed": 24,
+            "failed": 0
+          },
+          "business_tests": {
+            "passed": 21,
+            "failed": 0
+          },
+          "independent_tests": {
+            "passed": 4,
+            "failed": 0,
+            "business_condition_combinations": 8
+          },
+          "generated_source_file_sha256": {
+            "packages/command/access-domain/src/access-eligibility.ts": "0b8ecc472d695c0a1fbbffcd89ed30e7a16bd63efd654e2c3d0ebb4e127fff29",
+            "packages/command/access-domain/src/index.ts": "f740c6d63d5643ba2eb50eb12034e12bb15c18e613c147d6e3a6eb81546cd5b8",
+            "packages/command/access-domain/src/organization.ts": "71b82427780aa8cbb927ef7c10ae8bad61f16774eccd449699c73151dd73d1da",
+            "packages/command/access-domain/src/user.ts": "c666487617cd2f82571897adab89ca1881f1ff087c697b047bb57eb31a2f1127",
+            "packages/infrastructure/language-extensions/src/index.ts": "316d0d8d3a90e15a048111e7074d2f545213a2b035ad2edfcc3817a00f1ff74e"
+          }
+        },
+        "input_contract": "基本型以外の識別子制約を追加しない。Rustの欠落入力はOption::Noneで表す",
+        "business_boundary": "会議室予約とは別の利用資格コンテキスト。コンテキスト間の情報受け渡しは対象外",
+        "verification": {
+          "pass": true,
+          "tests": {
+            "pass": 45,
+            "fail": 0,
+            "skipped": 0
+          },
+          "ddd_lint": {
+            "pass": true,
+            "findings": 0,
+            "unavailable": 0
+          },
+          "typecheck": null,
+          "format": {
+            "pass": true,
+            "command": "cargo fmt --all -- --check"
+          }
+        },
+        "changed_files": [
+          "showcase/ddd-rust-default/access-task.txt",
+          "showcase/ddd-rust-default/packages/command/access-domain/Cargo.toml",
+          "showcase/ddd-rust-default/packages/command/access-domain/src/access.rs",
+          "showcase/ddd-rust-default/packages/command/access-domain/src/access/access_eligibility.rs",
+          "showcase/ddd-rust-default/packages/command/access-domain/src/access/organization.rs",
+          "showcase/ddd-rust-default/packages/command/access-domain/src/access/user.rs",
+          "showcase/ddd-rust-default/packages/command/access-domain/src/lib.rs",
+          "showcase/ddd-rust-default/packages/command/access-domain/tests/access_eligibility.rs",
+          "showcase/ddd-rust-default/Cargo.lock",
+          "showcase/ddd-rust-default/Cargo.toml",
+          "showcase/ddd-rust-default/README.md",
+          "showcase/ddd-rust-default/docs/ddd/aggregate-mapping.yaml",
+          "showcase/ddd-rust-default/docs/ddd/domain-model.yaml",
+          "showcase/ddd-rust-default/docs/ddd/layer-structure.yaml",
+          "showcase/ddd-rust-default/generation.json"
+        ]
+      },
+      "current_access_source_file_sha256": {
+        "packages/command/access-domain/Cargo.toml": "c14292352331e4bf7836127ef43bd633c3c241c7675fcbdc544de30de07aae91",
+        "packages/command/access-domain/src/access.rs": "c27b540ea87209207699de89494be36700638295eb753e6f84693c9476c2b299",
+        "packages/command/access-domain/src/access/access_eligibility.rs": "47ab0b9b52061abad143414d2cdfeba4f2aafcf167f2fce11c46dff77ca28628",
+        "packages/command/access-domain/src/access/organization.rs": "3e008c19e2fd071c1c16b526caa0f68e741157c5d5266c6b5bcd9fe878c1aec4",
+        "packages/command/access-domain/src/access/user.rs": "aab50d3a07d4676f1af0c10b28b802ff8fa0d4da94a286c9bf9297586a3b1e8f",
+        "packages/command/access-domain/src/lib.rs": "e4c48c07f696209cba3ccdd7c94c5686a7051a1341240a2b4107cb68cc0f89c5",
+        "packages/command/access-domain/tests/access_eligibility.rs": "2e4a82ef59f452b726386e97a600ac90a3294de1836e57c500d791f59b98e4df"
+      }
     }
   ]
 }

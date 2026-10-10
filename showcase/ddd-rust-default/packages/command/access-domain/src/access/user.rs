@@ -2,13 +2,13 @@ use super::organization::Organization;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CreateUserError {
-    InvalidInput,
+    MissingId,
+    MissingOrganizationId,
+    MissingAvailable,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CorruptUserHistory {
-    InvalidHistory,
-}
+pub struct CorruptUserHistory;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UserCreated {
@@ -19,93 +19,67 @@ pub struct UserCreated {
 }
 
 impl UserCreated {
-    fn new(
-        user_id: String,
-        organization_id: String,
-        available: bool,
-        sequence_number: u64,
-    ) -> Self {
+    fn new(user_id: &str, organization_id: &str, available: bool) -> Self {
         Self {
-            user_id,
-            organization_id,
+            user_id: user_id.to_string(),
+            organization_id: organization_id.to_string(),
             available,
-            sequence_number,
+            sequence_number: 1,
         }
-    }
-
-    pub fn from_record(
-        user_id: String,
-        organization_id: String,
-        available: bool,
-        sequence_number: u64,
-    ) -> Self {
-        Self::new(user_id, organization_id, available, sequence_number)
-    }
-
-    pub fn user_id(&self) -> &str {
-        &self.user_id
-    }
-
-    pub fn sequence_number(&self) -> u64 {
-        self.sequence_number
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct User {
-    created: UserCreated,
+    creation: UserCreated,
 }
 
 impl User {
-    fn new(created: UserCreated) -> Self {
-        Self { created }
+    fn new(creation: UserCreated) -> Self {
+        Self { creation }
     }
 
     pub fn create(
-        id: Option<String>,
-        organization_id: Option<String>,
+        id: Option<&str>,
+        organization_id: Option<&str>,
         available: Option<bool>,
     ) -> Result<Self, CreateUserError> {
-        let (Some(id), Some(organization_id), Some(available)) = (id, organization_id, available)
-        else {
-            return Err(CreateUserError::InvalidInput);
-        };
-        let event = UserCreated::new(id, organization_id, available, 1);
+        let id = id.ok_or(CreateUserError::MissingId)?;
+        let organization_id = organization_id.ok_or(CreateUserError::MissingOrganizationId)?;
+        let available = available.ok_or(CreateUserError::MissingAvailable)?;
+        let event = UserCreated::new(id, organization_id, available);
         Ok(Self::from_created(&event))
     }
 
-    pub fn replay(events: &[UserCreated]) -> Result<Self, CorruptUserHistory> {
-        if events.len() != 1 {
-            return Err(CorruptUserHistory::InvalidHistory);
-        }
-        let event = &events[0];
-        if event.sequence_number != 1 {
-            return Err(CorruptUserHistory::InvalidHistory);
-        }
-        Ok(Self::from_created(event))
-    }
-
-    fn from_created(event: &UserCreated) -> Self {
+    pub fn from_created(event: &UserCreated) -> Self {
         Self::new(event.clone())
     }
 
     pub fn created_event(&self) -> UserCreated {
-        self.created.clone()
+        self.creation.clone()
+    }
+
+    pub fn sequence_number(&self) -> u64 {
+        self.creation.sequence_number
+    }
+
+    pub fn replay(events: &[UserCreated], snapshot: Self) -> Result<Self, CorruptUserHistory> {
+        // 宣言されたイベントは生成だけなので、既存集約に有効な続きはない。
+        if !events.is_empty() {
+            return Err(CorruptUserHistory);
+        }
+        Ok(snapshot)
     }
 
     pub fn is_available(&self) -> bool {
-        self.created.available == true
+        self.creation.available
+    }
+
+    pub fn is_identified_by(&self, identifier: &str) -> bool {
+        self.creation.user_id == identifier
     }
 
     pub fn belongs_to(&self, organization: &Organization) -> bool {
-        organization.is_identified_by(&self.created.organization_id)
+        organization.is_identified_by(&self.creation.organization_id)
     }
 }
-
-impl PartialEq for User {
-    fn eq(&self, other: &Self) -> bool {
-        self.created.user_id == other.created.user_id
-    }
-}
-
-impl Eq for User {}
