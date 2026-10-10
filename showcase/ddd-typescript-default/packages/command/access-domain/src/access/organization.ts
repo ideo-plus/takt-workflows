@@ -35,8 +35,17 @@ export class Organization {
   }
 
   static replay(events: readonly OrganizationCreated[]): Organization {
-    const event: OrganizationCreated | undefined = events[0];
-    if (events.length !== 1 || event === undefined || event.kind !== "created" ||
+    const candidate: OrganizationCreated | undefined = events[0];
+    if (events.length !== 1 || candidate === undefined) {
+      throw new Error("corrupt organization history");
+    }
+    const event: OrganizationCreated = {
+      kind: candidate.kind,
+      organizationId: candidate.organizationId,
+      sequenceNumber: candidate.sequenceNumber,
+      active: candidate.active,
+    };
+    if (event.kind !== "created" ||
         event.sequenceNumber !== 1 || typeof event.organizationId !== "string" ||
         typeof event.active !== "boolean") {
       throw new Error("corrupt organization history");

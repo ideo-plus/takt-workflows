@@ -39,8 +39,18 @@ export class User {
   }
 
   static replay(events: readonly UserCreated[]): User {
-    const event: UserCreated | undefined = events[0];
-    if (events.length !== 1 || event === undefined || event.kind !== "created" ||
+    const candidate: UserCreated | undefined = events[0];
+    if (events.length !== 1 || candidate === undefined) {
+      throw new Error("corrupt user history");
+    }
+    const event: UserCreated = {
+      kind: candidate.kind,
+      userId: candidate.userId,
+      sequenceNumber: candidate.sequenceNumber,
+      organizationId: candidate.organizationId,
+      available: candidate.available,
+    };
+    if (event.kind !== "created" ||
         event.sequenceNumber !== 1 || typeof event.userId !== "string" ||
         typeof event.organizationId !== "string" || typeof event.available !== "boolean") {
       throw new Error("corrupt user history");
