@@ -1,5 +1,5 @@
 use reservation_domain::reservation::reservation_id::ReservationId;
-use reservation_domain::reservation::{Reservation, ReservationEvent};
+use reservation_domain::reservation::{Reservation, ReservationEvent, ReservationStatus};
 use reservation_use_case::reservation_repository::{RepositoryError, ReservationRepository};
 use std::collections::HashMap;
 
@@ -58,6 +58,22 @@ impl ReservationRepository for InMemoryReservationRepository {
         if event.sequence_number() != last + 1 {
             return Err(RepositoryError::new(
                 "イベントが保存済みの履歴に続いていません",
+            ));
+        }
+        let (expected_creation, expected_status) = match &event {
+            ReservationEvent::Reserved(created) => (created.clone(), ReservationStatus::Confirmed),
+            ReservationEvent::Cancelled(_) => {
+                let before = self.find_by_id(snapshot.id())?.ok_or_else(|| {
+                    RepositoryError::new("保存済みの予約がないため取消できません")
+                })?;
+                let expected = Reservation::replay(std::slice::from_ref(&event), before)
+                    .map_err(|_| RepositoryError::new("予約のイベント履歴が不正です"))?;
+                (expected.reserved_event(), expected.status())
+            }
+        };
+        if snapshot.reserved_event() != expected_creation || snapshot.status() != expected_status {
+            return Err(RepositoryError::new(
+                "スナップショットの業務状態がイベントと一致しません",
             ));
         }
         let sequence_number = event.sequence_number();

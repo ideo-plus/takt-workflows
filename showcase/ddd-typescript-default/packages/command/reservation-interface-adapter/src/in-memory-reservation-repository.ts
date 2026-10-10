@@ -1,5 +1,5 @@
 import { Reservation } from "@acme/reservation-domain";
-import type { ReservationId, ReservationEvent } from "@acme/reservation-domain";
+import type { ReservationId, ReservationEvent, ReservationReserved, ReservationStatus } from "@acme/reservation-domain";
 import type { ReservationRepository, RepositoryError } from "@acme/reservation-use-case";
 import type { Result } from "@acme/language-extensions";
 
@@ -28,17 +28,44 @@ export class InMemoryReservationRepository implements ReservationRepository {
   }
 
   store(event: ReservationEvent, snapshot: Reservation): Result<void, RepositoryError> {
-    if (!event.reservationId.equals(snapshot.id()) || event.sequenceNumber !== snapshot.sequenceNumber()) {
+    const persisted: ReservationEvent = Object.freeze({ ...event });
+    if (!persisted.reservationId.equals(snapshot.id()) || persisted.sequenceNumber !== snapshot.sequenceNumber()) {
       return { ok: false, error: { kind: "repository-error", message: "スナップショットがイベント直後の予約ではありません" } };
     }
-    const key = event.reservationId.value();
+    const key = persisted.reservationId.value();
     const previous = this.#events.get(key) ?? [];
-    if (event.sequenceNumber !== (previous[previous.length - 1]?.sequenceNumber ?? 0) + 1) {
+    if (persisted.sequenceNumber !== (previous[previous.length - 1]?.sequenceNumber ?? 0) + 1) {
       return { ok: false, error: { kind: "repository-error", message: "イベントが保存済みの履歴に続いていません" } };
     }
-    const persisted: ReservationEvent = Object.freeze({ ...event });
+    let expectedCreation: ReservationReserved;
+    let expectedStatus: ReservationStatus;
+    if (persisted.kind === "reserved") {
+      expectedCreation = persisted;
+      expectedStatus = "confirmed";
+    } else {
+      const loaded = this.findById(snapshot.id());
+      if (!loaded.ok) return loaded;
+      if (loaded.value === undefined) {
+        return { ok: false, error: { kind: "repository-error", message: "取消前の予約が存在しません" } };
+      }
+      try {
+        const expected = Reservation.replay([persisted], loaded.value);
+        expectedCreation = expected.reservedEvent();
+        expectedStatus = expected.status();
+      } catch {
+        return { ok: false, error: { kind: "repository-error", message: "予約のイベント履歴が不正です" } };
+      }
+    }
+    const actual = snapshot.reservedEvent();
+    if (!expectedCreation.reservationId.equals(actual.reservationId) ||
+        expectedCreation.sequenceNumber !== actual.sequenceNumber ||
+        !expectedCreation.memberId.equals(actual.memberId) || !expectedCreation.roomId.equals(actual.roomId) ||
+        expectedCreation.startsAt !== actual.startsAt || expectedCreation.endsAt !== actual.endsAt ||
+        snapshot.status() !== expectedStatus) {
+      return { ok: false, error: { kind: "repository-error", message: "スナップショットの業務状態がイベントと一致しません" } };
+    }
     this.#events.set(key, Object.freeze([...previous, persisted]));
-    if (event.sequenceNumber === 1 || event.sequenceNumber % this.#snapshotInterval === 0) {
+    if (persisted.sequenceNumber === 1 || persisted.sequenceNumber % this.#snapshotInterval === 0) {
       this.#snapshots.set(key, snapshot);
     }
     return { ok: true, value: undefined };

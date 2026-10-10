@@ -105,17 +105,14 @@ test("取消ユースケースは指定IDの予約が存在しないと失敗す
   assert.deepEqual(repository.findById(ReservationId.of(2)), { ok: true, value: undefined });
 });
 
-test("間隔の倍数でない番号では渡されたスナップショットを保持せず、生成時のスナップショットに差分イベントを再生する", () => {
+test("取消がスナップショット保存間隔に達しなくても取消後の業務状態を読み込める", () => {
   const repository = new InMemoryReservationRepository(10);
   const reservation = createConfirmedReservation();
   assert.equal(storeNew(repository, reservation).ok, true);
   const cancelled = reservation.cancel();
   if (!cancelled.ok) assert.fail("取消に失敗しました");
-  // 同じ予約IDと番号を持つ別内容の取消後予約を渡し、どちらから読み込んだかを見分ける。
-  const probe = createConfirmedReservation(RoomId.of(4)).cancel();
-  if (!probe.ok) assert.fail("取消に失敗しました");
 
-  assert.equal(repository.store(cancelled.value.event, probe.value.reservation).ok, true);
+  assert.equal(repository.store(cancelled.value.event, cancelled.value.reservation).ok, true);
   const found = load(repository, ReservationId.of(1));
 
   assert.equal(found.status(), "cancelled");
@@ -123,20 +120,18 @@ test("間隔の倍数でない番号では渡されたスナップショット�
   assert.equal(found.roomId().equals(RoomId.of(3)), true);
 });
 
-test("間隔1では取消後のスナップショットをそのまま読み込む", () => {
+test("間隔1でも保存した取消後の業務状態を読み込める", () => {
   const repository = new InMemoryReservationRepository(1);
   const reservation = createConfirmedReservation();
   assert.equal(storeNew(repository, reservation).ok, true);
   const cancelled = reservation.cancel();
   if (!cancelled.ok) assert.fail("取消に失敗しました");
-  const probe = createConfirmedReservation(RoomId.of(4)).cancel();
-  if (!probe.ok) assert.fail("取消に失敗しました");
 
-  assert.equal(repository.store(cancelled.value.event, probe.value.reservation).ok, true);
+  assert.equal(repository.store(cancelled.value.event, cancelled.value.reservation).ok, true);
   const found = load(repository, ReservationId.of(1));
 
   assert.equal(found.status(), "cancelled");
-  assert.equal(found.roomId().equals(RoomId.of(4)), true);
+  assert.equal(found.roomId().equals(RoomId.of(3)), true);
 });
 
 test("スナップショットがイベント直後の予約でない保存を拒否し、何も保存しない", () => {
