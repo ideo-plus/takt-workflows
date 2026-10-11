@@ -4,7 +4,7 @@ import { UserId, OrgId, User, Organization } from "@acme/access-domain";
 
 for (const [name, identifier] of [["UserId", UserId], ["OrgId", OrgId]] as const) {
   test(`${name}は空文字と文字列値を保ち、同じ値の別インスタンスを等しいと判断する`, () => {
-    for (const value of ["", "same", "利用者😀"]) {
+    for (const value of ["", "same", "利用者😀", " user ", "  ", "User", "e\u0301"]) {
       const first = identifier.of(value);
       const second = identifier.parse(value);
       assert.equal(first.value(), value);
@@ -60,4 +60,18 @@ test("生成イベントも文字列や異なる用途の識別子で復元で�
     // @ts-expect-error 生の文字列は組織識別子として復元できない。
     organizationId: "org",
   }]));
+});
+
+test("異なる表現の識別子を等価にせず、所属先も一致させない", () => {
+  for (const [left, right] of [[" user ", "user"], ["User", "user"], ["e\u0301", "é"]]) {
+    assert.equal(UserId.of(left).equals(UserId.of(right)), false);
+    assert.equal(OrgId.of(left).equals(OrgId.of(right)), false);
+  }
+  const organization = Organization.create(OrgId.of(" org "), true);
+  const user = User.create(UserId.of("user"), OrgId.of("org"), true);
+  if (!organization.ok || !user.ok) assert.fail("許された入力を構築できない");
+  assert.equal(user.value.belongsTo(organization.value), false);
+  const sameOrganization = Organization.create(OrgId.of("org"), true);
+  if (!sameOrganization.ok) assert.fail("利用組織を構築できない");
+  assert.equal(user.value.belongsTo(sameOrganization.value), true);
 });
