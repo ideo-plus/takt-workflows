@@ -141,7 +141,41 @@ test("スナップショットに続く取消イベントを再生すると取�
   assert.equal(replayed.roomId().equals(snapshot.roomId()), true);
   assert.equal(replayed.startsAt(), startsAt);
   assert.equal(replayed.endsAt(), endsAt);
-  assert.equal(Reservation.replay([], snapshot), snapshot);
+});
+
+test("空の履歴を再生しても確定済み・取消済みの予約と入力の業務状態が変わらない", () => {
+  const confirmed = createConfirmedReservation();
+  const cancelled = confirmed.cancel();
+  if (!cancelled.ok) assert.fail("取消に失敗しました");
+
+  function publicState(reservation: Reservation) {
+    const created = reservation.reservedEvent();
+    return {
+      id: reservation.id().value(),
+      memberId: reservation.memberId().value(),
+      roomId: reservation.roomId().value(),
+      startsAt: reservation.startsAt(),
+      endsAt: reservation.endsAt(),
+      sequenceNumber: reservation.sequenceNumber(),
+      status: reservation.status(),
+      created: {
+        kind: created.kind,
+        id: created.reservationId.value(),
+        memberId: created.memberId.value(),
+        roomId: created.roomId.value(),
+        startsAt: created.startsAt,
+        endsAt: created.endsAt,
+        sequenceNumber: created.sequenceNumber,
+      },
+    };
+  }
+
+  for (const input of [confirmed, cancelled.value.reservation]) {
+    const before = publicState(input);
+    const restored = Reservation.replay([], input);
+    assert.deepEqual(publicState(restored), before);
+    assert.deepEqual(publicState(input), before);
+  }
 });
 
 test("イベント再生はスナップショットに続かない履歴を拒否する", () => {

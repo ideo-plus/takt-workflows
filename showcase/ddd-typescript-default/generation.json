@@ -216,8 +216,8 @@
   "manual_revision": {
     "basis": "Explicit user instruction: remove ReservationSnapshot directly without TAKT; unify both showcases on Event Sourcing; retain no backward compatibility.",
     "started_at": "2026-10-04T05:46:34.699206+00:00",
-    "validation_bundle_commit": "ae21a8b74d20b9b5e1016e0e8fe4e41f4ea38157",
-    "finished_at": "2026-10-10T14:54:31.972771+00:00",
+    "validation_bundle_commit": "1fa97d6ed5f0fcb16ce30895f7942f09898ba58b",
+    "finished_at": "2026-10-11T08:55:35.125596+00:00",
     "versions": {
       "node": "v24.19.0",
       "bun": "1.4.2",
@@ -389,6 +389,41 @@
         },
         "format": null
       }
+    },
+    "replay_test_state_update": {
+      "basis": "単体テストの考え方／使い方の変更耐性と公開された振る舞いの区別を現在の契約と隔離実験で確認し、参照比較を業務状態の比較へ修正する。",
+      "issue": "https://github.com/ideo-plus/takt-workflows/issues/87",
+      "verified_at": "2026-10-11T08:55:35.125596+00:00",
+      "changed_files": [
+        "packages/command/reservation-domain/tests/reservation.test.ts"
+      ],
+      "verification": {
+        "pass": true,
+        "tests": {
+          "pass": 56,
+          "fail": 0,
+          "skipped": 0
+        },
+        "ddd_lint": {
+          "pass": true,
+          "findings": 0,
+          "unavailable": 0
+        },
+        "typecheck": {
+          "pass": true,
+          "command": "npm run typecheck"
+        },
+        "format": null
+      },
+      "isolated_experiments": {
+        "equivalent_instance_copy": {
+          "pass": 56,
+          "fail": 0
+        },
+        "wrong_state_on_empty_history": {
+          "target_test_failed": true
+        }
+      }
     }
   },
   "identifier_domain_assumption": {
@@ -421,7 +456,7 @@
     "packages/command/reservation-domain/src/reservation/reservation-id.ts": "61faeb4019711c788970c9eabc004f9cde94d6e54705983b5ac949fa6ab596ab",
     "packages/command/reservation-domain/src/room-id.ts": "e7cd8c041384f3746327e2ea4f71fb6aa8864600232c907b6646a2e19f4e32b4",
     "packages/command/reservation-domain/tests/identifiers.test.ts": "50daaaefa5c6549fd30019fe2075736ae099114950ca439c2b7b7c78f0ad0eb8",
-    "packages/command/reservation-domain/tests/reservation.test.ts": "2a705f79facf6affd98d79c823406e513fd296334c967e9acb09881764afec7a",
+    "packages/command/reservation-domain/tests/reservation.test.ts": "a43ec703f1ffaf84f247c4527d8f31e80755d5e7b46cd2d7449d71192c6feeb7",
     "packages/command/reservation-domain/tsconfig.json": "8aaddb5ad9b9a33dec06b79c55e72a828fdc71d7d990a6afb1a9f8487aa5ecfe",
     "packages/command/reservation-interface-adapter/package.json": "fe662eaf6346442c14b11c615421dbc79a640eeffeb9201cc04840a6bc1fb64f",
     "packages/command/reservation-interface-adapter/src/in-memory-reservation-repository.ts": "6f783127e29f20671ad060eb5c27de437592a821085dcaab24d566bcb24037a0",
@@ -447,7 +482,7 @@
   "standalone_verification": {
     "pass": true,
     "tests": {
-      "pass": 55,
+      "pass": 56,
       "fail": 0,
       "skipped": 0
     },
@@ -523,6 +558,29 @@
         "format": null
       },
       "validation_bundle_commit": "63604264852145232a886bdf88221d61d46323b0"
+    },
+    {
+      "recorded_at": "2026-10-11T08:55:35.125596+00:00",
+      "basis": "空の履歴復元の参照比較を変更する前の検証記録",
+      "standalone_verification": {
+        "pass": true,
+        "tests": {
+          "pass": 55,
+          "fail": 0,
+          "skipped": 0
+        },
+        "ddd_lint": {
+          "pass": true,
+          "findings": 0,
+          "unavailable": 0
+        },
+        "typecheck": {
+          "pass": true,
+          "command": "npm run typecheck"
+        },
+        "format": null
+      },
+      "validation_bundle_commit": "ae21a8b74d20b9b5e1016e0e8fe4e41f4ea38157"
     }
   ]
 }
