@@ -112,8 +112,8 @@
   "manual_revision": {
     "basis": "Explicit user instruction: remove ReservationSnapshot directly without TAKT; unify both showcases on Event Sourcing; retain no backward compatibility.",
     "started_at": "2026-10-04T05:46:34.820720+00:00",
-    "validation_bundle_commit": "ed11e315ddf1303f147c2f88f969d67cf873d039",
-    "finished_at": "2026-10-11T12:24:37.639138+00:00",
+    "validation_bundle_commit": "13eba79cfc82a143b1b90bc0b13acb8def5d2514",
+    "finished_at": "2026-10-11T23:16:05.832598+00:00",
     "versions": {
       "node": "v24.19.0",
       "bun": "1.4.2",
@@ -387,6 +387,34 @@
         "tools/ddd-lint/bin/darwin-arm64/ddd-rust-syn-spike": "ccd39ec95e1ef9230d3e1b6105efee429759a98f0b9902a4c4ba0f215bac202a"
       },
       "validation_bundle_commit": "ed11e315ddf1303f147c2f88f969d67cf873d039"
+    },
+    "input_value_contract_tests_update": {
+      "issue": "https://github.com/ideo-plus/takt-workflows/issues/91",
+      "basis": "許された入力をそのまま保持し、無断の補正で別の識別子を同じものにしない公開操作の反例を追加する。",
+      "completed_at": "2026-10-11T23:16:05.832598+00:00",
+      "validation_bundle_commit": "13eba79cfc82a143b1b90bc0b13acb8def5d2514",
+      "changed_files": [
+        "packages/command/access-domain/tests/identifiers.rs"
+      ],
+      "verification": {
+        "pass": true,
+        "tests": {
+          "pass": 73,
+          "fail": 0,
+          "skipped": 0
+        },
+        "ddd_lint": {
+          "pass": true,
+          "findings": 0,
+          "unavailable": 0
+        },
+        "typecheck": null,
+        "format": {
+          "pass": true,
+          "command": "cargo fmt --all -- --check"
+        }
+      },
+      "counterexperiment": "隔離コピーの無断の空白削除を追加テストが拒否した。製品コードの補正規則は変更していない。"
     }
   },
   "identifier_domain_assumption": {
@@ -437,13 +465,13 @@
     "task.txt": "2bdd77f37c78d4844eaac66ac6bb090cdcba201272923a46c8b67b510489245e",
     "packages/command/reservation-interface-adapter/tests/store_integrity.rs": "751d685fc7d5bdde5e72ea22c2fcac02bcccd1d148a256ab0e77ea62b153fef0",
     "packages/command/access-domain/src/access/user_id.rs": "791833eb9c6ef004f7070c94f40d0272eed59274be1bc0320e6a2102a912fd71",
-    "packages/command/access-domain/tests/identifiers.rs": "be1095eca0804aeaadc63d5b02031af2659c8d4e9e2a67ff7d3576fde15ffee4",
+    "packages/command/access-domain/tests/identifiers.rs": "a0f85b8e99961973e9e62586a71df0cacc145884f384f0984f51fdeccc505273",
     "packages/command/access-domain/src/access/org_id.rs": "d6b1d4d18bbb62c7534ad73c8c570bfd5f992365d958d8c63fabb9bff7472e3b"
   },
   "standalone_verification": {
     "pass": true,
     "tests": {
-      "pass": 72,
+      "pass": 73,
       "fail": 0,
       "skipped": 0
     },
@@ -648,6 +676,29 @@
         }
       },
       "validation_bundle_commit": "ae21a8b74d20b9b5e1016e0e8fe4e41f4ea38157"
+    },
+    {
+      "recorded_at": "2026-10-11T23:16:05.832598+00:00",
+      "basis": "入力値の保持と非等価の反例を追加する前の検証記録",
+      "standalone_verification": {
+        "pass": true,
+        "tests": {
+          "pass": 72,
+          "fail": 0,
+          "skipped": 0
+        },
+        "ddd_lint": {
+          "pass": true,
+          "findings": 0,
+          "unavailable": 0
+        },
+        "typecheck": null,
+        "format": {
+          "pass": true,
+          "command": "cargo fmt --all -- --check"
+        }
+      },
+      "validation_bundle_commit": "ed11e315ddf1303f147c2f88f969d67cf873d039"
     }
   ]
 }

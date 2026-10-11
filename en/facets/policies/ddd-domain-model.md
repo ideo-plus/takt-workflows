@@ -15,7 +15,7 @@ Defines what the declarations under `docs/ddd/` (domain model, aggregate mapping
 | A command or factory rule has no domain error, or names an error owned by another operation | REJECT |
 | A command with `effect: accumulation` has no `command-id-memory` idempotency strategy | REJECT |
 | A command with `retention: last-one` has no `rationale` stating why an older command is never resent after a newer one (`C1 → C2 → retry C1`) | REJECT. Choose `multiple` or `time-window` when it can be |
-| A Domain Primitive lacks a domain invariant narrower than the backing type or a parse factory rule whose preconditions include all its invariants | REJECT. Initialize DP values from their invariants; use the backing type directly when it alone expresses the domain |
+| A Domain Primitive lacks a declared distinct purpose and value invariants, or a parse factory rule whose preconditions include all its invariants | REJECT. Initialize DP values from their invariants; use the backing type when neither a distinct purpose nor additional value rules are needed; do not invent format or range restrictions |
 | An element attribute holds an element of another aggregate as its type instead of its ID | REJECT. Refer to other aggregates by ID |
 | An accepted model's element ID is renamed, an ID is reused after retirement, or an ID does not follow `<kind>.<segments>` | REJECT. A business rename changes only `name`. Correct invalid IDs and all references in an unaccepted plan or an artifact generated in this task; retain no compatibility path for the invalid IDs |
 | A split, merge, or deprecation is not recorded in `lineage` | REJECT |

@@ -32,3 +32,5 @@ Rust code takes what changes as `&mut` and changes it in place: aggregates, and 
 | A method changes an external mutable reference argument (`fn add_to(&self, total: &mut Money)`) | REJECT. Change the value itself through `&mut self`; this rule is syntactic and does not prove which statements mutate the argument |
 | A domain type implements `Add`, `Sub`, `Mul`, `Div`, or `Rem` | REJECT. Implement the operators that change in place, such as `AddAssign`, not operators that return a new value |
 | A query taking `&self` returns a value of another type (a total, a copy for display or persistence) | OK |
+
+When parse accepts Option<T> to represent missing input, of may pass the original value unchanged inside Some(value). Preserve the accepted payload; copying it into an owned string is not business normalization.

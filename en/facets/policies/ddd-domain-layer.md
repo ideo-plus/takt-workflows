@@ -98,7 +98,7 @@ Business failures are part of the operation's contract. Generic guidance to thro
 
 | Criterion | Judgment |
 |-----------|----------|
-| A value with domain invariants narrower than its backing type (an amount, an identifier, a quantity) is passed as a bare primitive across domain boundaries | REJECT. Wrap it in a Domain Primitive with those invariants. Do not introduce a DP when the backing type alone expresses its valid domain |
+| A value with a distinct purpose and value invariants (an amount, an identifier, a quantity) is passed as a bare primitive across domain boundaries | REJECT. Wrap it in a Domain Primitive with those invariants. Use the backing type when neither a distinct purpose nor additional value rules are needed; do not invent format or range restrictions |
 | A value object has identity-based equality, or an Entity has value-based equality | REJECT |
 | A factory that builds a Domain Primitive from an outside value accepts it without checking the declared value rule | REJECT. Return a value that breaks the rule as that factory's error in a Result |
 | A domain type holds a collection (an array, `Set`, `Map`, `Vec`, `HashSet`, `HashMap`, and so on) bare beside other state | REJECT. Wrap it in a first-class collection type and put the operations and decisions on the collection in that type. A type whose whole state is the collection is a first-class collection |
@@ -112,3 +112,5 @@ Assess Service state by whether retained business state or invocation history af
 |-----------|----------|
 | A received mutable array, map, or object is kept without copying | REJECT |
 | A method returns the mutable collection or object held in state | REJECT. Return a copy or a read-only value |
+
+Any transformation changing input preservation or equality needs an accepted requirement or model rule. REJECT unauthorized trimming, case/Unicode conversion, or coercion that changes inputs or merges distinct identifiers. Green static inspection alone does not resolve this violation.

@@ -321,7 +321,9 @@ impl InvoiceLine {
 
 ## Domain Primitives
 
-A Domain Primitive wraps one value and has domain invariants narrower than its backing type. Always provide both of and parse. Initialize only after parse rejects invalid input; of delegates the unchanged input to parse and panics (Rust) or throws (TypeScript) on a caller contract violation. parse returns its own error type in Result. Every successful instance satisfies the invariants. Declare those invariants and the parse factory rule that checks all of them in the model. Equality follows the value.
+Follow “Input preservation and normalization” in the modeling knowledge. Introducing a type for a distinct purpose and restricting its backing format or range are separate decisions.
+
+A Domain Primitive wraps one value and expresses a distinct purpose and its domain invariants. Always provide both of and parse. Initialize only after parse rejects invalid input; of delegates the unchanged input to parse and panics (Rust) or throws (TypeScript) on a caller contract violation. parse returns its own error type in Result. Every successful instance satisfies the invariants. Declare those invariants and the parse factory rule that checks all of them in the model. Equality follows the value.
 
 ```rust
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -349,7 +351,7 @@ impl CustomerId {
 }
 ```
 
-Do not introduce a DP when the backing type alone expresses the valid domain. Resolve unspecified rules as open questions. Never initialize before validation or validate one value and initialize another. ddd-lint checks declarations, input rejection guards, of delegation and direct-construction bypasses from syntax; it does not prove the business meaning of an invariant. Test valid, boundary and invalid values too.
+Use the backing type when neither a distinct purpose nor additional value rules are needed. Resolve unspecified rules as open questions. Never initialize before validation or validate one value and initialize another. ddd-lint checks declarations, input rejection guards, of delegation and direct-construction bypasses from syntax; it does not prove the business meaning of an invariant. Test valid, boundary and invalid values too.
 
 ## First-Class Collections
 
@@ -394,7 +396,7 @@ impl InvoiceLines {
 | Condition | Meaning / options |
 |-----------|-------------------|
 | The value has a business rule (format, range) | Domain Primitive whose factory checks the rule and returns a Result |
-| The backing type alone expresses the valid domain | Use the backing type directly; do not create a DP |
+| No purpose distinction or additional value rule is needed | Use the backing type directly; do not create a DP |
 | Several values always travel together with a rule | Value object |
 | A type holds a collection beside other state | First-class collection type |
 

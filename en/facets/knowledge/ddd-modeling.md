@@ -206,7 +206,17 @@ lineage: []
 
 Element IDs are `<kind>.<segments>` in lower kebab case. `bc`, `aggregate`, `entity`, `vo`, `primitive`, `pm`, and `service` take one segment. `invariant`, `command`, `event`, `transition`, and `factory` take the aggregate and a name; `service-operation` takes the service and operation; `error` takes the owning aggregate or service, the operation, and a name. A `lineage` entry (`lineage-0001`, relation `renamed`, `split`, `merged`, or `deprecated`) records how an ID changed.
 
-A Domain Primitive (`kind: domain-primitive`) wraps one attribute and has a domain invariant narrower than its backing type. Declare invariants whose `element` names the primitive and a `parse` factory rule whose `preconditions` include every such invariant. Always provide both `of` and `parse`: `of` passes the unchanged input to `parse` and throws or panics on a caller contract violation; `parse` checks the invariants before initialization and returns its own error type in Result. Do not introduce a DP when the backing type alone expresses the valid domain. Resolve unspecified value rules as open questions rather than declaring an unconstrained DP. Attributes with `collection: true` use first-class collection types.
+A Domain Primitive (`kind: domain-primitive`) wraps one attribute and expresses a distinct purpose and its domain invariants. Declare invariants whose `element` names the primitive and a `parse` factory rule whose `preconditions` include every such invariant. Always provide both `of` and `parse`: `of` passes the unchanged input to `parse` and throws or panics on a caller contract violation; `parse` checks the invariants before initialization and returns its own error type in Result. Use the backing type when neither a distinct purpose nor additional value rules are needed. Resolve unconfirmed business rules as open questions; do not invent non-empty, format, or length restrictions to introduce a distinct type. Attributes with `collection: true` use first-class collection types.
+
+### Input preservation and normalization
+
+Distinguish preserving the supplied value from normalizing it under an accepted business rule. Normalization treats different representations as the same value. A distinct identifier type does not justify trimming whitespace, changing case, normalizing Unicode, or coercing numbers and strings. Do not repair rejected input to make validation or an inspection pass. Distinguish business normalization from value-preserving ownership/borrowing changes or wrapping a Rust value in Some.
+
+Without an accepted normalization rule, preserve every permitted string, including whitespace; `" user "` and `"user"` identify different values. If the format rejects whitespace, reject that input instead of trimming it into acceptance. When normalization is required, record the accepted contract, before/after values, and equivalent and non-equivalent examples in the existing invariant or factory-rule descriptions. Add no unsupported schema keys.
+
+Test the stored value and equality through public operations with independent expected values. Do not derive expectations with the implementation's own transformation. For relevant changes, include examples such as surrounding whitespace where transformation would alter identity. A passing static inspection does not prove this semantic contract. Distinguishing UserId from OrgId does not require inventing non-empty, format, or length constraints on their backing strings.
+
+Primary source: Secure by Design, chapter 9, section 9.4, “Handling bad data” (Japanese edition, pages 359–368). The identifier examples apply that perspective to the current contract.
 
 ### Aggregate mapping
 

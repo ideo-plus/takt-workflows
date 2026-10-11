@@ -5,8 +5,11 @@
 
 {{include:output-contracts/base-review-summary}}
 
+For changes to value construction, replay, or comparison, verification evidence names the preservation/normalization rule, counterexample input and expected value, test location, and execution result from the implementation report. Do not approve unauthorized transformations or missing in-scope counterexamples merely because static inspection passes.
+
 ## Reviewed Aspects
 - [x] Domain model declaration (invariants, operations, errors, IDs, lineage)
+- [x] Input preservation, normalization, and equality (accepted rules, independent counterexamples, no repair to bypass rejection)
 - [x] Model meaning (examples and counterexamples, language and Contexts, Aggregate consistency, identity and Value classification)
 - [x] Aggregate mapping and layer structure
 - [x] Domain layer (construction, state changes, getters, Result errors, ownership)
