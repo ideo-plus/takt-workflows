@@ -319,9 +319,9 @@ impl InvoiceLine {
 
 `Money` is a Domain Primitive, the amount of a line and the total of an invoice, in a module of its own, `money` (`src/money.rs`). This example requires integer monetary amounts in steps of 100; negative discounts and zero are valid, while the aggregate keeps the total non-negative. `Money::add` changes the receiving `Money` through `&mut self`; `InvoiceLine` supplies the Domain Primitive to an operation without exposing a bare value or a getter. The in-place rule rejects methods that receive an external `&mut` value, but permits ordinary `&self` queries.
 
-## Domain Primitive
+## Domain Primitives
 
-Follow “Input preservation and normalization” in the modeling knowledge. Introducing a type for a distinct purpose and restricting its backing format or range are separate decisions.s
+Follow “Input preservation and normalization” in the modeling knowledge. Introducing a type for a distinct purpose and restricting its backing format or range are separate decisions.
 
 A Domain Primitive wraps one value and expresses a distinct purpose and its domain invariants. Always provide both of and parse. Initialize only after parse rejects invalid input; of delegates the unchanged input to parse and panics (Rust) or throws (TypeScript) on a caller contract violation. parse returns its own error type in Result. Every successful instance satisfies the invariants. Declare those invariants and the parse factory rule that checks all of them in the model. Equality follows the value.
 

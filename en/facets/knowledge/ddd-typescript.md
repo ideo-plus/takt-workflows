@@ -150,9 +150,9 @@ export class Invoice {
 
 The companion representation uses the same commands, events, replay methods and repository contract. Its full-constructor closure owns state, and commands and replay return new instances. The executable standard example below uses classes.
 
-## Domain Primitive
+## Domain Primitives
 
-Follow “Input preservation and normalization” in the modeling knowledge. Introducing a type for a distinct purpose and restricting its backing format or range are separate decisions.s
+Follow “Input preservation and normalization” in the modeling knowledge. Introducing a type for a distinct purpose and restricting its backing format or range are separate decisions.
 
 A Domain Primitive wraps one value and expresses a distinct purpose and its domain invariants. Always provide both of and parse. Initialize only after parse rejects invalid input; of delegates the unchanged input to parse and panics (Rust) or throws (TypeScript) on a caller contract violation. parse returns its own error type in Result. Every successful instance satisfies the invariants. Declare those invariants and the parse factory rule that checks all of them in the model. Equality follows the value.
 
