@@ -4,3 +4,7 @@ export { User } from "./access/user.ts";
 export type { CreateUserError, UserCreated } from "./access/user.ts";
 export { AccessEligibility } from "./access/access-eligibility.ts";
 export type { AssessAccessEligibilityError } from "./access/access-eligibility.ts";
+export { UserId } from "./access/user-id.ts";
+export type { ParseUserIdError } from "./access/user-id.ts";
+export { OrgId } from "./access/org-id.ts";
+export type { ParseOrgIdError } from "./access/org-id.ts";

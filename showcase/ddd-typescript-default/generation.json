@@ -216,8 +216,8 @@
   "manual_revision": {
     "basis": "Explicit user instruction: remove ReservationSnapshot directly without TAKT; unify both showcases on Event Sourcing; retain no backward compatibility.",
     "started_at": "2026-10-04T05:46:34.699206+00:00",
-    "validation_bundle_commit": "1fa97d6ed5f0fcb16ce30895f7942f09898ba58b",
-    "finished_at": "2026-10-11T08:55:35.125596+00:00",
+    "validation_bundle_commit": "ed11e315ddf1303f147c2f88f969d67cf873d039",
+    "finished_at": "2026-10-11T12:24:37.639138+00:00",
     "versions": {
       "node": "v24.19.0",
       "bun": "1.4.2",
@@ -424,6 +424,51 @@
           "target_test_failed": true
         }
       }
+    },
+    "access_identifier_types_update": {
+      "basis": "利用者と所属組織の識別子をUserIdとOrgIdの固有型で区別するユーザー指示。内部の文字列値と空文字の受入を維持する。",
+      "issue": "https://github.com/ideo-plus/takt-workflows/issues/89",
+      "source_origin": "direct-revision-of-generated-access-example",
+      "completed_at": "2026-10-11T12:24:37.639138+00:00",
+      "changed_files": [
+        "docs/ddd/aggregate-mapping.yaml",
+        "docs/ddd/domain-model.yaml",
+        "packages/command/access-domain/src/access.ts",
+        "packages/command/access-domain/src/access/organization.ts",
+        "packages/command/access-domain/src/access/user.ts",
+        "packages/command/access-domain/src/index.ts",
+        "packages/command/access-domain/test/access-eligibility.test.ts",
+        "packages/command/access-domain/test/input-aggregates.test.ts",
+        "packages/command/access-domain/test/replay-capture.test.ts",
+        "packages/command/access-domain/src/access/org-id.ts",
+        "packages/command/access-domain/src/access/user-id.ts",
+        "packages/command/access-domain/test/identifiers.test.ts"
+      ],
+      "input_contract": "識別子はUserIdまたはOrgId。内部値は空文字を含む文字列。Rustの欠落入力はOption::Noneで拒否する。",
+      "verification": {
+        "pass": true,
+        "tests": {
+          "pass": 62,
+          "fail": 0,
+          "skipped": 0
+        },
+        "ddd_lint": {
+          "pass": true,
+          "findings": 0,
+          "unavailable": 0
+        },
+        "typecheck": {
+          "pass": true,
+          "command": "npm run typecheck"
+        },
+        "format": null
+      },
+      "validation_inspector_file_sha256": {
+        "tools/ddd-lint/lib/rules/rust/primitives.ts": "2d67614d4490f8bff40df3d1663158bd6cc629f5ea744985f867a033a9f2b664",
+        "tools/ddd-lint/rust-extractor/src/initialization.rs": "176b7b8d4b306581f7f26b6a13603003d96793c7677049be2fbd633d4503a5a7",
+        "tools/ddd-lint/bin/darwin-arm64/ddd-rust-syn-spike": "ccd39ec95e1ef9230d3e1b6105efee429759a98f0b9902a4c4ba0f215bac202a"
+      },
+      "validation_bundle_commit": "ed11e315ddf1303f147c2f88f969d67cf873d039"
     }
   },
   "identifier_domain_assumption": {
@@ -433,19 +478,19 @@
   "current_source_file_sha256": {
     "access-task.txt": "e049e313926513ebd96d3134c1203ca7ea96675dd9f92d61d9c2277b97481cdf",
     "packages/command/access-domain/package.json": "6a8da91e95ad697023ecc9f9aa3b7d02633c2bc16c3db32744b9bf73f18a0a0c",
-    "packages/command/access-domain/src/access.ts": "69bd65a6c7dddbba27cb0e5652d987238ea93e13ef1759aeecae2163204f7766",
+    "packages/command/access-domain/src/access.ts": "1b8837f6c804fc8ebeb7c7335952e12af7de528fc6bb61a836c45d3993d8c3d3",
     "packages/command/access-domain/src/access/access-eligibility.ts": "fe2ae0d611ed5efe83f62ef283bd0b157b0fa49df20ff3a0268b8bb3d0e99fa7",
-    "packages/command/access-domain/src/access/organization.ts": "feb9fed160a84cd18989ecba26ec462980ee310f87ea4e2783843327f5d1f756",
-    "packages/command/access-domain/src/access/user.ts": "038ad79630aff8501cdfb6f9d9e749b8809f9bca1b2c1219960dde22f56beb75",
-    "packages/command/access-domain/src/index.ts": "7f16b564e2e966af915a8a4bc645bae238a9485c7f3b182827f43a929c731187",
-    "packages/command/access-domain/test/access-eligibility.test.ts": "063fc1acfde33471051a0c4524c37af2081483e990622abcb641570e426891d7",
-    "packages/command/access-domain/test/input-aggregates.test.ts": "a871e48153eefd8c3b953fe6325dba19a3e35eb50de4af2aa9081f1a9f30ce86",
+    "packages/command/access-domain/src/access/organization.ts": "d60d683103070780608c710b195566496154abadb8a63e9802fb2a506d18318d",
+    "packages/command/access-domain/src/access/user.ts": "d5b32e57e6f805b5b4bd9539d1e64e8a473184b98d63ddfca9766501ccf3ae98",
+    "packages/command/access-domain/src/index.ts": "c9e67ff21e92b7cedb8836c1b48f239bd4e41aeef6544b4adde29ddd7e74b00b",
+    "packages/command/access-domain/test/access-eligibility.test.ts": "b80139398c00ea816a04f620a53a0f68340539415f71151eb161f29d1a9bde06",
+    "packages/command/access-domain/test/input-aggregates.test.ts": "40638de9d1a6f45285b0b07e05b37a631b617050e859cd73fff2d97496a74e94",
     "packages/command/access-domain/tsconfig.json": "8aaddb5ad9b9a33dec06b79c55e72a828fdc71d7d990a6afb1a9f8487aa5ecfe",
     ".ddd.toml": "2493ae622b5412418a6368546397c2a174107e4b04254b5128733bfa5cc1059f",
     ".gitignore": "54d812f808766fdd595bdd77352a4d5496a66fb636bb28634e214d86d4bcf47f",
     "config.yaml": "49911acbbb5a8b44b315348212c0e9b1162e60f862704518285246f55f72d348",
-    "docs/ddd/aggregate-mapping.yaml": "74e93bcdb68858ac5eca02cef47f5539d28ecefc65eb506697c2e6ae6ae2c447",
-    "docs/ddd/domain-model.yaml": "49c03c99857b5acdae4613032588c1111a11a307f3be5c7d1fdc51e086009d30",
+    "docs/ddd/aggregate-mapping.yaml": "0a60c41e7b5332bf568513c64a226d359c0b78efc5068cf69b11e713d2d68d61",
+    "docs/ddd/domain-model.yaml": "5ab9815223eaf7f44874cadcae02e7aef7b0dbf343597c0b2b89f53ab56409eb",
     "docs/ddd/layer-structure.yaml": "4bc76bc3c2186448e3be29ca1ec3823f145d5ded25571fad565d6fa17d311252",
     "package-lock.json": "d8aa63c8b41b7f0f85ea4aede4106fb1fb7800cda09c50b2adc6e21d19f66376",
     "package.json": "1b9c80de9a044ed5dd1cf9cd5491effd4676cd2b263a64f9dc188f08bd0b0b38",
@@ -477,12 +522,15 @@
     "tsconfig.json": "03343a6e62b23795ee40544eb48f295a0802cea7df9147c033a87c9d4f6a820c",
     "tsconfig.typecheck.json": "eb5b58c698ecf76ccbf97c4da250e3b3444da88b9e617cf7debe337227e9cbb8",
     "tests/composition-root/reservation-store-integrity.test.ts": "5cb33c3ee20b7d78fa09a781985a07f5ad081024d04e436e3e9fb801b70894a3",
-    "packages/command/access-domain/test/replay-capture.test.ts": "1140871b4a4a081ec7910e9e0ba5495f26b660572ef85c08532eb5d389d7319b"
+    "packages/command/access-domain/test/replay-capture.test.ts": "b0c6adc88b2681730248e3b57880c80a9b24c1f5a2c2b3ab5f1e843c675497b3",
+    "packages/command/access-domain/src/access/user-id.ts": "1a7dcb60cee2b0437e9745a1be49529189ea115b83c85b207a83f0626c7058ab",
+    "packages/command/access-domain/test/identifiers.test.ts": "4415c37d0bc00dacee8205da08bacb79aeee346c102d6023400d27c3ee8e42f0",
+    "packages/command/access-domain/src/access/org-id.ts": "e0e83f7e89f84a2caa0fb776cf608fb41ebce2e6d57d6f6849de812b5d0a07a3"
   },
   "standalone_verification": {
     "pass": true,
     "tests": {
-      "pass": 56,
+      "pass": 62,
       "fail": 0,
       "skipped": 0
     },
@@ -581,6 +629,29 @@
         "format": null
       },
       "validation_bundle_commit": "ae21a8b74d20b9b5e1016e0e8fe4e41f4ea38157"
+    },
+    {
+      "recorded_at": "2026-10-11T12:24:37.639138+00:00",
+      "basis": "利用資格の識別子を固有型へ変更する前の検証記録",
+      "standalone_verification": {
+        "pass": true,
+        "tests": {
+          "pass": 56,
+          "fail": 0,
+          "skipped": 0
+        },
+        "ddd_lint": {
+          "pass": true,
+          "findings": 0,
+          "unavailable": 0
+        },
+        "typecheck": {
+          "pass": true,
+          "command": "npm run typecheck"
+        },
+        "format": null
+      },
+      "validation_bundle_commit": "1fa97d6ed5f0fcb16ce30895f7942f09898ba58b"
     }
   ]
 }

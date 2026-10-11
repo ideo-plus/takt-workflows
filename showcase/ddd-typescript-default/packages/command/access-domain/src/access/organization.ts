@@ -1,10 +1,11 @@
+import { OrgId } from "./org-id.ts";
 import type { Result } from "@acme/language-extensions";
 
 export type CreateOrganizationError = "invalid-input";
 
 export type OrganizationCreated = {
   readonly kind: "created";
-  readonly organizationId: string;
+  readonly organizationId: OrgId;
   readonly sequenceNumber: number;
   readonly active: boolean;
 };
@@ -21,8 +22,8 @@ export class Organization {
     });
   }
 
-  static create(id: string, active: boolean): Result<Organization, CreateOrganizationError> {
-    if (typeof id !== "string" || typeof active !== "boolean") {
+  static create(id: OrgId, active: boolean): Result<Organization, CreateOrganizationError> {
+    if (!(id instanceof OrgId) || typeof active !== "boolean") {
       return { ok: false, error: "invalid-input" };
     }
     const event: OrganizationCreated = {
@@ -46,7 +47,7 @@ export class Organization {
       active: candidate.active,
     };
     if (event.kind !== "created" ||
-        event.sequenceNumber !== 1 || typeof event.organizationId !== "string" ||
+        event.sequenceNumber !== 1 || !(event.organizationId instanceof OrgId) ||
         typeof event.active !== "boolean") {
       throw new Error("corrupt organization history");
     }
@@ -65,7 +66,7 @@ export class Organization {
     return this.#created.active === true;
   }
 
-  isIdentifiedBy(organizationId: string): boolean {
-    return this.#created.organizationId === organizationId;
+  isIdentifiedBy(organizationId: OrgId): boolean {
+    return organizationId.equals(this.#created.organizationId);
   }
 }

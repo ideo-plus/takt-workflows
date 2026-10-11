@@ -1,4 +1,6 @@
+use super::org_id::OrgId;
 use super::organization::Organization;
+use super::user_id::UserId;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CreateUserError {
@@ -12,17 +14,17 @@ pub struct CorruptUserHistory;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UserCreated {
-    user_id: String,
-    organization_id: String,
+    user_id: UserId,
+    organization_id: OrgId,
     available: bool,
     sequence_number: u64,
 }
 
 impl UserCreated {
-    fn new(user_id: &str, organization_id: &str, available: bool) -> Self {
+    fn new(user_id: UserId, organization_id: OrgId, available: bool) -> Self {
         Self {
-            user_id: user_id.to_string(),
-            organization_id: organization_id.to_string(),
+            user_id,
+            organization_id,
             available,
             sequence_number: 1,
         }
@@ -39,9 +41,18 @@ impl User {
         Self { creation }
     }
 
+    /// 利用者と組織の識別子は同じ値でも用途を取り違えられない。
+    /// ```compile_fail
+    /// use access_domain::access::{user::User, org_id::OrgId};
+    /// User::create(Some(OrgId::of("same")), Some(OrgId::of("same")), Some(true));
+    /// ```
+    /// ```compile_fail
+    /// use access_domain::access::{user::User, user_id::UserId};
+    /// User::create(Some(UserId::of("same")), Some(UserId::of("same")), Some(true));
+    /// ```
     pub fn create(
-        id: Option<&str>,
-        organization_id: Option<&str>,
+        id: Option<UserId>,
+        organization_id: Option<OrgId>,
         available: Option<bool>,
     ) -> Result<Self, CreateUserError> {
         let id = id.ok_or(CreateUserError::MissingId)?;
@@ -75,8 +86,8 @@ impl User {
         self.creation.available
     }
 
-    pub fn is_identified_by(&self, identifier: &str) -> bool {
-        self.creation.user_id == identifier
+    pub fn is_identified_by(&self, identifier: &UserId) -> bool {
+        &self.creation.user_id == identifier
     }
 
     pub fn belongs_to(&self, organization: &Organization) -> bool {

@@ -2,13 +2,19 @@ use access_domain::access::organization::{
     CorruptOrganizationHistory, CreateOrganizationError, Organization,
 };
 use access_domain::access::user::{CorruptUserHistory, CreateUserError, User};
+use access_domain::access::{org_id::OrgId, user_id::UserId};
 
 fn organization(id: &str, active: bool) -> Organization {
-    Organization::create(Some(id), Some(active)).expect("利用組織を作成できる入力")
+    Organization::create(Some(OrgId::of(id)), Some(active)).expect("利用組織を作成できる入力")
 }
 
 fn user(id: &str, organization_id: &str, available: bool) -> User {
-    User::create(Some(id), Some(organization_id), Some(available)).expect("利用者を作成できる入力")
+    User::create(
+        Some(UserId::of(id)),
+        Some(OrgId::of(organization_id)),
+        Some(available),
+    )
+    .expect("利用者を作成できる入力")
 }
 
 #[test]
@@ -20,7 +26,7 @@ fn organization_rejects_a_missing_identifier() {
 
 #[test]
 fn organization_rejects_a_missing_active_status() {
-    let result = Organization::create(Some("org-a"), None);
+    let result = Organization::create(Some(OrgId::of("org-a")), None);
 
     assert!(matches!(
         result,
@@ -30,14 +36,14 @@ fn organization_rejects_a_missing_active_status() {
 
 #[test]
 fn user_rejects_a_missing_identifier() {
-    let result = User::create(None, Some("org-a"), Some(true));
+    let result = User::create(None, Some(OrgId::of("org-a")), Some(true));
 
     assert!(matches!(result, Err(CreateUserError::MissingId)));
 }
 
 #[test]
 fn user_rejects_a_missing_organization_identifier() {
-    let result = User::create(Some("user-a"), None, Some(true));
+    let result = User::create(Some(UserId::of("user-a")), None, Some(true));
 
     assert!(matches!(
         result,
@@ -47,7 +53,7 @@ fn user_rejects_a_missing_organization_identifier() {
 
 #[test]
 fn user_rejects_a_missing_available_status() {
-    let result = User::create(Some("user-a"), Some("org-a"), None);
+    let result = User::create(Some(UserId::of("user-a")), Some(OrgId::of("org-a")), None);
 
     assert!(matches!(result, Err(CreateUserError::MissingAvailable)));
 }
@@ -58,9 +64,9 @@ fn empty_identifiers_and_false_statuses_are_valid_inputs() {
     let user = user("", "", false);
 
     assert!(!organization.is_active());
-    assert!(organization.is_identified_by(""));
+    assert!(organization.is_identified_by(&OrgId::of("")));
     assert!(!user.is_available());
-    assert!(user.is_identified_by(""));
+    assert!(user.is_identified_by(&UserId::of("")));
     assert!(user.belongs_to(&organization));
 }
 
@@ -85,9 +91,9 @@ fn aggregates_can_be_restored_from_their_creation_events() {
     let restored_user = User::from_created(&original_user.created_event());
 
     assert!(restored_organization.is_active());
-    assert!(restored_organization.is_identified_by("org-a"));
+    assert!(restored_organization.is_identified_by(&OrgId::of("org-a")));
     assert!(restored_user.is_available());
-    assert!(restored_user.is_identified_by("user-a"));
+    assert!(restored_user.is_identified_by(&UserId::of("user-a")));
     assert!(restored_user.belongs_to(&restored_organization));
 }
 
@@ -103,9 +109,9 @@ fn replay_without_following_events_preserves_the_current_aggregates() {
     let restored_user = User::replay(&[], user).expect("空の続きは有効な履歴");
 
     assert!(restored_organization.is_active());
-    assert!(restored_organization.is_identified_by("org-a"));
+    assert!(restored_organization.is_identified_by(&OrgId::of("org-a")));
     assert!(restored_user.is_available());
-    assert!(restored_user.is_identified_by("user-a"));
+    assert!(restored_user.is_identified_by(&UserId::of("user-a")));
     assert!(restored_user.belongs_to(&restored_organization));
     assert_eq!(restored_organization.sequence_number(), 1);
     assert_eq!(restored_user.sequence_number(), 1);
@@ -130,10 +136,10 @@ fn creation_and_restoration_preserve_sequence_one_and_creation_events() {
     assert_eq!(restored_organization.created_event(), organization_event);
     assert_eq!(restored_user.created_event(), user_event);
     assert!(!restored_organization.is_active());
-    assert!(restored_organization.is_identified_by("org-a"));
+    assert!(restored_organization.is_identified_by(&OrgId::of("org-a")));
     assert!(!restored_user.is_available());
-    assert!(restored_user.is_identified_by("user-a"));
-    assert!(!restored_user.is_identified_by("user-b"));
+    assert!(restored_user.is_identified_by(&UserId::of("user-a")));
+    assert!(!restored_user.is_identified_by(&UserId::of("user-b")));
     assert!(restored_user.belongs_to(&restored_organization));
 }
 

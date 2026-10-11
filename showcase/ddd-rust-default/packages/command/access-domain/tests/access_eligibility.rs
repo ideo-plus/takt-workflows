@@ -1,13 +1,19 @@
 use access_domain::access::eligibility::{AccessEligibility, AssessAccessEligibilityError};
 use access_domain::access::organization::Organization;
 use access_domain::access::user::User;
+use access_domain::access::{org_id::OrgId, user_id::UserId};
 
 fn organization(id: &str, active: bool) -> Organization {
-    Organization::create(Some(id), Some(active)).expect("利用組織を作成できる入力")
+    Organization::create(Some(OrgId::of(id)), Some(active)).expect("利用組織を作成できる入力")
 }
 
 fn user(id: &str, organization_id: &str, available: bool) -> User {
-    User::create(Some(id), Some(organization_id), Some(available)).expect("利用者を作成できる入力")
+    User::create(
+        Some(UserId::of(id)),
+        Some(OrgId::of(organization_id)),
+        Some(available),
+    )
+    .expect("利用者を作成できる入力")
 }
 
 #[test]
@@ -179,9 +185,9 @@ fn allowance_does_not_change_inputs_or_creation_events() {
 
     assert_eq!(result, Ok(true));
     assert!(organization.is_active());
-    assert!(organization.is_identified_by("org-a"));
+    assert!(organization.is_identified_by(&OrgId::of("org-a")));
     assert!(user.is_available());
-    assert!(user.is_identified_by("user-a"));
+    assert!(user.is_identified_by(&UserId::of("user-a")));
     assert!(user.belongs_to(&organization));
     assert_eq!(organization.created_event(), organization_event);
     assert_eq!(user.created_event(), user_event);
@@ -206,9 +212,9 @@ fn rejection_does_not_change_inputs_or_creation_events() {
         Err(AssessAccessEligibilityError::OrganizationMismatch)
     );
     assert!(organization.is_active());
-    assert!(organization.is_identified_by("org-a"));
+    assert!(organization.is_identified_by(&OrgId::of("org-a")));
     assert!(!user.is_available());
-    assert!(user.is_identified_by("user-a"));
+    assert!(user.is_identified_by(&UserId::of("user-a")));
     assert!(!user.belongs_to(&organization));
     assert_eq!(organization.created_event(), organization_event);
     assert_eq!(user.created_event(), user_event);

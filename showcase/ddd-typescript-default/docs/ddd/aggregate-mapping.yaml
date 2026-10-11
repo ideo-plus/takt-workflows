@@ -68,6 +68,7 @@ aggregate_mappings:
   persistence_method: event-sourcing
   reference_ids:
     - entity.organization
+    - primitive.org-id
   code:
     language: typescript
     package: "@acme/access-domain"
@@ -84,6 +85,14 @@ aggregate_mappings:
         - error_ref: error.organization.create.invalid-input
           code:
             case: invalid-input
+    - operation_ref: factory.organization.parse-org-id
+      code:
+        method: parse
+        error_type: ParseOrgIdError
+      errors:
+        - error_ref: error.organization.parse-org-id.invalid-id
+          code:
+            case: invalid-id
   replay_methods:
     - event_ref: event.organization.created
       code:
@@ -93,6 +102,7 @@ aggregate_mappings:
   persistence_method: event-sourcing
   reference_ids:
     - entity.user
+    - primitive.user-id
   code:
     language: typescript
     package: "@acme/access-domain"
@@ -109,11 +119,39 @@ aggregate_mappings:
         - error_ref: error.user.create.invalid-input
           code:
             case: invalid-input
+    - operation_ref: factory.user.parse-user-id
+      code:
+        method: parse
+        error_type: ParseUserIdError
+      errors:
+        - error_ref: error.user.parse-user-id.invalid-id
+          code:
+            case: invalid-id
   replay_methods:
     - event_ref: event.user.created
       code:
         method: fromCreated
 domain_packages:
+- term: 組織識別子
+  model_refs:
+    - primitive.org-id
+  rationale: 文字列値を保ちながら識別子の用途を型で区別する
+  code:
+    language: typescript
+    package: '@acme/access-domain'
+    module:
+      - access
+      - org-id
+- term: 利用者識別子
+  model_refs:
+    - primitive.user-id
+  rationale: 文字列値を保ちながら識別子の用途を型で区別する
+  code:
+    language: typescript
+    package: '@acme/access-domain'
+    module:
+      - access
+      - user-id
 - term: 会議室予約
   model_refs:
   - bc.reservation

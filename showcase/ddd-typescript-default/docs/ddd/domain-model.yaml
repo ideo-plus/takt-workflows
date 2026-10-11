@@ -173,22 +173,35 @@ bounded_contexts:
           aggregate: aggregate.organization
           attributes:
             - name: id
-              type: string
+              type: primitive.org-id
               required: true
             - name: active
               type: boolean
+              required: true
+        - element_id: primitive.org-id
+          kind: domain-primitive
+          name: OrgId
+          aggregate: aggregate.organization
+          attributes:
+            - name: value
+              type: string
               required: true
       invariants:
         - element_id: invariant.organization.complete-input
           name: 完全な現在入力
           aggregate: aggregate.organization
           element: entity.organization
-          statement: 識別子は文字列、有効性は真偽値であり、無効な組織も構築できる
+          statement: 識別子はOrgId、有効性は真偽値であり、空文字と無効な組織も構築できる
         - element_id: invariant.organization.identity
           name: 組織の同一性
           aggregate: aggregate.organization
           element: entity.organization
           statement: 組織の同一性は識別子で決まり、判定によって識別子も現在状態も変わらない
+        - element_id: invariant.organization.org-id-string
+          name: 識別子の用途と文字列値
+          aggregate: aggregate.organization
+          element: primitive.org-id
+          statement: OrgIdは用途別の識別子で、内部値は空文字を含む文字列である
       commands:
         []
       events:
@@ -208,7 +221,17 @@ bounded_contexts:
             - element_id: error.organization.create.invalid-input
               name: 入力の型が不正
               operation: factory.organization.create
-              condition: 識別子が文字列でない、または有効性が真偽値でない
+              condition: 識別子がOrgIdでない、または有効性が真偽値でない
+        - element_id: factory.organization.parse-org-id
+          name: OrgIdを構築する
+          target_element: primitive.org-id
+          preconditions:
+            - invariant.organization.org-id-string
+          domain_errors:
+            - element_id: error.organization.parse-org-id.invalid-id
+              name: 入力が文字列でない
+              operation: factory.organization.parse-org-id
+              condition: 内部値が文字列でない
     - element_id: aggregate.user
       name: 利用者
       bounded_context: bc.access
@@ -223,25 +246,38 @@ bounded_contexts:
           aggregate: aggregate.user
           attributes:
             - name: id
-              type: string
+              type: primitive.user-id
               required: true
             - name: organizationId
-              type: string
+              type: primitive.org-id
               required: true
             - name: available
               type: boolean
+              required: true
+        - element_id: primitive.user-id
+          kind: domain-primitive
+          name: UserId
+          aggregate: aggregate.user
+          attributes:
+            - name: value
+              type: string
               required: true
       invariants:
         - element_id: invariant.user.complete-input
           name: 完全な現在入力
           aggregate: aggregate.user
           element: entity.user
-          statement: 利用者と所属組織の識別子は文字列、利用可否は真偽値であり、利用不可の利用者も構築できる
+          statement: 識別子はUserIdとOrgId、利用可否は真偽値であり、空文字と利用不可の利用者も構築できる
         - element_id: invariant.user.identity-and-membership
           name: 利用者の同一性と所属参照
           aggregate: aggregate.user
           element: entity.user
           statement: 利用者の同一性は識別子で決まり、所属組織は識別子だけで参照し、判定によって属性は変わらない
+        - element_id: invariant.user.user-id-string
+          name: 識別子の用途と文字列値
+          aggregate: aggregate.user
+          element: primitive.user-id
+          statement: UserIdは用途別の識別子で、内部値は空文字を含む文字列である
       commands:
         []
       events:
@@ -261,7 +297,17 @@ bounded_contexts:
             - element_id: error.user.create.invalid-input
               name: 入力の型が不正
               operation: factory.user.create
-              condition: 利用者または所属組織の識別子が文字列でない、または利用可否が真偽値でない
+              condition: 利用者識別子がUserIdでない、所属組織識別子がOrgIdでない、または利用可否が真偽値でない
+        - element_id: factory.user.parse-user-id
+          name: UserIdを構築する
+          target_element: primitive.user-id
+          preconditions:
+            - invariant.user.user-id-string
+          domain_errors:
+            - element_id: error.user.parse-user-id.invalid-id
+              name: 入力が文字列でない
+              operation: factory.user.parse-user-id
+              condition: 内部値が文字列でない
   domain_services:
     - element_id: service.access-eligibility
       name: 利用資格判定

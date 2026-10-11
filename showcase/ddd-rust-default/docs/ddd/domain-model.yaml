@@ -187,10 +187,18 @@ bounded_contexts:
           aggregate: aggregate.organization
           attributes:
             - name: id
-              type: string
+              type: primitive.org-id
               required: true
             - name: active
               type: boolean
+              required: true
+        - element_id: primitive.org-id
+          kind: domain-primitive
+          name: OrgId
+          aggregate: aggregate.organization
+          attributes:
+            - name: value
+              type: string
               required: true
       invariants:
         - element_id: invariant.organization.complete-input
@@ -203,6 +211,11 @@ bounded_contexts:
           aggregate: aggregate.organization
           element: entity.organization
           statement: 組織の同一性は識別子で決まり、判定によって識別子も現在状態も変わらない
+        - element_id: invariant.organization.org-id-string
+          name: 識別子の用途と文字列値
+          aggregate: aggregate.organization
+          element: primitive.org-id
+          statement: OrgIdは用途別の識別子で、内部値は空文字を含む文字列である
       commands:
         []
       events:
@@ -227,6 +240,16 @@ bounded_contexts:
               name: MissingActive
               operation: factory.organization.create
               condition: 現在の有効性が存在しない。
+        - element_id: factory.organization.parse-org-id
+          name: OrgIdを構築する
+          target_element: primitive.org-id
+          preconditions:
+            - invariant.organization.org-id-string
+          domain_errors:
+            - element_id: error.organization.parse-org-id.missing-value
+              name: MissingValue
+              operation: factory.organization.parse-org-id
+              condition: 識別子の内部値が存在しない
     - element_id: aggregate.user
       name: 利用者
       bounded_context: bc.access
@@ -240,13 +263,21 @@ bounded_contexts:
           aggregate: aggregate.user
           attributes:
             - name: id
-              type: string
+              type: primitive.user-id
               required: true
             - name: organization_id
-              type: string
+              type: primitive.org-id
               required: true
             - name: available
               type: boolean
+              required: true
+        - element_id: primitive.user-id
+          kind: domain-primitive
+          name: UserId
+          aggregate: aggregate.user
+          attributes:
+            - name: value
+              type: string
               required: true
       invariants:
         - element_id: invariant.user.complete-input
@@ -259,6 +290,11 @@ bounded_contexts:
           aggregate: aggregate.user
           element: entity.user
           statement: 利用者の同一性は識別子で決まり、所属組織は識別子だけで参照し、判定によって属性は変わらない
+        - element_id: invariant.user.user-id-string
+          name: 識別子の用途と文字列値
+          aggregate: aggregate.user
+          element: primitive.user-id
+          statement: UserIdは用途別の識別子で、内部値は空文字を含む文字列である
       commands:
         []
       events:
@@ -287,6 +323,16 @@ bounded_contexts:
               name: MissingAvailable
               operation: factory.user.create
               condition: 現在の利用可否が存在しない。
+        - element_id: factory.user.parse-user-id
+          name: UserIdを構築する
+          target_element: primitive.user-id
+          preconditions:
+            - invariant.user.user-id-string
+          domain_errors:
+            - element_id: error.user.parse-user-id.missing-value
+              name: MissingValue
+              operation: factory.user.parse-user-id
+              condition: 識別子の内部値が存在しない
   domain_services:
     - element_id: service.access-eligibility
       name: 利用資格判定

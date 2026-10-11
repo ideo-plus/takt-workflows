@@ -990,3 +990,36 @@ fn domain_facts_preserves_test_only_type_scope() {
     assert_eq!(types[1]["auxiliary"], true);
     assert_eq!(types[2]["auxiliary"], true);
 }
+
+#[test]
+fn option_payload_is_guarded_by_a_propagated_missing_error() {
+    let answer = check("struct Id(String); impl Id { fn new(value: String) -> Self { Self(value) } fn parse(value: Option<&str>) -> Result<Self, ()> { let checked = value.ok_or(())?; Ok(Self::new(checked.to_owned())) } }");
+    let site = &answer["impls"][0]["methods"][1]["initialization"]["delegations"][0];
+    assert_eq!(site["guarded"], true);
+    assert_eq!(site["input_unchanged"], true);
+}
+
+#[test]
+fn lifting_the_original_input_into_some_preserves_parse_delegation() {
+    let answer = check(
+        "struct Id; impl Id { fn of(value: &str) -> Self { Self::parse(Some(value)).unwrap() } }",
+    );
+    assert_eq!(
+        answer["impls"][0]["methods"][0]["initialization"]["parse_delegate"],
+        "Self"
+    );
+    let answer = check("struct Id; impl Id { fn of(value: &str) -> Self { Self::parse(Some(\"replacement\")).unwrap() } }");
+    assert!(answer["impls"][0]["methods"][0]["initialization"]["parse_delegate"].is_null());
+}
+
+#[test]
+fn discarding_option_failure_or_replacing_the_payload_does_not_validate_construction() {
+    for body in [
+        "let checked = value.ok_or(()); Ok(Self::new(String::new()))",
+        "let checked = value.ok_or(())?; Ok(Self::new(String::new()))",
+    ] {
+        let answer = check(&format!("struct Id(String); impl Id {{ fn parse(value: Option<&str>) -> Result<Self, ()> {{ {body} }} }}"));
+        let site = &answer["impls"][0]["methods"][0]["initialization"]["delegations"][0];
+        assert_eq!(site["guarded"], false);
+    }
+}

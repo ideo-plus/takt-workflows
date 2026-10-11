@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { Organization, User } from "@acme/access-domain";
+import { Organization, User, OrgId, UserId } from "@acme/access-domain";
 
 function createOrganization(id: string, active: boolean): Organization {
-  const created = Organization.create(id, active);
+  const created = Organization.create(OrgId.of(id), active);
   if (!created.ok) {
     throw new Error(`利用組織のテスト入力を構築できませんでした: ${created.error}`);
   }
@@ -16,7 +16,7 @@ function createUser(
   organizationId: string,
   available: boolean,
 ): User {
-  const created = User.create(id, organizationId, available);
+  const created = User.create(UserId.of(id), OrgId.of(organizationId), available);
   if (!created.ok) {
     throw new Error(`利用者のテスト入力を構築できませんでした: ${created.error}`);
   }
@@ -31,7 +31,7 @@ describe("取得済みの利用組織と利用者", () => {
     assert.deepStrictEqual(
       {
         organizationActive: organization.isActive(),
-        organizationIdentityMatches: organization.isIdentifiedBy(""),
+        organizationIdentityMatches: organization.isIdentifiedBy(OrgId.of("")),
         userAvailable: user.isAvailable(),
         userBelongsToOrganization: user.belongsTo(organization),
         organizationCreatedEvent: organization.createdEvent(),
@@ -44,15 +44,15 @@ describe("取得済みの利用組織と利用者", () => {
         userBelongsToOrganization: true,
         organizationCreatedEvent: {
           kind: "created",
-          organizationId: "",
+          organizationId: OrgId.of(""),
           sequenceNumber: 1,
           active: false,
         },
         userCreatedEvent: {
           kind: "created",
-          userId: "",
+          userId: UserId.of(""),
           sequenceNumber: 1,
-          organizationId: "",
+          organizationId: OrgId.of(""),
           available: false,
         },
       },
@@ -66,7 +66,7 @@ describe("取得済みの利用組織と利用者", () => {
       true,
     );
     const invalidActive = Organization.create(
-      "organization-a",
+      OrgId.of("organization-a"),
       // @ts-expect-error 実行時境界で真偽値以外の状態を拒否することを確認する。
       "active",
     );
@@ -84,18 +84,18 @@ describe("取得済みの利用組織と利用者", () => {
     const invalidId = User.create(
       // @ts-expect-error 実行時境界で文字列以外の識別子を拒否することを確認する。
       42,
-      "organization-a",
+      OrgId.of("organization-a"),
       true,
     );
     const invalidOrganizationId = User.create(
-      "user-a",
+      UserId.of("user-a"),
       // @ts-expect-error 実行時境界で文字列以外の所属組織識別子を拒否することを確認する。
       42,
       true,
     );
     const invalidAvailable = User.create(
-      "user-a",
-      "organization-a",
+      UserId.of("user-a"),
+      OrgId.of("organization-a"),
       // @ts-expect-error 実行時境界で真偽値以外の状態を拒否することを確認する。
       "available",
     );
@@ -121,7 +121,7 @@ describe("取得済みの利用組織と利用者", () => {
         belongsToOriginal: user.belongsTo(originalOrganization),
         belongsToSameIdentity: user.belongsTo(sameOrganization),
         belongsToOtherIdentity: user.belongsTo(otherOrganization),
-        inactiveIdentityMatches: sameOrganization.isIdentifiedBy("organization-a"),
+        inactiveIdentityMatches: sameOrganization.isIdentifiedBy(OrgId.of("organization-a")),
       },
       {
         belongsToOriginal: true,
@@ -134,14 +134,14 @@ describe("取得済みの利用組織と利用者", () => {
 
   test("利用組織を生成イベントから復元して同じ判断を行える", () => {
     const original = createOrganization("organization-a", false);
-    const createdEvent = structuredClone(original.createdEvent());
+    const createdEvent = ({ ...original.createdEvent() });
 
     const restored = Organization.replay([createdEvent]);
 
     assert.deepStrictEqual(
       {
         active: restored.isActive(),
-        identityMatches: restored.isIdentifiedBy("organization-a"),
+        identityMatches: restored.isIdentifiedBy(OrgId.of("organization-a")),
         createdEvent: restored.createdEvent(),
       },
       {
@@ -155,7 +155,7 @@ describe("取得済みの利用組織と利用者", () => {
   test("利用者を生成イベントから復元して同じ判断を行える", () => {
     const organization = createOrganization("organization-a", true);
     const original = createUser("user-a", "organization-a", false);
-    const createdEvent = structuredClone(original.createdEvent());
+    const createdEvent = ({ ...original.createdEvent() });
 
     const restored = User.replay([createdEvent]);
 
@@ -200,8 +200,8 @@ describe("取得済みの利用組織と利用者", () => {
   });
 
   test("復元元と公開されたイベントの変更が利用組織へ波及しない", () => {
-    const event = structuredClone(createOrganization("organization-a", true).createdEvent());
-    const expected = structuredClone(event);
+    const event = ({ ...createOrganization("organization-a", true).createdEvent() });
+    const expected = ({ ...event });
     const restored = Organization.replay([event]);
 
     Reflect.set(event, "organizationId", "organization-b");
@@ -209,14 +209,14 @@ describe("取得済みの利用組織と利用者", () => {
     Reflect.set(restored.createdEvent(), "active", false);
 
     assert.equal(restored.isActive(), true);
-    assert.equal(restored.isIdentifiedBy("organization-a"), true);
+    assert.equal(restored.isIdentifiedBy(OrgId.of("organization-a")), true);
     assert.deepStrictEqual(restored.createdEvent(), expected);
   });
 
   test("復元元と公開されたイベントの変更が利用者へ波及しない", () => {
     const organization = createOrganization("organization-a", true);
-    const event = structuredClone(createUser("user-a", "organization-a", true).createdEvent());
-    const expected = structuredClone(event);
+    const event = ({ ...createUser("user-a", "organization-a", true).createdEvent() });
+    const expected = ({ ...event });
     const restored = User.replay([event]);
 
     Reflect.set(event, "organizationId", "organization-b");

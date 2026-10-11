@@ -1560,3 +1560,31 @@ describe("knowledge examples are the samples", () => {
     });
   }
 });
+
+describe("Rust primitive factories with an optional input", () => {
+  function optionalCustomer(files: Record<string, string>): void {
+    for (const path of Object.keys(files)) {
+      if (!path.endsWith("customer_id.rs")) continue;
+      files[path] = files[path]
+        .replace('Self::parse(value).expect("CustomerId is outside its domain")', 'Self::parse(Some(value)).expect("CustomerId is outside its domain")')
+        .replace('pub fn parse(value: &str) -> Result<Self, ParseCustomerIdError> {', 'pub fn parse(value: Option<&str>) -> Result<Self, ParseCustomerIdError> {\n        let value = value.ok_or(ParseCustomerIdError::InvalidFormat)?;');
+    }
+  }
+
+  test("accepts Some of the unchanged input and propagates a missing-input error", () => {
+    const result = lint(rustSample("file").files, optionalCustomer);
+    expect(result.findings).toEqual([]);
+    expect(result.unavailable).toEqual([]);
+    expect(result.pass).toBe(true);
+  });
+
+  test("rejects a replacement passed to the parser", () => {
+    const result = lint(rustSample("file").files, (files) => {
+      optionalCustomer(files);
+      for (const path of Object.keys(files)) if (path.endsWith("customer_id.rs")) {
+        files[path] = files[path].replace('Self::parse(Some(value))', 'Self::parse(Some("C123456"))');
+      }
+    });
+    expect(result.findings.some((finding) => finding.rule_id === "primitive-initialization")).toBe(true);
+  });
+});

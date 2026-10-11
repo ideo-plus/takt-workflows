@@ -1,3 +1,4 @@
+use super::org_id::OrgId;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CreateOrganizationError {
     MissingId,
@@ -9,15 +10,15 @@ pub struct CorruptOrganizationHistory;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OrganizationCreated {
-    organization_id: String,
+    organization_id: OrgId,
     active: bool,
     sequence_number: u64,
 }
 
 impl OrganizationCreated {
-    fn new(organization_id: &str, active: bool) -> Self {
+    fn new(organization_id: OrgId, active: bool) -> Self {
         Self {
-            organization_id: organization_id.to_string(),
+            organization_id,
             active,
             sequence_number: 1,
         }
@@ -34,7 +35,10 @@ impl Organization {
         Self { creation }
     }
 
-    pub fn create(id: Option<&str>, active: Option<bool>) -> Result<Self, CreateOrganizationError> {
+    pub fn create(
+        id: Option<OrgId>,
+        active: Option<bool>,
+    ) -> Result<Self, CreateOrganizationError> {
         let id = id.ok_or(CreateOrganizationError::MissingId)?;
         let active = active.ok_or(CreateOrganizationError::MissingActive)?;
         let event = OrganizationCreated::new(id, active);
@@ -68,7 +72,7 @@ impl Organization {
         self.creation.active
     }
 
-    pub fn is_identified_by(&self, identifier: &str) -> bool {
-        self.creation.organization_id == identifier
+    pub fn is_identified_by(&self, identifier: &OrgId) -> bool {
+        &self.creation.organization_id == identifier
     }
 }
