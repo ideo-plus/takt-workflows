@@ -1,3 +1,5 @@
+import { OrgId } from "./org-id.ts";
+import { UserId } from "./user-id.ts";
 import type { Result } from "@acme/language-extensions";
 import type { Organization } from "./organization.ts";
 
@@ -5,9 +7,9 @@ export type CreateUserError = "invalid-input";
 
 export type UserCreated = {
   readonly kind: "created";
-  readonly userId: string;
+  readonly userId: UserId;
   readonly sequenceNumber: number;
-  readonly organizationId: string;
+  readonly organizationId: OrgId;
   readonly available: boolean;
 };
 
@@ -24,8 +26,8 @@ export class User {
     });
   }
 
-  static create(id: string, organizationId: string, available: boolean): Result<User, CreateUserError> {
-    if (typeof id !== "string" || typeof organizationId !== "string" || typeof available !== "boolean") {
+  static create(id: UserId, organizationId: OrgId, available: boolean): Result<User, CreateUserError> {
+    if (!(id instanceof UserId) || !(organizationId instanceof OrgId) || typeof available !== "boolean") {
       return { ok: false, error: "invalid-input" };
     }
     const event: UserCreated = {
@@ -51,8 +53,8 @@ export class User {
       available: candidate.available,
     };
     if (event.kind !== "created" ||
-        event.sequenceNumber !== 1 || typeof event.userId !== "string" ||
-        typeof event.organizationId !== "string" || typeof event.available !== "boolean") {
+        event.sequenceNumber !== 1 || !(event.userId instanceof UserId) ||
+        !(event.organizationId instanceof OrgId) || typeof event.available !== "boolean") {
       throw new Error("corrupt user history");
     }
     return User.fromCreated(event);

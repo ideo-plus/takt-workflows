@@ -3,12 +3,14 @@ import { describe, test } from "node:test";
 
 import {
   AccessEligibility,
+  OrgId,
+  UserId,
   Organization,
   User,
 } from "@acme/access-domain";
 
 function createOrganization(id: string, active: boolean): Organization {
-  const created = Organization.create(id, active);
+  const created = Organization.create(OrgId.of(id), active);
   if (!created.ok) {
     throw new Error(`利用組織のテスト入力を構築できませんでした: ${created.error}`);
   }
@@ -20,7 +22,7 @@ function createUser(
   organizationId: string,
   available: boolean,
 ): User {
-  const created = User.create(id, organizationId, available);
+  const created = User.create(UserId.of(id), OrgId.of(organizationId), available);
   if (!created.ok) {
     throw new Error(`利用者のテスト入力を構築できませんでした: ${created.error}`);
   }
@@ -34,14 +36,14 @@ function observeInputs(organization: Organization, user: User) {
   return {
     organizationActive: organization.isActive(),
     organizationMatchesSameIdentity:
-      organization.isIdentifiedBy("organization-a"),
+      organization.isIdentifiedBy(OrgId.of("organization-a")),
     organizationMatchesOtherIdentity:
-      organization.isIdentifiedBy("organization-b"),
+      organization.isIdentifiedBy(OrgId.of("organization-b")),
     userAvailable: user.isAvailable(),
     userBelongsToSameIdentity: user.belongsTo(sameOrganization),
     userBelongsToOtherIdentity: user.belongsTo(otherOrganization),
-    organizationCreatedEvent: structuredClone(organization.createdEvent()),
-    userCreatedEvent: structuredClone(user.createdEvent()),
+    organizationCreatedEvent: ({ ...organization.createdEvent() }),
+    userCreatedEvent: ({ ...user.createdEvent() }),
   };
 }
 
