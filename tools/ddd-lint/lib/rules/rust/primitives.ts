@@ -49,7 +49,8 @@ export function rulePrimitiveInitialization(
         of.return_type_text?.replace(/\s/g, "") ?? "",
       ) ||
       of.params.length !== 1 ||
-      of.params[0].type_text !== parsed?.params[0]?.type_text ||
+      (of.params[0].type_text !== parsed?.params[0]?.type_text &&
+        `Option<${of.params[0].type_text?.replace(/\s/g, "")}>` !== parsed?.params[0]?.type_text?.replace(/\s/g, "")) ||
       !["Self", type.name].includes(of.initialization.parse_delegate ?? "")
     )
       report(

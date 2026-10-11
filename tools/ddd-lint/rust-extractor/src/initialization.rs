@@ -213,7 +213,31 @@ pub fn facts(method: &syn::ImplItemFn, primitive_names: &PrimitiveNames) -> Valu
         delegations: Vec::new(),
     };
     for statement in &method.block.stmts {
+        let checked_option = match (statement, creations.input.as_deref()) {
+            (syn::Stmt::Local(local), Some(input)) => match (&local.pat, &local.init) {
+                (syn::Pat::Ident(binding), Some(initializer)) => match &*initializer.expr {
+                    syn::Expr::Try(tried) => match &*tried.expr {
+                        syn::Expr::MethodCall(call)
+                            if call.args.len() == 1
+                                && matches!(call.method.to_string().as_str(), "ok_or" | "ok_or_else")
+                                && matches!(&*call.receiver, syn::Expr::Path(path) if path.path.is_ident(input))
+                                && method.sig.inputs.iter().any(|parameter| matches!(parameter,
+                                    syn::FnArg::Typed(parameter) if matches!(&*parameter.ty,
+                                        syn::Type::Path(path) if path.path.segments.last().is_some_and(|segment| segment.ident == "Option"))
+                                )) => Some(binding.ident.to_string()),
+                        _ => None,
+                    },
+                    _ => None,
+                },
+                _ => None,
+            },
+            _ => None,
+        };
         creations.visit_stmt(statement);
+        if let Some(binding) = checked_option {
+            creations.input = Some(binding);
+            creations.guarded = true;
+        }
         if let Some(syn::Expr::If(guard)) = expression(statement) {
             let mut used = Names(&names, false);
             used.visit_expr(&guard.cond);
@@ -240,13 +264,22 @@ pub fn facts(method: &syn::ImplItemFn, primitive_names: &PrimitiveNames) -> Valu
                             && path.path.segments[1].ident == "parse"
                             && parsed.args.len() == 1
                         {
-                            if let (
-                                Some(syn::FnArg::Typed(parameter)),
-                                Some(syn::Expr::Path(argument)),
-                            ) = (method.sig.inputs.first(), parsed.args.first())
+                            if let (Some(syn::FnArg::Typed(parameter)), Some(argument)) =
+                                (method.sig.inputs.first(), parsed.args.first())
                             {
                                 if let syn::Pat::Ident(name) = &*parameter.pat {
-                                    if argument.path.is_ident(&name.ident.to_string()) {
+                                    let unchanged = match argument {
+                                        syn::Expr::Path(argument) => {
+                                            argument.path.is_ident(&name.ident.to_string())
+                                        }
+                                        syn::Expr::Call(lifted) => {
+                                            matches!(&*lifted.func, syn::Expr::Path(path) if path.path.is_ident("Some"))
+                                                && lifted.args.len() == 1
+                                                && matches!(lifted.args.first(), Some(syn::Expr::Path(argument)) if argument.path.is_ident(&name.ident.to_string()))
+                                        }
+                                        _ => false,
+                                    };
+                                    if unchanged {
                                         delegate = Some(path.path.segments[0].ident.to_string());
                                     }
                                 }
