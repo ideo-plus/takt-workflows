@@ -53,6 +53,8 @@ export interface RustProgram {
   /** The native facts this program was built from, keyed by workspace-relative file. */
   facts: DomainFactSet;
   resolveType(file: string, module: string[], text: string): RustType | undefined;
+  /** Resolve aliases of one named type without discarding references or containers. */
+  resolveNamedType(file: string, module: string[], text: string): RustType | undefined;
   receiver(file: string, call: CallFact): RustType | undefined;
 }
 
@@ -101,7 +103,7 @@ export function within(inner: Span, outer: Span): boolean {
   );
 }
 
-function importNames(text: string, prefix = ""): { name: string; target: string }[] {
+export function importNames(text: string, prefix = ""): { name: string; target: string }[] {
   const start = text.indexOf("{");
   if (start !== -1) {
     const path = prefix + text.slice(0, start);
@@ -131,6 +133,14 @@ function bareType(text: string): string {
     .replace(/^&\s*(?:'\w+\s*)?(?:mut\s+)?/, "")
     .replace(/^(impl|dyn)\s+/, "")
     .trim();
+}
+
+export function withoutReference(text: string): string {
+  return text.trim().replace(/^&\s*(?:'\w+\s*)?(?:mut\s+)?/, "").trim();
+}
+
+function isTypePath(text: string): boolean {
+  return /^(?:::\s*)?[A-Za-z_]\w*(?:\s*::\s*[A-Za-z_]\w*)*$/.test(text.trim());
 }
 
 export function buildProgram(sources: RustSourceInventory, facts: DomainFactSet): RustProgram {
@@ -230,11 +240,12 @@ export function buildProgram(sources: RustSourceInventory, facts: DomainFactSet)
     }
   }
   const crates = sources.workspaceCrates;
-  function lookup(file: string, module: string[], raw: string, seen: Set<string>): RustType | undefined {
+  function lookup(file: string, module: string[], raw: string, seen: Set<string>, strict = false): RustType | undefined {
     const owner = files.get(file);
     if (!owner || owner.localImports) return undefined;
-    const text = bareType(raw);
-    const wrapper = /^(?:(?:std|core|alloc)::(?:boxed|sync|rc|option|vec)::)?(Box|Arc|Rc|Option|Vec)\s*<(.+)>$/.exec(
+    if (strict && !isTypePath(raw)) return undefined;
+    const text = strict ? raw.replace(/\s+/g, "") : bareType(raw);
+    const wrapper = strict ? null : /^(?:(?:std|core|alloc)::(?:boxed|sync|rc|option|vec)::)?(Box|Arc|Rc|Option|Vec)\s*<(.+)>$/.exec(
       text,
     );
     if (wrapper) {
@@ -276,11 +287,12 @@ export function buildProgram(sources: RustSourceInventory, facts: DomainFactSet)
       if (!candidates.length) continue;
       if (candidates.length !== 1 || candidates[0].generic) return undefined;
       const alias = candidates[0];
-      return lookup(alias.file, alias.module, [alias.target, ...parts.slice(n)].join("::"), next);
+      return lookup(alias.file, alias.module, [alias.target, ...parts.slice(n)].join("::"), next, strict);
     }
     return undefined;
   }
   const resolveType = (file: string, module: string[], text: string) => lookup(file, module, text, new Set());
+  const resolveNamedType = (file: string, module: string[], text: string) => lookup(file, module, text, new Set(), true);
   for (const [file, data] of files) {
     for (const block of data.impls) {
       const module = [...data.module, ...block.module];
@@ -316,5 +328,5 @@ export function buildProgram(sources: RustSourceInventory, facts: DomainFactSet)
     }
     return type;
   }
-  return { files, types, notes, moduleInventories, facts, resolveType, receiver };
+  return { files, types, notes, moduleInventories, facts, resolveType, resolveNamedType, receiver };
 }

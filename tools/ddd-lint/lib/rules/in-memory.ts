@@ -2,6 +2,14 @@ import { join } from "node:path";
 import { loadLayerDeclaration } from "../layer-declaration/index.ts";
 import type { ProjectContext } from "../project/context.ts";
 import type { ModelAvailability } from "./types.ts";
+import { toPascal } from "./lists.ts";
+
+/** Declared event names and the conventional aggregate event union, never arbitrary domain types. */
+export function domainEventTypeNames(model: ModelAvailability, aggregateRef: string, aggregateType: string): ReadonlySet<string> {
+  const events = model.index?.elements("event").filter((event) => event.owner === aggregateRef) ?? [];
+  return new Set(events.flatMap((event) => [event.name, toPascal(event.id.segments.join("-"))])
+    .concat(events.length ? [`${aggregateType}Event`] : []));
+}
 
 /** Model state elements are never event stream elements, even when imported under an event alias. */
 export function isAggregateStateElement(model: ModelAvailability, aggregateRef: string, typeName: string): boolean {

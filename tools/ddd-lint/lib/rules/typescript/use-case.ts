@@ -10,14 +10,15 @@
 
 import { join } from "node:path";
 import type { FindingInput } from "../../shared/findings.ts";
-import { isAggregateStateElement } from "../in-memory.ts";
+import { domainEventTypeNames } from "../in-memory.ts";
 import { repositoryContractProblem, resultArguments, expandGenericStoreResult, EVENT_SOURCING_STORE } from "../repository-contract.ts";
 import type { MemberFact, ParamFact, TypeScriptFileFacts } from "../../typescript/domain-facts/index.ts";
 import { aggregateBinding, aggregateMappings } from "./aggregate-binding.ts";
-import { resolveSpecifier } from "./edges.ts";
 import { enclosingClass, factsOf, receiverType } from "./file-facts.ts";
 import { isNamedType, isPortDeclaration, passedType, resolveDeclaredType, resolveTypeName, typeNamesIn } from "./symbols.ts";
 import type { TsDomainType, TsInspection, TsTarget } from "./types.ts";
+import { resolveNamedType, isEventType } from "./named-types.ts";
+import { packageContaining } from "./edges.ts";
 
 // --- (h) execute aggregate argument --------------------------------------------------------------
 
@@ -250,22 +251,20 @@ export function ruleEventSourcingStore(inspection: TsInspection, target: TsTarge
   for (const port of facts.declarations.filter((entry) => isPortDeclaration(entry) && entry.name.endsWith("Repository"))) {
     const aggregate = aggregateMappings(inspection).find((entry) => entry.persistence_method === "event-sourcing" && `${entry.type}Repository` === port.name);
     if (!aggregate) continue;
-    const domainType = (text: string | undefined) => {
+    const namedType = (text: string | undefined) => {
       if (text === undefined) return undefined;
-      const resolved = resolveTypeName(inspection.packages, inspection.symbols, target.file, facts, text);
-      return resolved.kind === "domain" ? resolved.type : undefined;
+      const resolved = resolveNamedType(inspection, target.file, text);
+      if (resolved.kind !== "found") return undefined;
+      const pkg = packageContaining(inspection.packages, join(inspection.packages.workspaceRoot, resolved.file));
+      return pkg?.name === aggregate.package ? resolved.declaration : undefined;
     };
     const isSnapshot = (text: string | undefined) => {
-      const type = domainType(text);
-      return type !== undefined && type.name === aggregate.type && type.pkg.name === aggregate.package;
+      const type = namedType(text);
+      return type !== undefined && type.name === aggregate.type;
     };
     const isEvent = (text: string | undefined) => {
-      if (text === undefined || !/^[\w$]+(?:\.[\w$]+)*$/.test(text)) return false;
-      const type = domainType(text);
-      if (type && (type.name === aggregate.type || isAggregateStateElement(inspection.model, aggregate.aggregate_ref, type.name))) return false;
-      const imported = facts.imports.find((entry) => entry.bindings.some((binding) => binding.name === text.split(".")[0]));
-      const from = imported ? resolveSpecifier(inspection.packages, target.pkg, join(inspection.packages.workspaceRoot, target.file), imported.specifier) : undefined;
-      return from?.kind === "package" && from.pkg.name === aggregate.package;
+      return text !== undefined && isEventType(inspection, resolveNamedType(inspection, target.file, text),
+        domainEventTypeNames(inspection.model, aggregate.aggregate_ref, aggregate.type), aggregate.package);
     };
     for (const member of port.members.filter((entry) => entry.name === "store")) {
       const params = member.params ?? [];

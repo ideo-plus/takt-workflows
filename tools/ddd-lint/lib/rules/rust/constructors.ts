@@ -30,7 +30,8 @@ export function rulePrimaryConstructor(target: InspectionTarget, context: Inspec
     const key = (entry: LocatedMethod) => `${entry.file}:${entry.method.span.start_line}:${entry.method.name}`;
     const owns = (entry: LocatedMethod, text: string) => text === "Self" || context.program.resolveType(entry.file, entry.module, text)?.key === type.key;
     // A function that takes `Self` by value evolves that instance (Event Sourcing `replay(events, snapshot)`); it constructs nothing new.
-    const evolves = (entry: LocatedMethod) => entry.method.params.some((param) => owns(entry, param.type_text));
+    const evolves = (entry: LocatedMethod) => entry.method.params.some((param) => param.type_text === "Self" ||
+      context.program.resolveNamedType(entry.file, entry.module, param.type_text)?.key === type.key);
     const paths = methods.filter((entry) => {
       const returned = entry.method.return_type_text ?? "";
       return owns(entry, resultArguments(returned)?.[0] ?? returned) && !evolves(entry);

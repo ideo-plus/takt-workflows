@@ -221,6 +221,20 @@ function targetStrings(value: unknown): string[] {
   return Object.values(value as Record<string, unknown>).flatMap(targetStrings);
 }
 
+/** The source entry paths an exports subpath explicitly allows, or undefined for unsupported targets. */
+export function exportTargets(pkg: TsPackage, subpath: string): readonly string[] | undefined {
+  const exported = exportsOf(pkg);
+  if (exported.kind !== "map") return undefined;
+  const selected = decisiveEntry(exported.entries, subpath);
+  if (!selected) return [];
+  const [key, value] = selected;
+  const targets = targetStrings(value);
+  const star = key.indexOf("*");
+  const matched = star < 0 ? "" : subpath.slice(star, subpath.length - (key.length - star - 1));
+  const paths = targets.map((target) => resolve(pkg.root, target.replace("*", matched)));
+  return targets.every((target) => target.startsWith("./")) && paths.every((path) => isInside(pkg.root, path)) ? paths : undefined;
+}
+
 /** Whether a file of a package is one of its public entries, or why that cannot be told. */
 type PublicEntry =
   | { readonly kind: "entry" }
