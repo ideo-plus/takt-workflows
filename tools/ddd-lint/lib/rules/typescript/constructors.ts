@@ -4,6 +4,7 @@ import { resultArguments } from "../repository-contract.ts";
 import { companionsOf, instancesOf, within, resolveTypeName } from "./symbols.ts";
 import { factsOf } from "./file-facts.ts";
 import type { TsInspection, TsTarget } from "./types.ts";
+import { resolveNamedType } from "./named-types.ts";
 
 export function rulePrimaryConstructor(inspection: TsInspection, target: TsTarget): FindingInput[] {
   const facts = factsOf(inspection, target.file);
@@ -41,7 +42,11 @@ export function rulePrimaryConstructor(inspection: TsInspection, target: TsTarge
       return found.kind === "domain" && found.type.key === type.key;
     };
     // A method that takes an instance of the type evolves it (Event Sourcing `replay(events, snapshot)`); it constructs nothing new.
-    const evolves = (method: (typeof members)[number]) => (method.params ?? []).some((param) => param.type_text !== undefined && owns(param.type_text));
+    const evolves = (method: (typeof members)[number]) => (method.params ?? []).some((param) => {
+      if (param.type_text === undefined) return false;
+      const resolved = resolveNamedType(inspection, target.file, param.type_text);
+      return resolved.kind === "found" && resolved.file === type.file && resolved.declaration.name === type.name;
+    });
     const paths = members.filter((method) => method.name === primary || (owns(resultArguments(method.return_type_text)?.[0] ?? method.return_type_text ?? "") && !evolves(method))).map((method) => {
       const targets = facts.calls.flatMap((call) => {
         if (!within(call.span, method.span) || call.kind !== "method-call" || !call.receiver_text) return [];

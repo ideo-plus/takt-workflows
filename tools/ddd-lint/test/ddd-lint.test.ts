@@ -56,6 +56,16 @@ function replace(files: Record<string, string>, path: string, from: string, to: 
   files[path] = content.replace(from, to);
 }
 
+function splitRustRepository(files: Record<string, string>): void {
+  const file = "packages/command/billing-interface-adapter/src/in_memory_invoice_repository.rs";
+  const source = files[file]!;
+  const start = source.indexOf("impl InvoiceRepository for InMemoryInvoiceRepository {");
+  if (start < 0) throw new Error("missing repository implementation");
+  files[file] = source.slice(0, start) + "mod storage;\n";
+  files["packages/command/billing-interface-adapter/src/in_memory_invoice_repository/storage.rs"] =
+    source.slice(0, source.indexOf("pub struct InMemoryInvoiceRepository")) + "use super::InMemoryInvoiceRepository;\n" + source.slice(start);
+}
+
 function writeProject(files: Readonly<Record<string, string>>, prefix: string): string {
   const dir = mkdtempSync(join(tmpdir(), prefix));
   for (const [path, content] of Object.entries(files)) {
@@ -591,6 +601,59 @@ describe("Rust sample aggregate mapping", () => {
 });
 
 describe("primary constructor contracts", () => {
+  test("Rust borrowed instances do not exempt auxiliary construction from delegation", () => {
+    const result = lint(rustSample("file").files, (files) => replace(files,
+      "packages/command/billing-domain/src/money.rs", "    pub fn of(",
+      "    pub fn detached(snapshot: &Money) -> Self { snapshot.clone() }\n    pub fn of("));
+    expect(result.findings.some((entry) => entry.rule_id === "primary-constructor" && entry.message.includes("reach"))).toBe(true);
+  });
+  for (const wrapped of ["Option<Money>", "Vec<Money>", "&'static Money"]) {
+    test(`Rust aliases of ${wrapped} do not bypass auxiliary construction checks`, () => {
+      const result = lint(rustSample("file").files, (files) => {
+        const file = "packages/command/billing-domain/src/money.rs";
+        files[file] = `type Snap = ${wrapped};\n` + files[file];
+        replace(files, file, "    pub fn of(", "    pub fn detached(snapshot: Snap) -> Self { panic!(\"no construction path\") }\n    pub fn of(");
+      });
+      expect(result.findings.some((entry) => entry.rule_id === "primary-constructor" && entry.message.includes("reach"))).toBe(true);
+    });
+  }
+  for (const sample of typeScriptSamples()) {
+    for (const [alias, accepted] of [["Money", true], ["Money[]", false], ["Readonly<Money>", false], ["Money | undefined", false]] as const) {
+      test(`${sample.name}: snapshot alias ${alias} ${accepted ? "evolves an instance" : "does not bypass construction checks"}`, () => {
+        const file = "packages/command/billing-domain/src/money.ts";
+        const result = lint(sample.files, (files) => {
+          files[file] = `type Snap = ${alias};\n` + files[file];
+          const body = accepted ? "return snapshot;" : 'throw new Error("no construction path");';
+          replace(files, file, sample.representation === "class" ? "  static of(" : "  of(",
+            sample.representation === "class"
+              ? `  static replay(snapshot: Snap): Money { ${body} }\n  static of(`
+              : `  replay(snapshot: Snap): Money { ${body} },\n  of(`);
+        });
+        expect(result.unavailable).toEqual([]);
+        expect(result.findings.some((entry) => entry.rule_id === "primary-constructor")).toBe(!accepted);
+      });
+    }
+  }
+  test("TypeScript replay accepts a simple alias of the snapshot type", () => {
+    const result = lint(eventTypeScriptSample().files, (files) => {
+      const file = parentModuleFile("named-file");
+      files[file] = "type Snap = Invoice;\n" + files[file];
+      replace(files, file, "snapshot: Invoice): Invoice", "snapshot: Snap): Invoice");
+    });
+    expect(result.unavailable).toEqual([]);
+    expect(result.findings).toEqual([]);
+  });
+  test("TypeScript replay accepts a snapshot alias imported from another file", () => {
+    const result = lint(eventTypeScriptSample().files, (files) => {
+      const file = parentModuleFile("named-file");
+      const aliasFile = "packages/command/billing-domain/src/money.ts";
+      files[aliasFile] = 'import type { Invoice } from "./invoice.ts";\nexport type Snapshot = Invoice;\n' + files[aliasFile];
+      files[file] = 'import type { Snapshot as Snap } from "./money.ts";\n' + files[file];
+      replace(files, file, "snapshot: Invoice): Invoice", "snapshot: Snap): Invoice");
+    });
+    expect(result.unavailable).toEqual([]);
+    expect(result.findings).toEqual([]);
+  });
   for (const sample of typeScriptSamples()) {
     const file = "packages/command/billing-domain/src/money.ts";
     if (sample.representation === "class") {
@@ -822,6 +885,321 @@ describe("sample builds", () => {
 });
 
 describe("Event Sourcing repository contract", () => {
+  test("TypeScript event aliases cannot conceal an array behind the conventional event name", () => {
+    const result = lint(eventTypeScriptSample().files, (files) => replace(files,
+      parentModuleFile("named-file"),
+      "export type InvoiceEvent = InvoiceOpened | InvoiceLineAdded | InvoiceIssued;",
+      "export type InvoiceEvent = readonly InvoiceIssued[];"));
+    expect(result.findings.some((entry) => entry.rule_id === "event-sourcing-store")).toBe(true);
+    expect(result.findings.some((entry) => entry.rule_id === "event-sourcing-storage")).toBe(true);
+  });
+  test("TypeScript resolves a renamed port from the package's published entry", () => {
+    const result = lint(eventTypeScriptSample().files, (files) => {
+      files["packages/command/billing-use-case/src/index.ts"] += '\nexport type { InvoiceRepository as Port } from "./invoice-repository.ts";\n';
+      const file = "packages/command/billing-interface-adapter/src/in-memory-invoice-repository.ts";
+      replace(files, file, "InvoiceRepository, RepositoryError", "Port, RepositoryError");
+      replace(files, file, "implements InvoiceRepository", "implements Port");
+    });
+    expect(result.unavailable).toEqual([]);
+    expect(result.findings).toEqual([]);
+  });
+  test("TypeScript does not confuse unpublished port declarations with the package entry", () => {
+    for (const unpublishedImport of [false, true]) {
+      const result = lint(eventTypeScriptSample().files, (files) => {
+        files["packages/command/billing-use-case/src/private.ts"] = 'import type { InvoiceRepository } from "./invoice-repository.ts";\nexport type HiddenRepository = InvoiceRepository;\n';
+        if (unpublishedImport) {
+          const file = "packages/command/billing-interface-adapter/src/in-memory-invoice-repository.ts";
+          replace(files, file, "InvoiceRepository, RepositoryError", "HiddenRepository as Port, RepositoryError");
+          replace(files, file, "implements InvoiceRepository", "implements Port");
+        }
+      });
+      if (unpublishedImport) {
+        expect(result.pass).toBe(false);
+        expect(result.unavailable.some((entry) => entry.includes("repository port"))).toBe(true);
+      } else {
+        expect(result.unavailable).toEqual([]);
+        expect(result.findings).toEqual([]);
+      }
+    }
+  });
+  test("TypeScript follows the exact configured path of a port alias", () => {
+    const result = lint(eventTypeScriptSample().files, (files) => {
+      const directory = "packages/command/billing-interface-adapter";
+      files[`${directory}/src/port.ts`] = 'export type { InvoiceRepository as Port } from "@acme/billing-use-case";\n';
+      const config = JSON.parse(files[`${directory}/tsconfig.json`]);
+      config.compilerOptions.paths = { ports: ["./src/port.ts"] };
+      files[`${directory}/tsconfig.json`] = JSON.stringify(config);
+      const file = `${directory}/src/in-memory-invoice-repository.ts`;
+      files[file] = 'import type { Port } from "ports";\n' + files[file];
+      replace(files, file, "implements InvoiceRepository", "implements Port");
+    });
+    expect(result.unavailable).toEqual([]);
+    expect(result.findings).toEqual([]);
+  });
+  test("Rust repository checks do not block an unrelated generic trait implementation", () => {
+    const result = lint(eventRustSample().files, (files) => {
+      files["packages/command/billing-domain/src/money.rs"] += "\npub trait Inspection<T> {}\n";
+      const file = "packages/command/billing-interface-adapter/src/in_memory_invoice_repository.rs";
+      files[file] += "\nuse billing_domain::money::Inspection;\nimpl Inspection<Invoice> for InMemoryInvoiceRepository {}\n";
+    });
+    expect(result.unavailable).toEqual([]);
+    expect(result.findings).toEqual([]);
+  });
+  for (const [event, snapshot] of [
+    ["Vec<InvoiceEvent>", "Invoice"], ["Option<InvoiceEvent>", "Invoice"],
+    ["InvoiceEvent", "Vec<Invoice>"], ["InvoiceEvent", "Option<Invoice>"],
+    ["&[InvoiceEvent]", "Invoice"], ["InvoiceEvent", "&[Invoice]"],
+  ]) {
+    test(`Rust store rejects ${event} with ${snapshot}, also through type aliases`, () => {
+      const file = "packages/command/billing-use-case/src/invoice_repository.rs";
+      for (const aliased of [false, true]) {
+        const result = lint(eventRustSample().files, (files) => {
+          if (aliased) files[file] = `type EventArg = ${event};\ntype SnapshotArg = ${snapshot};\n` + files[file];
+          replace(files, file, "event: InvoiceEvent, snapshot: Invoice", aliased
+            ? "event: EventArg, snapshot: SnapshotArg" : `event: ${event}, snapshot: ${snapshot}`);
+        });
+        expect(result.findings.filter((entry) => entry.rule_id === "event-sourcing-store")).toHaveLength(1);
+      }
+    });
+  }
+  for (const [event, snapshot] of [
+    ["InvoiceEvent", "Invoice"], ["&InvoiceEvent", "&Invoice"],
+    ["&'a InvoiceEvent", "&'a Invoice"], ["&mut InvoiceEvent", "&mut Invoice"],
+  ]) {
+    test(`Rust store accepts ${event} with ${snapshot}`, () => {
+      const file = "packages/command/billing-use-case/src/invoice_repository.rs";
+      const result = lint(eventRustSample().files, (files) => {
+        if (event.includes("'a")) replace(files, file, "fn store(", "fn store<'a>(");
+        replace(files, file, "event: InvoiceEvent, snapshot: Invoice", `event: ${event}, snapshot: ${snapshot}`);
+      });
+      expect(result.unavailable).toEqual([]);
+      expect(result.findings.filter((entry) => entry.rule_id === "event-sourcing-store")).toEqual([]);
+    });
+  }
+  test("Rust store and snapshot maps accept aliases of the exact named types", () => {
+    const result = lint(eventRustSample().files, (files) => {
+      const port = "packages/command/billing-use-case/src/invoice_repository.rs";
+      files[port] = "type EventArg = InvoiceEvent;\ntype SnapshotArg = Invoice;\n" + files[port];
+      replace(files, port, "event: InvoiceEvent, snapshot: Invoice", "event: EventArg, snapshot: SnapshotArg");
+      const adapter = "packages/command/billing-interface-adapter/src/in_memory_invoice_repository.rs";
+      files[adapter] = "type Snapshot = Invoice;\n" + files[adapter];
+      replace(files, adapter, "snapshots: HashMap<String, Invoice>", "snapshots: HashMap<String, Snapshot>");
+    });
+    expect(result.unavailable).toEqual([]);
+    expect(result.findings).toEqual([]);
+  });
+  test("Rust split repository implementations remain valid", () => {
+    const result = lint(eventRustSample().files, splitRustRepository);
+    expect(result.unavailable).toEqual([]);
+    expect(result.findings).toEqual([]);
+  });
+  test("Rust state storage remains valid when the repository impl is split", () => {
+    const result = lint(rustSample("file").files, splitRustRepository);
+    expect(result.unavailable).toEqual([]);
+    expect(result.findings).toEqual([]);
+  });
+  test("Rust state storage still rejects serialized records with a split impl", () => {
+    const result = lint(rustSample("file").files, (files) => {
+      splitRustRepository(files);
+      replace(files, "packages/command/billing-interface-adapter/src/in_memory_invoice_repository.rs",
+        "stored: HashMap<String, Invoice>", "stored: HashMap<String, String>");
+    });
+    expect(result.findings.some((entry) => entry.rule_id === "in-memory-restoration")).toBe(true);
+  });
+  test("Rust repository ports remain checked through renamed and qualified imports", () => {
+    for (const trait of ["Port", "billing_use_case::invoice_repository::InvoiceRepository"]) {
+      const file = "packages/command/billing-interface-adapter/src/in_memory_invoice_repository.rs";
+      const result = lint(eventRustSample().files, (files) => {
+        replace(files, file, "{InvoiceRepository, RepositoryError}", "{InvoiceRepository as Port, RepositoryError}");
+        replace(files, file, "impl InvoiceRepository for", `impl ${trait} for`);
+        replace(files, file, "    pub fn new(", "    pub fn events_for(&self) -> usize { self.events.len() }\n    pub fn new(");
+        replace(files, file, "    snapshots: HashMap<String, Invoice>,\n", "");
+      });
+      expect(result.unavailable).toEqual([]);
+      expect(result.findings.filter((entry) => entry.rule_id === "repository-adapter-surface")).toHaveLength(1);
+      expect(result.findings.some((entry) => entry.rule_id === "event-sourcing-storage" && entry.message.includes("keeps no aggregate snapshot"))).toBe(true);
+    }
+  });
+  test("Rust cannot approve an unresolved renamed repository port", () => {
+    const result = lint(eventRustSample().files, (files) => {
+      const file = "packages/command/billing-interface-adapter/src/in_memory_invoice_repository.rs";
+      replace(files, file, "{InvoiceRepository, RepositoryError}", "{MissingRepository as Port, RepositoryError}");
+      replace(files, file, "impl InvoiceRepository for", "impl Port for");
+    });
+    expect(result.pass).toBe(false);
+    expect(result.unavailable.some((entry) => entry.includes("repository port"))).toBe(true);
+  });
+  test("Rust reports a public member in a separate inherent impl at its definition", () => {
+    const memberFile = "packages/command/billing-interface-adapter/src/in_memory_invoice_repository/access.rs";
+    const result = lint(eventRustSample().files, (files) => {
+      splitRustRepository(files);
+      files["packages/command/billing-interface-adapter/src/in_memory_invoice_repository.rs"] += "mod access;\n";
+      files[memberFile] = "use super::InMemoryInvoiceRepository;\nimpl InMemoryInvoiceRepository {\n    pub fn events_for(&self) -> usize { self.events.len() }\n}\n";
+    });
+    const findings = result.findings.filter((entry) => entry.rule_id === "repository-adapter-surface");
+    expect(findings).toHaveLength(1);
+    expect(findings[0]?.file).toBe(memberFile);
+    expect(findings[0]?.line).toBe(3);
+  });
+  test("Rust reports missing snapshot maps with a split repository impl", () => {
+    const result = lint(eventRustSample().files, (files) => {
+      splitRustRepository(files);
+      replace(files, "packages/command/billing-interface-adapter/src/in_memory_invoice_repository.rs", "    snapshots: HashMap<String, Invoice>,\n", "");
+    });
+    expect(result.findings.some((entry) => entry.rule_id === "event-sourcing-storage" && entry.message.includes("keeps no aggregate snapshot"))).toBe(true);
+  });
+  test("Rust checks duplicate snapshot maps when the repository impl is in another file", () => {
+    const file = "packages/command/billing-interface-adapter/src/in_memory_invoice_repository.rs";
+    const result = lint(eventRustSample().files, (files) => {
+      splitRustRepository(files);
+      replace(files, file, "    snapshot_interval: u64,", "    latest: HashMap<String, Invoice>,\n    snapshot_interval: u64,");
+    });
+    const finding = result.findings.find((entry) => entry.rule_id === "event-sourcing-storage" && entry.message.includes("more than one snapshot map"));
+    expect(finding?.file).toBe(file);
+  });
+  test("Rust store rejects an optional snapshot instead of the aggregate itself", () => {
+    const result = lint(eventRustSample().files, (files) => replace(files,
+      "packages/command/billing-use-case/src/invoice_repository.rs",
+      "snapshot: Invoice)", "snapshot: Option<Invoice>)"));
+    expect(result.findings.filter((entry) => entry.rule_id === "event-sourcing-store")).toHaveLength(1);
+  });
+  test("Rust snapshot maps reject aliases of optional aggregates", () => {
+    const result = lint(eventRustSample().files, (files) => {
+      const file = "packages/command/billing-interface-adapter/src/in_memory_invoice_repository.rs";
+      files[file] = "type Snap = Option<Invoice>;\n" + files[file];
+      replace(files, file, "snapshots: HashMap<String, Invoice>", "snapshots: HashMap<String, Snap>");
+    });
+    expect(result.findings.some((entry) => entry.rule_id === "event-sourcing-storage" && entry.message.includes("snapshots stores Snap"))).toBe(true);
+  });
+  test("Rust event streams reject business errors from the aggregate's crate", () => {
+    const result = lint(eventRustSample().files, (files) => {
+      const file = "packages/command/billing-interface-adapter/src/in_memory_invoice_repository.rs";
+      replace(files, file, "{Invoice, InvoiceEvent}", "{Invoice, InvoiceEvent, IssueInvoiceError}");
+      replace(files, file, "events: HashMap<String, Vec<InvoiceEvent>>", "events: HashMap<String, Vec<IssueInvoiceError>>");
+    });
+    expect(result.findings.some((entry) => entry.rule_id === "event-sourcing-storage" && entry.message.includes("events stores"))).toBe(true);
+  });
+  test("Rust store rejects business errors from the aggregate's crate as events", () => {
+    const result = lint(eventRustSample().files, (files) => {
+      const file = "packages/command/billing-use-case/src/invoice_repository.rs";
+      replace(files, file, "{Invoice, InvoiceEvent}", "{Invoice, InvoiceEvent, IssueInvoiceError}");
+      replace(files, file, "event: InvoiceEvent", "event: IssueInvoiceError");
+    });
+    expect(result.findings.filter((entry) => entry.rule_id === "event-sourcing-store")).toHaveLength(1);
+  });
+  test("TypeScript repository surface follows a renamed port import", () => {
+    const result = lint(eventTypeScriptSample().files, (files) => {
+      const file = "packages/command/billing-interface-adapter/src/in-memory-invoice-repository.ts";
+      replace(files, file, "InvoiceRepository, RepositoryError", "InvoiceRepository as Port, RepositoryError");
+      replace(files, file, "implements InvoiceRepository", "implements Port");
+      replace(files, file, "  constructor(snapshotInterval: number)", "  eventsFor(): number { return 1; }\n  constructor(snapshotInterval: number)");
+    });
+    expect(result.unavailable).toEqual([]);
+    expect(result.findings.filter((entry) => entry.rule_id === "repository-adapter-surface")).toHaveLength(1);
+  });
+  test("TypeScript store rejects business errors from the aggregate's package as events", () => {
+    const result = lint(eventTypeScriptSample().files, (files) => {
+      const file = "packages/command/billing-use-case/src/invoice-repository.ts";
+      replace(files, file, "Invoice, InvoiceEvent", "Invoice, InvoiceEvent, IssueInvoiceError");
+      replace(files, file, "event: InvoiceEvent", "event: IssueInvoiceError");
+    });
+    expect(result.findings.filter((entry) => entry.rule_id === "event-sourcing-store")).toHaveLength(1);
+  });
+  test("TypeScript snapshot maps accept aliases of the aggregate itself", () => {
+    const result = lint(eventTypeScriptSample().files, (files) => {
+      const file = "packages/command/billing-interface-adapter/src/in-memory-invoice-repository.ts";
+      files[file] = "type Snapshot = Invoice;\n" + files[file];
+      replace(files, file, "#snapshots: Map<string, Invoice>", "#snapshots: Map<string, Snapshot>");
+    });
+    expect(result.unavailable).toEqual([]);
+    expect(result.findings).toEqual([]);
+  });
+  test("TypeScript event streams reject business errors even under an event import alias", () => {
+    const result = lint(eventTypeScriptSample().files, (files) => replace(files,
+      "packages/command/billing-interface-adapter/src/in-memory-invoice-repository.ts",
+      'import type { InvoiceEvent } from "@acme/billing-domain";',
+      'import type { IssueInvoiceError as InvoiceEvent } from "@acme/billing-domain";'));
+    expect(result.findings.some((entry) => entry.rule_id === "event-sourcing-storage" && entry.message.includes("#events stores"))).toBe(true);
+  });
+  test("TypeScript store accepts namespace imports and simple argument aliases", () => {
+    const result = lint(eventTypeScriptSample().files, (files) => {
+      const file = "packages/command/billing-use-case/src/invoice-repository.ts";
+      files[file] = 'import type * as domain from "@acme/billing-domain";\ntype EventArg = domain.InvoiceEvent;\ntype Snap = domain.Invoice;\n' + files[file];
+      replace(files, file, "event: InvoiceEvent, snapshot: Invoice", "event: EventArg, snapshot: Snap");
+    });
+    expect(result.unavailable).toEqual([]);
+    expect(result.findings).toEqual([]);
+  });
+  test("TypeScript namespace port aliases keep both storage and public surface checked", () => {
+    const result = lint(eventTypeScriptSample().files, (files) => {
+      const file = "packages/command/billing-interface-adapter/src/in-memory-invoice-repository.ts";
+      files[file] = 'import type * as ports from "@acme/billing-use-case";\n' + files[file];
+      replace(files, file, "implements InvoiceRepository", "implements ports.InvoiceRepository");
+      replace(files, file, "  constructor(snapshotInterval: number)", "  eventsFor(): number { return 1; }\n  constructor(snapshotInterval: number)");
+      replace(files, file, "  readonly #snapshots: Map<string, Invoice> = new Map();\n", "");
+    });
+    expect(result.unavailable).toEqual([]);
+    expect(result.findings.filter((entry) => entry.rule_id === "repository-adapter-surface")).toHaveLength(1);
+    expect(result.findings.some((entry) => entry.rule_id === "event-sourcing-storage" && entry.message.includes("keeps no aggregate snapshot"))).toBe(true);
+  });
+  test("TypeScript resolves a repository port alias declared in another file", () => {
+    const adapter = "packages/command/billing-interface-adapter/src/in-memory-invoice-repository.ts";
+    const result = lint(eventTypeScriptSample().files, (files) => {
+      files["packages/command/billing-interface-adapter/src/port.ts"] = 'import type { InvoiceRepository } from "@acme/billing-use-case";\nexport type Port = InvoiceRepository;\n';
+      replace(files, adapter, 'import type { InvoiceRepository, RepositoryError } from "@acme/billing-use-case";',
+        'import type { RepositoryError } from "@acme/billing-use-case";\nimport type { Port } from "./port.ts";');
+      replace(files, adapter, "implements InvoiceRepository", "implements Port");
+    });
+    expect(result.unavailable).toEqual([]);
+    expect(result.findings).toEqual([]);
+  });
+  test("TypeScript checks extra public members through a renamed port re-export", () => {
+    const result = lint(eventTypeScriptSample().files, (files) => {
+      const file = "packages/command/billing-interface-adapter/src/in-memory-invoice-repository.ts";
+      files["packages/command/billing-interface-adapter/src/port.ts"] = 'export type { InvoiceRepository as Port } from "@acme/billing-use-case";\n';
+      files[file] = 'import type { Port } from "./port.ts";\n' + files[file];
+      replace(files, file, "implements InvoiceRepository", "implements Port");
+      replace(files, file, "  constructor(snapshotInterval: number)", "  eventsFor(): number { return 1; }\n  constructor(snapshotInterval: number)");
+    });
+    expect(result.unavailable).toEqual([]);
+    expect(result.findings.filter((entry) => entry.rule_id === "repository-adapter-surface")).toHaveLength(1);
+  });
+  test("TypeScript cannot approve a repository port alias that cycles", () => {
+    const adapter = "packages/command/billing-interface-adapter/src/in-memory-invoice-repository.ts";
+    const result = lint(eventTypeScriptSample().files, (files) => {
+      files[adapter] = "type Port = Other;\ntype Other = Port;\n" + files[adapter];
+      replace(files, adapter, "implements InvoiceRepository", "implements Port");
+    });
+    expect(result.pass).toBe(false);
+    expect(result.unavailable.some((entry) => entry.includes("repository port"))).toBe(true);
+  });
+  test("TypeScript cannot approve a repository port alias with a missing target", () => {
+    const result = lint(eventTypeScriptSample().files, (files) => {
+      const file = "packages/command/billing-interface-adapter/src/in-memory-invoice-repository.ts";
+      files[file] = "type Port = Missing;\n" + files[file];
+      replace(files, file, "implements InvoiceRepository", "implements Port");
+    });
+    expect(result.pass).toBe(false);
+    expect(result.unavailable.some((entry) => entry.includes("repository port"))).toBe(true);
+  });
+  test("TypeScript cannot approve an unresolved renamed repository port", () => {
+    const result = lint(eventTypeScriptSample().files, (files) => {
+      const file = "packages/command/billing-interface-adapter/src/in-memory-invoice-repository.ts";
+      replace(files, file, "InvoiceRepository, RepositoryError", "MissingRepository as Port, RepositoryError");
+      replace(files, file, "implements InvoiceRepository", "implements Port");
+    });
+    expect(result.pass).toBe(false);
+    expect(result.unavailable.some((entry) => entry.includes("repository port"))).toBe(true);
+  });
+  test("TypeScript cannot approve a generic alias of a repository port", () => {
+    const result = lint(eventTypeScriptSample().files, (files) => {
+      const file = "packages/command/billing-interface-adapter/src/in-memory-invoice-repository.ts";
+      files[file] = "type Port<T> = InvoiceRepository;\n" + files[file];
+      replace(files, file, "implements InvoiceRepository", "implements Port<number>");
+    });
+    expect(result.pass).toBe(false);
+    expect(result.unavailable.some((entry) => entry.includes("repository port"))).toBe(true);
+  });
   for (const sample of [eventTypeScriptSample(), eventRustSample()]) {
     test(`${sample.name} rejects primitive values as event streams`, () => {
       const rust = sample.name.includes("rust");

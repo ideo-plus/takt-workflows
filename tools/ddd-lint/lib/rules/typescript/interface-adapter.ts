@@ -11,13 +11,15 @@
 import { join } from "node:path";
 import type { FindingInput } from "../../shared/findings.ts";
 import { containsMediaWord, toPascal } from "../lists.ts";
-import { inMemoryAggregates, storedMapValue, eventStreamElement, isAggregateStateElement, EVENT_SOURCING_STORAGE, eventSourcingStorageGaps } from "../in-memory.ts";
+import { inMemoryAggregates, storedMapValue, eventStreamElement, domainEventTypeNames, EVENT_SOURCING_STORAGE, eventSourcingStorageGaps } from "../in-memory.ts";
 import { aggregateMappings } from "./aggregate-binding.ts";
 import { packageContaining, resolveSpecifier } from "./edges.ts";
 import { factsOf } from "./file-facts.ts";
-import { importedDomainType, isPortDeclaration, resolveConstructedType, resolveDeclaredType, resolveTypeName } from "./symbols.ts";
+import { importedDomainType, isPortDeclaration, resolveConstructedType, resolveTypeName } from "./symbols.ts";
 import { ADAPTER_SURFACE } from "../repository-contract.ts";
 import type { TsInspection, TsTarget } from "./types.ts";
+import type { DeclarationFact } from "../../typescript/domain-facts/index.ts";
+import { resolveNamedType, isEventType } from "./named-types.ts";
 
 // --- (l) query side domain / repository reference ------------------------------------------------
 
@@ -193,30 +195,32 @@ export function ruleN(inspection: TsInspection, target: TsTarget): FindingInput[
   return findings;
 }
 
-/** A State Sourcing memory repository retains aggregate objects without decoding state records. */
-/**
- * A class that implements a repository port exposes only that port and its constructor: a public
- * member the port does not declare (an `eventsFor` that hands the stored history to tests) widens
- * the adapter beyond the contract the use case relies on. A port that cannot be resolved is left
- * undecided.
- */
+/** Resolve the port before classifying its name, including aliases across files. */
+function repositoryPorts(inspection: TsInspection, file: string, adapter: DeclarationFact): readonly DeclarationFact[] | undefined {
+  const ports: DeclarationFact[] = [];
+  for (const entry of (adapter.heritage ?? []).filter((candidate) => candidate.kind === "implements")) {
+    const resolved = resolveNamedType(inspection, file, entry.type_text.replace(/<.*>$/, ""));
+    const unresolvedAlias = resolved.kind === "found" && resolved.declaration.kind === "type-alias" &&
+      (!resolved.declaration.type_literal || resolved.declaration.generic);
+    if (unresolvedAlias || resolved.kind === "undecided" || (resolved.kind === "other" && entry.type_text.endsWith("Repository"))) {
+      const reason = resolved.kind === "undecided" ? resolved.reason : `cannot resolve ${entry.type_text} as a repository port`;
+      inspection.undecided.add(file, adapter.span.start_line, `the repository port ${adapter.name} implements: ${reason}`);
+      return undefined;
+    }
+    if (resolved.kind === "found" && isPortDeclaration(resolved.declaration) && resolved.declaration.name.endsWith("Repository"))
+      ports.push(resolved.declaration);
+  }
+  return ports;
+}
+
+/** Public adapter members are limited to the resolved ports and the constructor. */
 export function ruleRepositoryAdapterSurface(inspection: TsInspection, target: TsTarget): FindingInput[] {
   const facts = factsOf(inspection, target.file);
   const findings: FindingInput[] = [];
   for (const adapter of facts.declarations.filter((entry) => entry.kind === "class")) {
-    const ports = (adapter.heritage ?? []).filter((entry) => entry.kind === "implements" && entry.type_text.replace(/<.*$/, "").split(".").pop()!.endsWith("Repository"));
-    if (!ports.length) continue;
-    const allowed = new Set<string>();
-    let resolvedAll = true;
-    for (const port of ports) {
-      const resolved = resolveDeclaredType(inspection.packages, inspection.declarations, target.file, facts, port.type_text.replace(/<.*$/, ""));
-      if (resolved.kind !== "found" || !isPortDeclaration(resolved.entry.declaration)) { resolvedAll = false; continue; }
-      for (const member of resolved.entry.declaration.members) allowed.add(member.name);
-    }
-    if (!resolvedAll) {
-      inspection.undecided.add(target.file, adapter.span.start_line, `the repository port ${adapter.name} implements`);
-      continue;
-    }
+    const ports = repositoryPorts(inspection, target.file, adapter);
+    if (!ports?.length) continue;
+    const allowed = new Set(ports.flatMap((port) => port.members.map((member) => member.name)));
     for (const member of adapter.members) {
       if (member.kind === "constructor" || member.visibility === "private" || member.visibility === "private-name" || member.visibility === "protected") continue;
       if (allowed.has(member.name)) continue;
@@ -238,27 +242,27 @@ function inMemoryStorage(inspection: TsInspection, target: TsTarget, rule: "in-m
   const references = inMemoryAggregates(inspection.run, target.pkg.name, "typescript");
   if (!references.size) return [];
   const facts = factsOf(inspection, target.file);
-  if (!facts.declarations.some((entry) => entry.kind === "class" && entry.name.endsWith("Repository"))) return [];
   const state = rule === "in-memory-restoration";
   const aggregates = aggregateMappings(inspection).filter((entry) => references.has(entry.aggregate_ref) && entry.persistence_method === (state ? "state-sourcing" : "event-sourcing"));
   if (!aggregates.length) return [];
   const findings: FindingInput[] = [];
-  for (const repository of facts.declarations.filter((entry) => entry.kind === "class" && entry.name.endsWith("Repository"))) {
-    const owned = aggregates.filter((entry) => repository.heritage?.some((port) => port.kind === "implements" && port.type_text.split(".").pop() === `${entry.type}Repository`));
+  for (const repository of facts.declarations.filter((entry) => entry.kind === "class")) {
+    const ports = repositoryPorts(inspection, target.file, repository);
+    if (!ports) continue;
+    const owned = aggregates.filter((entry) => ports.some((port) => port.name === `${entry.type}Repository`));
     if (!owned.length) continue;
     const streams = new Set<string>(), snapshots = new Set<string>();
     for (const field of repository.members.filter((entry) => entry.kind === "property")) {
       const values = new Set([field.type_text, field.initializer_type_text].map(storedMapValue).filter((entry): entry is string => entry !== undefined));
       for (const value of values) {
         const element = state ? value : eventStreamElement(value, "typescript");
-        const resolved = resolveTypeName(inspection.packages, inspection.symbols, target.file, facts, element ?? value);
-        const direct = resolved.kind === "domain" && owned.some((entry) => entry.type === resolved.type.name && entry.package === resolved.type.pkg.name);
-        const stateElement = resolved.kind === "domain" && owned.some((entry) => isAggregateStateElement(inspection.model, entry.aggregate_ref, resolved.type.name));
-        const imported = element === undefined ? undefined : facts.imports.find((entry) => entry.bindings.some((binding) => binding.name === element.split(".")[0]));
-        const eventPackage = imported ? resolveSpecifier(inspection.packages, target.pkg, join(inspection.packages.workspaceRoot, target.file), imported.specifier) : undefined;
-        const domainEvent = eventPackage?.kind === "package" && owned.some((entry) => entry.package === eventPackage.pkg.name);
+        const resolved = resolveNamedType(inspection, target.file, element ?? value);
+        const pkg = resolved.kind === "found" ? packageContaining(inspection.packages, join(inspection.packages.workspaceRoot, resolved.file)) : undefined;
+        const direct = resolved.kind === "found" && owned.some((entry) => entry.type === resolved.declaration.name && entry.package === pkg?.name);
+        const domainEvent = owned.some((entry) => isEventType(inspection, resolved,
+          domainEventTypeNames(inspection.model, entry.aggregate_ref, entry.type), entry.package));
         if (state && direct) continue;
-        if (!state && element !== undefined && domainEvent && !direct && !stateElement) { streams.add(field.name); continue; }
+        if (!state && element !== undefined && domainEvent && !direct) { streams.add(field.name); continue; }
         if (!state && element === undefined && direct) { snapshots.add(field.name); continue; }
         findings.push({ rule_id: rule, file: target.file, line: field.span.start_line, message: `${repository.name}.${field.name} stores ${value}; ${state ? "its map must retain the aggregate directly" : EVENT_SOURCING_STORAGE}` });
       }

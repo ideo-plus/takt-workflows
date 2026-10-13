@@ -35,6 +35,7 @@ import { IO_PACKAGES, matchesIoRule } from "../lists.ts";
 import {
   dependencyNames,
   exportsOf,
+  exportTargets,
   importTarget,
   isExported,
   isInside,
@@ -156,6 +157,21 @@ export function resolveSpecifier(
     };
   if (specifier.startsWith("node:") || BUILTINS.has(specifier.split("/")[0])) return { kind: "builtin" };
   return { kind: "external", name };
+}
+
+/** Explicit source paths for a named import; no search across unrelated exports of its package. */
+export function specifierSourcePaths(packages: ProjectPackages, from: TsPackage, file: string, specifier: string): readonly string[] | undefined {
+  const target = resolveSpecifier(packages, from, file, specifier);
+  if (target.kind !== "package") return undefined;
+  switch (target.via) {
+    case "path": return [resolve(dirname(file), specifier)];
+    case "imports": {
+      const path = importTarget(from, specifier);
+      return path === undefined ? undefined : [path];
+    }
+    case "alias": return aliasFor(packages.configs.get(from.root)!, specifier)?.targets;
+    case "name": return exportTargets(target.pkg, target.subpath ?? ".");
+  }
 }
 
 /** One dependency a checked source spells: an import, or a re-export naming a module. */

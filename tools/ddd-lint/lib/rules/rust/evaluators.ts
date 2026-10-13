@@ -5,7 +5,7 @@
  */
 
 import type { CallFact, ParamFact, RustFileFacts, Span } from "../../rust/domain-facts/index.ts";
-import { finding } from "../../project/context.ts";
+import { finding, ToolUnavailableError } from "../../project/context.ts";
 import { operationOwner } from "../operation-owner.ts";
 import type { FindingInput } from "../../shared/findings.ts";
 import { containsMediaWord, toPascal } from "../lists.ts";
@@ -15,9 +15,9 @@ import { rulePrimitiveInitialization } from "./primitives.ts";
 import { ruleFactoryNaming } from "./factories.ts";
 import { rulePrimaryConstructor } from "./constructors.ts";
 import { ruleServices } from "./services.ts";
-import { inMemoryAggregates, storedMapValue, eventStreamElement, isAggregateStateElement, EVENT_SOURCING_STORAGE, eventSourcingStorageGaps } from "../in-memory.ts";
+import { inMemoryAggregates, storedMapValue, eventStreamElement, isAggregateStateElement, domainEventTypeNames, EVENT_SOURCING_STORAGE, eventSourcingStorageGaps } from "../in-memory.ts";
 import { repositoryContractProblem, resultArguments, expandGenericStoreResult, EVENT_SOURCING_STORE, ADAPTER_SURFACE } from "../repository-contract.ts";
-import { within as withinSpan } from "./program.ts";
+import { within as withinSpan, withoutReference, importNames } from "./program.ts";
 
 function within(span: Span, outer: Span): boolean {
   return (
@@ -723,10 +723,11 @@ function ruleEventSourcingStore(target: InspectionTarget, context: InspectionCon
     const aggregate = context.rustMapping.view.aggregates.find((entry) => entry.persistence_method === "event-sourcing" && `${entry.type}Repository` === port.name);
     if (!aggregate) continue;
     const crate = aggregate.crate.replace(/-/g, "_");
-    const resolve = (text: string) => context.program.resolveType(file, [...module, ...port.module], text.replace(/^&\s*/, ""));
+    const eventNames = domainEventTypeNames(context.model, aggregate.aggregate_ref, aggregate.type);
+    const resolve = (text: string) => context.program.resolveNamedType(file, [...module, ...port.module], withoutReference(text));
     for (const method of port.signatures.filter((entry) => entry.name === "store")) {
       const [event, snapshot] = method.params.map((param) => resolve(param.type_text));
-      const eventOk = Boolean(event && event.crate === crate && event.name !== aggregate.type && !isAggregateStateElement(context.model, aggregate.aggregate_ref, event.name));
+      const eventOk = Boolean(event && event.crate === crate && eventNames.has(event.name) && event.name !== aggregate.type && !isAggregateStateElement(context.model, aggregate.aggregate_ref, event.name));
       const snapshotOk = Boolean(snapshot && snapshot.crate === crate && snapshot.name === aggregate.type);
       if (method.params.length === 2 && eventOk && snapshotOk) continue;
       const spelled = method.params.map((param) => `${param.name}: ${param.type_text}`).join(", ");
@@ -745,20 +746,47 @@ function ruleRepositoryAdapterSurface(target: InspectionTarget, context: Inspect
   if (!target.file) return [];
   const file = target.file;
   const facts = declarationsOf(context, file);
-  const adapters = new Set(facts.impls.filter((entry) => entry.trait_text?.replace(/<.*$/, "").split("::").pop()!.endsWith("Repository")).map((entry) => entry.target_type_text.replace(/<.*$/, "")));
+  const source = context.program.files.get(file);
+  if (!source) return [];
+  const resolve = (module: readonly string[], text: string) => context.program.resolveNamedType(file, [...source.module, ...module], text);
+  const adapters = new Set(repositoryImplementations(context).map((entry) => entry.target));
   const findings: FindingInput[] = [];
-  for (const type of facts.types.filter((entry) => adapters.has(entry.name)))
+  for (const type of facts.types.filter((entry) => adapters.has(resolve(entry.module, entry.name)?.key ?? "")))
     for (const field of type.fields.filter((entry) => entry.visibility !== "private"))
       findings.push(finding("repository-adapter-surface", file, `${type.name}.${field.name} is not part of its port: ${ADAPTER_SURFACE}`, field.line));
-  for (const block of facts.impls.filter((entry) => entry.trait_text === undefined && adapters.has(entry.target_type_text.replace(/<.*$/, ""))))
+  for (const block of facts.impls.filter((entry) => entry.trait_text === undefined && adapters.has(resolve(entry.module, entry.target_type_text)?.key ?? "")))
     for (const method of block.methods) {
       if (method.visibility === "private") continue;
       const returned = method.return_type_text?.replace(/\s+/g, "");
-      const constructs = method.receiver === "none" && (returned === "Self" || returned === block.target_type_text.replace(/\s+/g, ""));
+      const constructs = method.receiver === "none" && (returned === "Self" || (returned !== undefined && resolve(block.module, returned)?.key === resolve(block.module, block.target_type_text)?.key));
       if (constructs) continue;
       findings.push(finding("repository-adapter-surface", file, `${block.target_type_text}::${method.name} is not part of its port: ${ADAPTER_SURFACE}`, method.line));
     }
   return findings;
+}
+
+/** Match repository traits to their implementing type across all read modules. */
+function repositoryImplementations(context: InspectionContext): readonly { port: string; target: string }[] {
+  return [...context.program.files].flatMap(([file, source]) => source.impls.flatMap((block) => {
+    if (block.trait_text === undefined) return [];
+    const scope = [...source.module, ...block.module];
+    const spelling = block.trait_text.replace(/<.*$/, "");
+    const trait = context.program.resolveNamedType(file, scope, spelling);
+    if (!trait) {
+      const first = spelling.split("::")[0];
+      const imported = declarationsOf(context, file).uses.filter((entry) => !entry.local && entry.module.join("::") === block.module.join("::"))
+        .flatMap((entry) => importNames(entry.path_text)).find((entry) => entry.name === first)?.target;
+      const path = imported ?? spelling;
+      const workspace = ["crate", "self", "super", ...context.assignments.map((entry) => entry.crate_name.replace(/-/g, "_"))];
+      if (path.split("::").at(-1)?.endsWith("Repository") || workspace.includes(path.split("::")[0]))
+        throw new ToolUnavailableError(`${file}:${block.span.start_line} cannot resolve repository port ${block.trait_text}`);
+      return [];
+    }
+    if (trait.kind !== "trait" || !trait.name.endsWith("Repository")) return [];
+    const type = context.program.resolveNamedType(file, scope, block.target_type_text);
+    if (!type) throw new ToolUnavailableError(`${file}:${block.span.start_line} cannot resolve repository implementation ${block.target_type_text}`);
+    return [{ port: trait.name, target: type.key }];
+  }));
 }
 
 function ruleInMemoryRestoration(target: InspectionTarget, context: InspectionContext): FindingInput[] {
@@ -774,25 +802,28 @@ function inMemoryStorage(target: InspectionTarget, context: InspectionContext, r
   const references = inMemoryAggregates(context.run, target.crate_name, "rust");
   if (!references.size) return [];
   const facts = declarationsOf(context, target.file);
-  if (!facts.impls.some((entry) => entry.trait_text?.replace(/<.*$/, "").endsWith("Repository"))) return [];
+  const repositories = repositoryImplementations(context);
+  if (!repositories.length) return [];
   const state = rule === "in-memory-restoration";
   const aggregates = context.rustMapping.view.aggregates.filter((entry) => references.has(entry.aggregate_ref) && entry.persistence_method === (state ? "state-sourcing" : "event-sourcing"));
   if (!aggregates.length) return [];
   const module = context.program.files.get(target.file)!.module;
   const findings: FindingInput[] = [];
-  const repositories = facts.impls.filter((entry) => entry.trait_text?.replace(/<.*$/, "").endsWith("Repository"));
   for (const repository of facts.types) {
-    const owned = aggregates.filter((entry) => repositories.some((port) => port.target_type_text === repository.name && port.trait_text?.split("::").pop() === `${entry.type}Repository`));
+    const key = context.program.resolveNamedType(target.file, [...module, ...repository.module], repository.name)?.key;
+    const owned = aggregates.filter((entry) => repositories.some((port) => port.target === key && port.port === `${entry.type}Repository`));
     if (!owned.length) continue;
     let streams = 0, snapshots = 0;
     for (const field of repository.fields) {
       const value = storedMapValue(field.type_text);
       if (value === undefined) continue;
       const element = state ? value : eventStreamElement(value, "rust");
-      const type = context.program.resolveType(target.file, [...module, ...repository.module], element ?? value);
+      const type = state ? context.program.resolveType(target.file, [...module, ...repository.module], value)
+        : context.program.resolveNamedType(target.file, [...module, ...repository.module], element ?? value);
       const direct = Boolean(type && owned.some((entry) => entry.type === type.name && entry.crate.replace(/-/g, "_") === type.crate));
       const stateElement = Boolean(type && owned.some((entry) => isAggregateStateElement(context.model, entry.aggregate_ref, type.name)));
-      const domainEvent = Boolean(type && owned.some((entry) => entry.crate.replace(/-/g, "_") === type.crate));
+      const domainEvent = Boolean(type && owned.some((entry) => entry.crate.replace(/-/g, "_") === type.crate &&
+        domainEventTypeNames(context.model, entry.aggregate_ref, entry.type).has(type.name)));
       if (state && direct) continue;
       if (!state && element !== undefined && domainEvent && !direct && !stateElement) { streams++; continue; }
       if (!state && element === undefined && direct) { snapshots++; continue; }
