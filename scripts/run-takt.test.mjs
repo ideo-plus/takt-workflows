@@ -17,7 +17,8 @@ const CREDENTIALS = [
   'ANTHROPIC_DEFAULT_FABLE_MODEL', 'ANTHROPIC_SMALL_FAST_MODEL',
   'CLAUDE_CODE_SUBAGENT_MODEL', 'CLAUDE_CODE_SUBAGENT_MODEL_FORCE',
 ];
-const CODEX_CREDENTIALS = ['OPENAI_API_KEY', 'CODEX_API_KEY', 'TAKT_OPENAI_API_KEY'];
+const CODEX_CREDENTIALS = ['OPENAI_API_KEY', 'CODEX_API_KEY', 'OPENAI_BASE_URL', 'CODEX_ACCESS_TOKEN',
+  'OPENAI_IDENTITY_TOKEN_FILE', 'OPENAI_FEDERATION_RULE_ID', 'TAKT_OPENAI_API_KEY'];
 const TAKT_CREDENTIALS = ['TAKT_ANTHROPIC_API_KEY'];
 const codexAdapter = fileURLToPath(new URL('./takt-codex.sh', import.meta.url));
 
@@ -58,7 +59,8 @@ process.stdin.on('data', chunk => { input += chunk; });
 process.stdin.on('end', () => {
   const keys = ['TAKT_CLAUDE_ACCOUNT_DIR', 'TAKT_CLAUDE_CLI_PATH', 'CLAUDE_CONFIG_DIR', 'TAKT_AGENT',
     'TAKT_CODEX_ACCOUNT_DIR', 'TAKT_CODEX_CLI_PATH', 'CODEX_HOME', 'TAKT_CONFIG_DIR',
-    'TAKT_CLAUDE_REAL_CLI', 'TAKT_CODEX_REAL_CLI'];
+    'TAKT_CLAUDE_REAL_CLI', 'TAKT_CODEX_REAL_CLI', 'RUN_TAKT_LAUNCH_STATE', 'RUN_TAKT_CLAUDE_CLI_PATH',
+    'RUN_TAKT_CODEX_CLI_PATH'];
   console.log(JSON.stringify({
     args: process.argv.slice(2), input, cwd: process.cwd(), executable: process.argv[1],
     env: Object.fromEntries(keys.map(key => [key, process.env[key]])),
@@ -262,12 +264,107 @@ test('launcher runs takt through mise exec when mise is available, so the projec
   });
   assert.equal(result.status, 5, result.stderr);
   const got = JSON.parse(result.stdout);
-  assert.deepEqual(got.args, ['exec', '--', 'takt', '--pipeline']);
+  // mise exec の後に選んだ値を残す状態ファイルの場所を、入口のスクリプトに渡す。
+  assert.match(got.env.RUN_TAKT_LAUNCH_STATE, /\/launch$/);
+  assert.equal(got.env.RUN_TAKT_CLAUDE_CLI_PATH, join(dirname(launcher), 'takt-claude.sh'));
+  assert.equal(got.env.RUN_TAKT_CODEX_CLI_PATH, join(dirname(launcher), 'takt-codex.sh'));
+  const calls = readFileSync(record, 'utf8').trim().split('\n').map(line => JSON.parse(line));
+  assert.deepEqual(calls[0], { args: ['trust', '--show'], cwd: f.project });
+  const args = calls[1].args;
+  assert.deepEqual(args.slice(0, 3), ['exec', '--', 'sh']);
+  assert.equal(args[3], '-c');
+  // 子の sh は、mise exec の後の PATH から takt を決め、run-takt-exec.sh に渡す。
+  assert.match(args[4], /takt_path=/);
+  assert.equal(args[5], join(dirname(launcher), 'run-takt-exec.sh'));
+  assert.deepEqual(args.slice(6), ['--pipeline']);
+  assert.equal(calls[1].cwd, f.project);
+});
+
+test('takt never inherits the credential, provider, endpoint or model overrides the adapters clear', t => {
+  const f = fixture(t);
+  const result = spawnSync('sh', [launcher, '--claude-account', f.account, '--codex-account', f.codex, '--pipeline'], {
+    cwd: f.project, env: f.env, encoding: 'utf8',
+  });
+  assert.equal(result.status, 0, result.stderr);
+  const got = JSON.parse(result.stdout);
+  assert.deepEqual(got.credentials, []);
+  assert.deepEqual(got.codexCredentials, []);
   assert.deepEqual(got.taktCredentials, []);
-  assert.deepEqual(readFileSync(record, 'utf8').trim().split('\n').map(line => JSON.parse(line)), [
-    { args: ['trust', '--show'], cwd: f.project },
-    { args: ['exec', '--', 'takt', '--pipeline'], cwd: f.project },
-  ]);
+});
+
+test('mise exec re-applies the selected account variables and drops the overrides after the project [env]', t => {
+  const f = fixture(t);
+  const bin = join(f.root, 'bin');
+  mkdirSync(bin);
+  copyFileSync(f.cli, join(bin, 'mise'));
+  chmodSync(join(bin, 'mise'), 0o755);
+  copyFileSync(f.cli, join(bin, 'takt'));
+  chmodSync(join(bin, 'takt'), 0o755);
+  // Stands in for a project mise.toml whose [env] sets the same variables and brings the overrides back.
+  const restored = ['TAKT_CLAUDE_ACCOUNT_DIR', 'TAKT_CODEX_ACCOUNT_DIR', 'TAKT_CONFIG_DIR', 'CODEX_HOME',
+    ...CREDENTIALS, ...CODEX_CREDENTIALS, ...TAKT_CREDENTIALS];
+  writeFileSync(join(f.root, 'fake-mise'), `#!/bin/sh
+if [ "$1" = trust ]; then echo "${f.project}/mise.toml: trusted"; exit 0; fi
+shift 2
+${restored.map(name => `${name}='from [env]'\nexport ${name}`).join('\n')}
+exec "$@"
+`, { mode: 0o755 });
+  const { TAKT_REAL_CLI, ...env } = f.env;
+  const result = spawnSync('sh', [launcher, '--claude-account', f.account, '--codex-account', f.codex, '--pipeline'], {
+    cwd: f.project, env: { ...env, PATH: `${bin}:${env.PATH}`, TAKT_REAL_MISE: join(f.root, 'fake-mise'), TEST_EXIT_CODE: '6' }, encoding: 'utf8',
+  });
+  assert.equal(result.status, 6, result.stderr);
+  const got = JSON.parse(result.stdout);
+  // fake の mise は exec で置き換えずに子で動くので、子の takt が直接動く。実物の mise では
+  // run-takt-exec.sh が takt を動かし、選んだ値は状態ファイルから読み直す (次の試験)。
+  assert.ok([join(bin, 'takt'), join(bin, 'mise')].includes(got.executable), got.executable);
+  assert.deepEqual(got.args.slice(-1), ['--pipeline']);
+  assert.deepEqual(got.credentials, []);
+  assert.deepEqual(got.codexCredentials, []);
+  assert.deepEqual(got.taktCredentials, []);
+});
+
+test('entry adapters re-read the selected accounts from the state file left by the launcher', t => {
+  const f = fixture(t);
+  const state = join(f.root, 'launch');
+  writeFileSync(state, `${f.account}\n${f.codex}\n${join(f.project, '.takt/home')}\n${f.codex}\n`);
+  writeFileSync(`${state}.tmp`, [...CREDENTIALS, ...CODEX_CREDENTIALS, ...TAKT_CREDENTIALS].join('\n') + '\n');
+  for (const [script, accountKey] of [[adapter, 'TAKT_CLAUDE_ACCOUNT_DIR'], [codexAdapter, 'TAKT_CODEX_ACCOUNT_DIR']]) {
+    const result = spawnSync('sh', [script, 'list'], {
+      cwd: f.project, env: { ...f.env, [accountKey]: 'from [env]', RUN_TAKT_LAUNCH_STATE: state }, encoding: 'utf8',
+    });
+    assert.equal(result.status, 0, result.stderr);
+    const got = JSON.parse(result.stdout);
+    assert.equal(got.env[accountKey], accountKey === 'TAKT_CLAUDE_ACCOUNT_DIR' ? f.account : f.codex);
+    // それぞれの入口は、自分の CLI の変数だけを外す (run-takt.sh が TAKT の環境からは両方を外す)。
+    const isClaude = accountKey === 'TAKT_CLAUDE_ACCOUNT_DIR';
+    assert.deepEqual(got.credentials, isClaude ? [] : CREDENTIALS, accountKey);
+    assert.deepEqual(got.codexCredentials, isClaude ? CODEX_CREDENTIALS : [], accountKey);
+  }
+});
+
+test('run-takt-exec runs the takt given as its first argument and drops the overrides listed in the state file', t => {
+  const f = fixture(t);
+  const state = join(f.root, 'launch');
+  writeFileSync(state, 'a\nb\nc\nd\n');
+  writeFileSync(`${state}.tmp`, [...CREDENTIALS, ...CODEX_CREDENTIALS, ...TAKT_CREDENTIALS].join('\n'));
+  const taktPath = join(f.root, 'takt path with spaces');
+  copyFileSync(f.cli, taktPath);
+  chmodSync(taktPath, 0o755);
+  const executor = fileURLToPath(new URL('./run-takt-exec.sh', import.meta.url));
+  const result = spawnSync('sh', [executor, taktPath, '--pipeline'], {
+    cwd: f.project, env: { ...f.env, RUN_TAKT_LAUNCH_STATE: state }, encoding: 'utf8',
+  });
+  assert.equal(result.status, 0, result.stderr);
+  const got = JSON.parse(result.stdout);
+  assert.equal(got.executable, taktPath);
+  assert.deepEqual(got.args, ['--pipeline']);
+  for (const list of ['credentials', 'codexCredentials', 'taktCredentials']) assert.deepEqual(got[list], [], list);
+  for (const [args, env] of [[['/bin/true'], {}], [[taktPath], { RUN_TAKT_LAUNCH_STATE: join(f.root, 'missing') }], [[], { RUN_TAKT_LAUNCH_STATE: state }]]) {
+    const failed = spawnSync('sh', [executor, ...args], { cwd: f.project, env: { ...f.env, ...env }, encoding: 'utf8' });
+    assert.notEqual(failed.status, 0, JSON.stringify(args));
+    assert.equal(failed.stdout, '');
+  }
 });
 
 test('without mise, a project that pins tools with mise stops instead of running an unpinned takt', t => {
@@ -327,6 +424,8 @@ test('untrusted or unconfirmed mise configuration stops without trusting or laun
   for (const [output, exit] of [
     [`${f.project}/mise.toml: untrusted`, '0'],
     [`${f.root}/mise.toml: trusted\n${f.project}/mise.toml: untrusted`, '0'],
+    // mise exec は、信頼していない親ディレクトリの設定でも止まるので、親の設定も確かめる。
+    [`${f.root}/mise.toml: untrusted\n${f.project}/mise.toml: trusted`, '0'],
     ['', '0'],
     [`${f.project}/mise.toml: trusted`, '1'],
   ]) {

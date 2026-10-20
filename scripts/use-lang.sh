@@ -17,7 +17,7 @@
 # Usage: scripts/use-lang.sh <en|ja> [project-dir] [--no-config] [--launchers-only]
 #   project-dir   target project (default: current directory)
 #   --no-config   skip configuration and Claude settings; still allow bin/ in .takt/.gitignore (alias: --no-runtime)
-#   --launchers-only   install only the three launchers and their .takt/.gitignore permissions
+#   --launchers-only   install only the launchers and their .takt/.gitignore permissions
 #
 # Examples:
 #   cd ~/work/my-app && /path/to/takt-workflows/scripts/use-lang.sh ja
@@ -49,7 +49,7 @@ target="$project/.takt"
 mkdir -p "$target"
 
 mkdir -p "$target/bin"
-for launcher in run-takt.sh takt-claude.sh takt-codex.sh; do
+for launcher in run-takt.sh run-takt-exec.sh takt-claude.sh takt-codex.sh; do
   cp "$bundle/scripts/$launcher" "$target/bin/$launcher"
   chmod 755 "$target/bin/$launcher"
 done

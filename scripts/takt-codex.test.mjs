@@ -59,7 +59,8 @@ test('adapter overrides inherited account and API credentials without changing S
   assert.equal(got.input, 'SDK prompt\n');
   assert.equal(got.env.CODEX_HOME, f.account);
   assert.equal(got.env.TAKT_AGENT, '1');
-  assert.deepEqual(got.apiKeys, ['TAKT_OPENAI_API_KEY']);
+  // takt の API key も、CODEX_HOME の OAuth 認証より優先されるので外す。
+  assert.deepEqual(got.apiKeys, []);
 });
 
 test('missing or invalid account selection never launches the real CLI', t => {
