@@ -11,7 +11,7 @@ test('tarball installer forwards launchers-only and literal paths while preservi
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const bundle = join(root, 'bundle');
   mkdirSync(join(bundle, 'scripts'), { recursive: true });
-  for (const name of ['use-lang.sh', 'run-takt.sh', 'takt-claude.sh', 'takt-codex.sh']) {
+  for (const name of ['use-lang.sh', 'run-takt.sh', 'run-takt-exec.sh', 'takt-claude.sh', 'takt-codex.sh']) {
     copyFileSync(new URL(`./${name}`, import.meta.url), join(bundle, 'scripts', name));
     chmodSync(join(bundle, 'scripts', name), 0o755);
   }
@@ -40,8 +40,9 @@ fs.copyFileSync(process.env.TEST_ARCHIVE, output);
     });
     assert.equal(result.status, 0, result.stderr);
     const files = readdirSync(project, { recursive: true }).filter(file => statSync(join(project, file)).isFile()).sort();
-    assert.deepEqual(files, ['.takt/.gitignore', '.takt/bin/run-takt.sh', '.takt/bin/takt-claude.sh', '.takt/bin/takt-codex.sh']);
-    for (const name of ['run-takt.sh', 'takt-claude.sh', 'takt-codex.sh']) {
+    assert.deepEqual(files, ['.takt/.gitignore', '.takt/bin/run-takt-exec.sh', '.takt/bin/run-takt.sh', '.takt/bin/takt-claude.sh',
+      '.takt/bin/takt-codex.sh']);
+    for (const name of ['run-takt.sh', 'run-takt-exec.sh', 'takt-claude.sh', 'takt-codex.sh']) {
       assert.equal(readFileSync(join(project, '.takt/bin', name), 'utf8'), readFileSync(join(bundle, 'scripts', name), 'utf8'));
       assert.equal(statSync(join(project, '.takt/bin', name)).mode & 0o111, 0o111);
     }

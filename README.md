@@ -27,7 +27,7 @@ See the [code showcase](showcase/README.md) for event-sourced meeting-room reser
 - For the launcher: `claude` (2.1.280 or later) and `codex` on PATH, with authenticated account configuration directories for both
 
 ### Add it to the project you work in
-Run the one-line installer inside the project. It downloads the bundle as a tarball (no git clone), copies `<lang>/{workflows,steps,facets}` into the project's `.takt/` and three executable launchers into `.takt/bin/`, and creates `.takt/runtime.yaml` and `.takt/config.yaml` if they do not exist:
+Run the one-line installer inside the project. It downloads the bundle as a tarball (no git clone), copies `<lang>/{workflows,steps,facets}` into the project's `.takt/` and four executable launchers into `.takt/bin/`, and creates `.takt/runtime.yaml` and `.takt/config.yaml` if they do not exist:
 
 ```sh
 cd ~/work/my-app
@@ -55,7 +55,7 @@ takt workflow doctor flash-default
 - Before the first run, check that the models in `.takt/runtime.yaml` are available in your environment.
 - To update the bundle or switch language, run the installer again. It replaces only its own files, keeps your `runtime.yaml` and `config.yaml`, and leaves other workflows in `.takt/` untouched.
 
-Run the launcher from your project's root. Replace each `<dir>` with the corresponding account configuration directory; either account option can come first. Remaining arguments go directly to TAKT. The launcher selects the adjacent `takt-claude.sh` and `takt-codex.sh`, resolves the real CLIs to absolute paths, and stops before starting TAKT if either CLI is missing or Claude is older than 2.1.280. Accounts, CLI paths and versions, and the TAKT configuration directory are printed to standard error. If mise is available, TAKT runs through `mise exec` to use the project's pinned version. If the project has a mise configuration but mise is not found, the launcher stops instead of running an unpinned TAKT.
+Run the launcher from your project's root. Replace each `<dir>` with the corresponding account configuration directory; either account option can come first. Remaining arguments go directly to TAKT. The launcher selects the adjacent `takt-claude.sh` and `takt-codex.sh`, resolves the real CLIs to absolute paths, and stops before starting TAKT if either CLI is missing or Claude is older than 2.1.280. Accounts, CLI paths and versions, and the TAKT configuration directory are printed to standard error. If mise is available, TAKT runs through `mise exec` to use the project's pinned version. `mise exec` applies the project's `[env]` over the environment you launch from, so the launcher saves the selected accounts and passes them along; the launcher also stops when any mise configuration (the project's or a parent directory's) is untrusted, and names the ones to trust. If the project has a mise configuration but mise is not found, the launcher stops instead of running an unpinned TAKT.
 
 ### Install or update only the launchers
 From the project root:
@@ -66,7 +66,7 @@ curl -fsSL https://raw.githubusercontent.com/ideo-plus/takt-workflows/main/scrip
 ~/src/takt-workflows/scripts/use-lang.sh en /path/to/project --launchers-only
 ```
 
-The language argument (`en` or `ja`) is still required. This mode replaces only `.takt/bin/{run-takt,takt-claude,takt-codex}.sh` and adds their `.takt/.gitignore` permissions. Other files in `bin/` are kept. Workflows, steps, facets, tools, runtime and config files, Claude settings, and the installation record are left untouched.
+The language argument (`en` or `ja`) is still required. This mode replaces only `.takt/bin/{run-takt,run-takt-exec,takt-claude,takt-codex}.sh` and adds their `.takt/.gitignore` permissions. Other files in `bin/` are kept. Workflows, steps, facets, tools, runtime and config files, Claude settings, and the installation record are left untouched.
 
 ## Configuration stays in the project
 All TAKT configuration for the bundle lives in the project and is committed with it.

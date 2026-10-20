@@ -54,7 +54,7 @@ test('the installer keeps existing Claude settings and adds nothing on a re-inst
   assert.deepEqual(settings.permissions.deny, ['Read(./.env)', ...EXPECTED_DENY]);
 });
 
-const launchers = ['run-takt.sh', 'takt-claude.sh', 'takt-codex.sh'];
+const launchers = ['run-takt.sh', 'run-takt-exec.sh', 'takt-claude.sh', 'takt-codex.sh'];
 
 function projectFixture(t) {
   const project = mkdtempSync(join(tmpdir(), 'use-lang-'));
@@ -84,7 +84,7 @@ test('normal installation replaces executable launchers and preserves unbundled 
   assert.equal(readFileSync(join(project, '.takt/bin/custom.sh'), 'utf8'), 'custom launcher');
 });
 
-test('normal and no-config installation allow all three launchers in new and existing gitignore files', t => {
+test('normal and no-config installation allow all the launchers in new and existing gitignore files', t => {
   for (const existing of [null, '*\n!.gitignore', '*\n!.gitignore\n!bin/\n!bin/**']) {
     for (const noConfig of [false, true]) {
       const project = projectFixture(t);
